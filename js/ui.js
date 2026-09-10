@@ -215,22 +215,52 @@ export function createUI(root, api) {
   function showHud() { hud.classList.remove('hidden'); }
   function hideHud() { hud.classList.add('hidden'); }
 
-  function updateHud(info) {
-    showHud();
-    const w = info.weapon;
-    const ammo = info.ammo;
+  let hudBuilt = false;
+  let lastHudKey = '';
+  function ensureHudDom() {
+    if (hudBuilt) return;
     hud.innerHTML = `
-      <div>
-        <span class="pill">Lap ${Math.min(info.lap + 1, info.totalLaps)}/${info.totalLaps}</span>
-        <span class="pill">Pos ${info.place}/${info.total}</span>
-        <span class="pill">HP <span style="color:${hpColor(info.hp, info.maxHp)}">${Math.round(info.hp)}</span></span>
+      <div class="hud-left">
+        <span class="pill">Lap <strong data-h="lap">1/3</strong></span>
+        <span class="pill">Pos <strong data-h="pos">1/6</strong></span>
+        <span class="pill">HP <strong data-h="hp">10000</strong></span>
       </div>
-      <div>
-        <span class="pill">${WEAPON_LABELS[w] || w} ×${ammo}</span>
-        <span class="pill">N2O ${info.nitro}</span>
-        <span class="pill">${info.time}</span>
+      <div class="hud-right">
+        <span class="pill"><strong data-h="wep">ROCKET</strong></span>
+        <span class="pill">N2O <strong data-h="n2o">0</strong></span>
+        <span class="pill"><strong data-h="time">0:00.00</strong></span>
       </div>
     `;
+    hudBuilt = true;
+  }
+
+  function updateHud(info) {
+    showHud();
+    ensureHudDom();
+    const w = info.weapon;
+    const ammo = info.ammo;
+    const lap = `${Math.min(info.lap + 1, info.totalLaps)}/${info.totalLaps}`;
+    const pos = `${info.place}/${info.total}`;
+    const hp = String(Math.round(info.hp));
+    const wep = `${WEAPON_LABELS[w] || w} ×${ammo}`;
+    const n2o = String(info.nitro);
+    const time = info.time;
+    // Avoid rewriting innerHTML every RAF — that caused HUD flicker
+    const key = [lap, pos, hp, wep, n2o, time].join('|');
+    if (key === lastHudKey) return;
+    lastHudKey = key;
+    const set = (k, v) => {
+      const el = hud.querySelector(`[data-h="${k}"]`);
+      if (el && el.textContent !== v) el.textContent = v;
+    };
+    set('lap', lap);
+    set('pos', pos);
+    set('hp', hp);
+    const hpEl = hud.querySelector('[data-h="hp"]');
+    if (hpEl) hpEl.style.color = hpColor(info.hp, info.maxHp);
+    set('wep', wep);
+    set('n2o', n2o);
+    set('time', time);
   }
 
   function showPause(onResume, onQuit) {

@@ -59,7 +59,9 @@ html, body {
   max-width: 100%;
   max-height: 100%;
   background: #050608;
+  /* HD crisp: buffer is DPR-sized; avoid CSS soft scaling */
   image-rendering: auto;
+  transform: translateZ(0);
 }
 
 #ui {
@@ -390,7 +392,7 @@ html, body {
   background: linear-gradient(180deg, #2a2e38, #12141a);
   border: 2px solid var(--metal-hi);
   border-radius: 2px;
-  padding: 5px 10px;
+  padding: 6px 11px;
   margin: 2px;
   display: inline-block;
   box-shadow:
@@ -398,6 +400,14 @@ html, body {
     0 2px 0 #000;
   clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px);
 }
+.hud .pill strong {
+  color: #fff;
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+}
+.hud-left, .hud-right { display: flex; flex-wrap: wrap; gap: 2px; align-items: center; }
+.hud-right { justify-content: flex-end; }
 
 /* Touch controls */
 #touch-controls {
@@ -481,12 +491,12 @@ html, body {
 .overlay {
   position: absolute;
   inset: 0;
-  background: rgba(4, 5, 8, 0.82);
+  background: rgba(4, 5, 8, 0.88);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 9;
-  backdrop-filter: blur(3px);
+  /* no backdrop-filter — soft blur under overlays felt like mush/flicker */
 }
 .overlay.hidden { display: none; }
 

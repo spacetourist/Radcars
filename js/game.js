@@ -18,14 +18,16 @@ export function createGame(canvas, input) {
   let onFinish = null;
   let onPause = null;
 
+  let _fitW = 0, _fitH = 0, _fitDpr = 0;
   function fit() {
     const app = document.getElementById('app');
     const w = app.clientWidth;
     const h = app.clientHeight;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    // letterbox 16:9-ish internal view
-    let cw = w, ch = h;
-    renderer.resize(cw, ch, dpr);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    // Skip no-op resizes — resetting canvas width/height clears buffer and flickers
+    if (w === _fitW && h === _fitH && dpr === _fitDpr) return;
+    _fitW = w; _fitH = h; _fitDpr = dpr;
+    renderer.resize(w, h, dpr);
   }
 
   window.addEventListener('resize', fit);
@@ -161,12 +163,13 @@ export function createGame(canvas, input) {
       }
     }
 
-    // camera follow player
+    // camera follow — smooth zoom lerp avoids blurry continuous rescale
     const p = world.player;
-    world.cam.x += (p.x - world.cam.x) * 0.12;
-    world.cam.y += (p.y - world.cam.y) * 0.12;
+    world.cam.x += (p.x - world.cam.x) * 0.14;
+    world.cam.y += (p.y - world.cam.y) * 0.14;
     const spd = Math.hypot(p.vx, p.vy);
-    world.cam.zoom = clamp(0.95 - spd * 0.04, 0.65, 0.95);
+    const targetZoom = clamp(0.92 - spd * 0.032, 0.7, 0.92);
+    world.cam.zoom += (targetZoom - world.cam.zoom) * 0.06;
 
     renderer.draw(world);
 
