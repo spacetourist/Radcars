@@ -1,0 +1,11 @@
+{
+  "name": "radcars",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Radcars — HD remaster style 90s top-down combat racer (PWA)",
+  "scripts": {
+    "start": "npx --yes serve -p 4173",
+    "serve": "npx --yes serve -p 4173",
+    "python": "python3 -m http.server 4173"
+  }
+}

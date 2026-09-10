@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#0a0e17" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Radcars" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg" />
+  <link rel="apple-touch-icon" href="icons/icon-192.png" />
+  <title>Radcars</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app">
+    <canvas id="game"></canvas>
+    <div id="ui"></div>
+    <div id="touch-controls" class="hidden">
+      <div class="tc-left">
+        <button type="button" id="btn-left" class="tc-btn tc-steer" data-action="left">◀</button>
+        <button type="button" id="btn-right" class="tc-btn tc-steer" data-action="right">▶</button>
+      </div>
+      <div class="tc-right">
+        <button type="button" id="btn-accel" class="tc-btn tc-accel" data-action="accel">GAS</button>
+        <button type="button" id="btn-brake" class="tc-btn tc-brake" data-action="brake">BRK</button>
+        <button type="button" id="btn-fire" class="tc-btn tc-fire" data-action="fire">FIRE</button>
+        <button type="button" id="btn-nitro" class="tc-btn tc-nitro" data-action="nitro">N2O</button>
+      </div>
+      <button type="button" id="btn-pause" class="tc-btn tc-pause" data-action="pause">❚❚</button>
+    </div>
+  </div>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
