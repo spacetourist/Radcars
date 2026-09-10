@@ -1,8 +1,8 @@
 import { normalizeAngle } from './util.js';
 
 export const CAR_COLORS = [
-  '#5cf0ff', '#ff5c7a', '#7dff9a', '#ffd060',
-  '#c080ff', '#ff9040', '#40c0ff', '#f0f0f0'
+  '#00e8ff', '#ff2b6a', '#b8ff00', '#ffe600',
+  '#ff2bd6', '#ff8a00', '#40c0ff', '#f0f0f0'
 ];
 
 export const AI_NAMES = [

@@ -21,20 +21,28 @@ export function createUI(root, api) {
     const el = document.createElement('div');
     el.className = 'screen';
     el.innerHTML = `
-      <div class="title-logo"><span class="sub">Combat Circuit</span></div>
-      <h1>Radcars</h1>
-      <p class="tagline">90s arcade soul · HD remaster clarity · original brand</p>
+      <div class="title-hero">
+        <div class="glow-ring" aria-hidden="true"></div>
+        <div class="title-logo"><span class="sub">Underground Circuit</span></div>
+        <h1 class="logo-title">Radcars</h1>
+        <p class="tagline">Bigger. Faster. Louder.</p>
+      </div>
+      <p class="muted" style="text-align:center;margin:-6px 0 16px;letter-spacing:0.04em">
+        Polite racing is for cowards.
+      </p>
       <div class="menu-btns">
         <button class="btn primary" data-act="career">Career</button>
         <button class="btn" data-act="single">Single Race</button>
         <button class="btn" data-act="garage">Garage / Shop</button>
         <button class="btn" data-act="options">Options</button>
       </div>
-      <p class="muted" style="text-align:center;margin-top:14px">
-        Cash: <span class="cash">${formatMoney(save.cash)}</span>
-        · Circuit ${Math.min(save.careerTrack + 1, TRACKS.length)}/${TRACKS.length}
-        · Wins ${save.careerWins}
-      </p>
+      <div class="cash-chrome">
+        <span>Cash <span class="cash">${formatMoney(save.cash)}</span></span>
+        <span class="sep">│</span>
+        <span>Circuit ${Math.min(save.careerTrack + 1, TRACKS.length)}/${TRACKS.length}</span>
+        <span class="sep">│</span>
+        <span>Wins ${save.careerWins}</span>
+      </div>
     `;
     root.appendChild(el);
     el.querySelectorAll('[data-act]').forEach((b) => {
@@ -50,7 +58,7 @@ export function createUI(root, api) {
     const unlocked = mode === 'career' ? Math.min(save.unlockedTracks, TRACKS.length) : TRACKS.length;
     el.innerHTML = `
       <h1>${mode === 'career' ? 'Career' : 'Single Race'}</h1>
-      <p class="tagline">Pick a circuit · ${save.options.laps} laps · ${save.options.aiCount} rivals</p>
+      <p class="tagline">Pick your arena · ${save.options.laps} laps · ${save.options.aiCount} rivals</p>
       <div class="grid2" id="tracks"></div>
       <div class="row" style="margin-top:14px">
         <button class="btn" data-act="back">Back</button>
@@ -66,7 +74,7 @@ export function createUI(root, api) {
       card.innerHTML = `
         <h3>${t.name} ${locked ? '🔒' : ''}</h3>
         <p>Difficulty ${'★'.repeat(t.difficulty)}${'☆'.repeat(3 - t.difficulty)}</p>
-        <p class="stat">Geometric circuit · weapons enabled</p>
+        <p class="stat">Industrial circuit · weapons hot</p>
         <button class="btn primary" ${locked ? 'disabled' : ''} data-i="${i}">Race</button>
       `;
       grid.appendChild(card);
@@ -81,11 +89,13 @@ export function createUI(root, api) {
     hideHud();
     const c = save.car;
     const el = document.createElement('div');
-    el.className = 'screen';
+    el.className = 'screen garage-screen';
     el.innerHTML = `
+      <div class="dealer-banner">⚠ Black Market Pit · Cash only · No receipts ⚠</div>
       <h1>Garage</h1>
-      <p class="tagline">Cash: <span class="cash">${formatMoney(save.cash)}</span>
-        · HP <span style="color:${hpColor(c.hp, c.maxHp)}">${Math.round(c.hp)}/${c.maxHp}</span>
+      <p class="tagline">Cash: <span class="cash">${formatMoney(save.cash)}</span></p>
+      <p class="muted" style="text-align:center;margin:-10px 0 12px">
+        HP <span style="color:${hpColor(c.hp, c.maxHp)}">${Math.round(c.hp)}/${c.maxHp}</span>
         · Eng ${c.engine} · Arm ${c.armour} · Ram ${c.ram} · N2O ${c.nitro}/${c.nitroMax}
       </p>
       <div class="card" style="margin-bottom:10px">
@@ -114,7 +124,7 @@ export function createUI(root, api) {
       wsel.appendChild(b);
     });
     const shop = el.querySelector('#shop');
-    shop.innerHTML = '<h3>Shop</h3>';
+    shop.innerHTML = '<h3>Arms &amp; Upgrades</h3><p class="muted" style="margin-bottom:8px">Shady pit-stop stock — buy it before it walks.</p>';
     SHOP_ITEMS.forEach((item) => {
       const price = priceOf(item, save);
       const row = document.createElement('div');
@@ -146,6 +156,7 @@ export function createUI(root, api) {
     el.className = 'screen';
     el.innerHTML = `
       <h1>Options</h1>
+      <p class="tagline">Tune the mayhem</p>
       <div class="card">
         <div class="shop-item">
           <div class="info"><strong>Mute SFX</strong></div>
@@ -229,6 +240,7 @@ export function createUI(root, api) {
     ov.innerHTML = `
       <div class="screen">
         <h1>Paused</h1>
+        <p class="tagline">Still breathing?</p>
         <div class="menu-btns">
           <button class="btn primary" id="resume">Resume</button>
           <button class="btn danger" id="quit">Quit to Title</button>
@@ -253,7 +265,9 @@ export function createUI(root, api) {
       <h1>Race Over</h1>
       <p class="tagline">${result.trackName} · You finished P${result.playerPlace}</p>
       <div class="card">${rows}</div>
-      <p class="stat" style="text-align:center;margin-top:10px">Cash: <span class="cash">${formatMoney(save.cash)}</span></p>
+      <div class="cash-chrome" style="margin-top:12px">
+        <span>Cash <span class="cash">${formatMoney(save.cash)}</span></span>
+      </div>
       <div class="row" style="margin-top:14px">
         <button class="btn primary" id="cont">Garage</button>
         <button class="btn" id="title">Title</button>

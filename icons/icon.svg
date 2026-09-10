@@ -1,11 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
-  <rect width="512" height="512" rx="96" fill="#0b0e18"/>
-  <rect x="36" y="36" width="440" height="440" rx="72" stroke="#3fdfff" stroke-width="16"/>
-  <rect x="118" y="210" width="276" height="120" rx="36" fill="#3fdfff"/>
-  <rect x="250" y="230" width="100" height="80" rx="18" fill="#123048"/>
-  <rect x="360" y="236" width="48" height="68" rx="12" fill="#7af0ff"/>
-  <rect x="100" y="228" width="28" height="84" rx="6" fill="#1a8aaa"/>
-  <circle cx="170" cy="350" r="28" fill="#ff4d9a"/>
-  <circle cx="340" cy="350" r="28" fill="#ff4d9a"/>
-  <text x="256" y="170" text-anchor="middle" font-family="Trebuchet MS,sans-serif" font-weight="800" font-size="56" fill="#ff4d9a" letter-spacing="8">RAD</text>
+  <rect width="512" height="512" rx="72" fill="#07080c"/>
+  <rect x="28" y="28" width="456" height="456" rx="56" stroke="#00e8ff" stroke-width="10"/>
+  <rect x="28" y="28" width="456" height="28" fill="#111"/>
+  <g>
+    <rect x="28" y="28" width="28" height="28" fill="#ffe600"/>
+    <rect x="84" y="28" width="28" height="28" fill="#ffe600"/>
+    <rect x="140" y="28" width="28" height="28" fill="#ffe600"/>
+    <rect x="196" y="28" width="28" height="28" fill="#ffe600"/>
+    <rect x="252" y="28" width="28" height="28" fill="#ffe600"/>
+    <rect x="308" y="28" width="28" height="28" fill="#ffe600"/>
+    <rect x="364" y="28" width="28" height="28" fill="#ffe600"/>
+    <rect x="420" y="28" width="28" height="28" fill="#ffe600"/>
+  </g>
+  <text x="256" y="150" text-anchor="middle" font-family="Impact, Arial Black, sans-serif" font-weight="800" font-size="64" fill="#ff2bd6" letter-spacing="10">RAD</text>
+  <!-- angular car -->
+  <path d="M110 250 L200 230 L360 240 L420 270 L400 320 L180 330 L100 300 Z" fill="#00e8ff"/>
+  <path d="M250 245 L340 250 L335 300 L245 305 Z" fill="#0a1020"/>
+  <path d="M380 255 L415 272 L400 310 L365 300 Z" fill="#7af0ff"/>
+  <rect x="105" y="255" width="22" height="55" fill="#ff2bd6"/>
+  <circle cx="175" cy="345" r="26" fill="#111" stroke="#ffe600" stroke-width="4"/>
+  <circle cx="355" cy="345" r="26" fill="#111" stroke="#ffe600" stroke-width="4"/>
 </svg>

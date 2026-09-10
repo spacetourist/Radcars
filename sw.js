@@ -1,4 +1,4 @@
-const CACHE = 'radcars-v1';
+const CACHE = 'radcars-v2-swagger';
 const ASSETS = [
   './',
   './index.html',
