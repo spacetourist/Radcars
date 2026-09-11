@@ -1,4 +1,4 @@
-const CACHE = 'radcars-v7-start-straight';
+const CACHE = 'radcars-v8-scenery';
 const ASSETS = [
   './',
   './index.html',
@@ -21,7 +21,8 @@ const ASSETS = [
   './js/render.js',
   './js/ui.js',
   './js/util.js',
-  './js/sprites.js'
+  './js/sprites.js',
+  './js/scenery.js'
 ];
 
 self.addEventListener('install', (e) => {

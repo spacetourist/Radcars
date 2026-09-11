@@ -75,6 +75,8 @@ radcars/
     weapons.js   projectiles / mines
     input.js     keyboard + touch
     render.js    HD canvas draw
+    scenery.js   procedural buildings / crowds / skyline
+    sprites.js   pre-rendered cars / FX sheets
     shop.js      garage economy
     career.js    save / prizes
     audio.js     beeps
@@ -85,6 +87,8 @@ radcars/
 ## Art direction
 
 **HD remaster of a 90s top-down combat racer:** bold arcade palette, chunky car silhouettes, clear barriers, arcade menus — rendered at high resolution with anti-aliased shapes, soft shadows, and smooth UI (not low-res pixel/CRT mush).
+
+**Scenery:** each track gets a painted sky + parallax skyline, industrial ground fill, and layers of pre-rendered buildings (warehouses, towers, neon shops, billboards, chimneys, water towers), props, and original crowd/mechanic sprites packed outside the asphalt — denser on straights and at start/finish. Title screen uses a matching neon skyline backdrop.
 
 ## Known gaps / future polish
 

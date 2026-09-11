@@ -1,6 +1,14 @@
 import { hpColor } from './util.js';
 import { createSpriteBank } from './sprites.js';
 import { CAR_COLORS } from './cars.js';
+import {
+  createSceneryCache,
+  drawArenaBackground,
+  drawGroundPlate,
+  drawSceneryFar,
+  drawSceneryMid,
+  drawSceneryNear
+} from './scenery.js';
 
 /** HD remaster renderer: industrial arena, angular cars, visceral FX — crisp, no mush. */
 export function createRenderer(canvas) {
@@ -12,6 +20,7 @@ export function createRenderer(canvas) {
   let bufW = 0, bufH = 0, lastDpr = 0;
   const sprites = createSpriteBank();
   try { sprites.warm(CAR_COLORS); } catch (_) {}
+  const sceneryCache = createSceneryCache();
   const boomAnims = []; // {x,y,frame,age}
 
   function resize(cssW, cssH, dpr) {
@@ -124,13 +133,18 @@ export function createRenderer(canvas) {
     const H = canvas.clientHeight;
     stepParticles(world.dt || 16);
 
+    const scenery = sceneryCache.get(track);
+
     ctx.save();
-    // Solid clear — no soft full-scene filters
-    const floor = ctx.createRadialGradient(W * 0.5, H * 0.45, 40, W * 0.5, H * 0.5, Math.max(W, H) * 0.7);
-    floor.addColorStop(0, track.bg);
-    floor.addColorStop(1, '#050608');
-    ctx.fillStyle = floor;
-    ctx.fillRect(0, 0, W, H);
+    // Sky + distant skyline (screen space, light parallax)
+    if (scenery) drawArenaBackground(ctx, scenery, cam, W, H);
+    else {
+      const floor = ctx.createRadialGradient(W * 0.5, H * 0.45, 40, W * 0.5, H * 0.5, Math.max(W, H) * 0.7);
+      floor.addColorStop(0, track.bg);
+      floor.addColorStop(1, '#050608');
+      ctx.fillStyle = floor;
+      ctx.fillRect(0, 0, W, H);
+    }
 
     // Deterministic shake (no Math.random per frame — that looked like flicker)
     const sx = shake ? shake * Math.sin(shakePhase * 1.7) * 0.55 : 0;
@@ -149,8 +163,18 @@ export function createRenderer(canvas) {
     const oy = Math.round(camY * zoom) / zoom;
     ctx.translate(-ox, -oy);
 
+    // Ground fill + far/mid scenery behind asphalt
+    if (scenery) {
+      drawGroundPlate(ctx, scenery, track);
+      drawSceneryFar(ctx, scenery, cam, W, H, zoom);
+      drawSceneryMid(ctx, scenery, cam, W, H, zoom);
+    }
+
     drawTrack(ctx, track);
     drawStartLine(ctx, track);
+
+    // Near props / crowds on top of asphalt edge (still outside racing line visually)
+    if (scenery) drawSceneryNear(ctx, scenery, cam, W, H, zoom);
 
     for (const m of weapons.mines) {
       if (!m.alive) continue;
@@ -207,7 +231,7 @@ export function createRenderer(canvas) {
   }
 
   function drawTrack(ctx, track) {
-    // dark asphalt plate
+    // dark asphalt plate with subtle texture
     ctx.beginPath();
     pathPoly(ctx, track.outer);
     const asphaltGrad = ctx.createLinearGradient(0, 0, track.width, track.height);
@@ -221,6 +245,19 @@ export function createRenderer(canvas) {
     ctx.beginPath();
     pathPoly(ctx, track.outer);
     ctx.clip();
+    // Subtle asphalt grit (deterministic pattern, clipped to track)
+    ctx.fillStyle = 'rgba(255,255,255,0.025)';
+    for (let y = 0; y < track.height; y += 17) {
+      for (let x = (y % 34); x < track.width; x += 23) {
+        ctx.fillRect(x, y, 1.5, 1.5);
+      }
+    }
+    ctx.fillStyle = 'rgba(0,0,0,0.04)';
+    for (let y = 8; y < track.height; y += 29) {
+      for (let x = 11; x < track.width; x += 31) {
+        ctx.fillRect(x, y, 2, 1);
+      }
+    }
     // Outer lane edge (wear / rubber)
     ctx.strokeStyle = 'rgba(255,255,255,0.04)';
     ctx.lineWidth = 22;
@@ -370,14 +407,22 @@ export function createRenderer(canvas) {
     ctx.translate(s.x, s.y);
     ctx.rotate(s.angle + Math.PI / 2);
     // Shadow under grid
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.fillRect(-46, -12, 92, 24);
-    for (let i = -5; i < 6; i++) {
-      for (let j = 0; j < 2; j++) {
-        ctx.fillStyle = ((i + j) & 1) ? 'rgba(255,230,0,0.82)' : 'rgba(0,0,0,0.78)';
-        ctx.fillRect(i * 9, j * 10 - 10, 9, 10);
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillRect(-52, -14, 104, 28);
+    // Wider chequered start/finish stripe
+    for (let i = -6; i < 7; i++) {
+      for (let j = 0; j < 3; j++) {
+        ctx.fillStyle = ((i + j) & 1) ? 'rgba(255,230,0,0.9)' : 'rgba(8,8,10,0.88)';
+        ctx.fillRect(i * 8, j * 8 - 12, 8, 8);
       }
     }
+    // Neon edge rails
+    ctx.fillStyle = hexAlpha(track.accent || '#ff2bd6', 0.75);
+    ctx.fillRect(-52, -15, 104, 2);
+    ctx.fillRect(-52, 12, 104, 2);
+    ctx.fillStyle = hexAlpha(track.wall || '#00e8ff', 0.55);
+    ctx.fillRect(-52, -17, 104, 1.5);
+    ctx.fillRect(-52, 14, 104, 1.5);
     ctx.restore();
   }
 

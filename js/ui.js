@@ -4,6 +4,7 @@ import { WEAPON_LABELS } from './weapons.js';
 import { sfx, setMuted, isMuted } from './audio.js';
 import { persistSave, resetSave } from './career.js';
 import { hpColor } from './util.js';
+import { installMenuBackdrop, hideMenuBackdrop } from './scenery.js';
 
 export function createUI(root, api) {
   const hud = document.createElement('div');
@@ -18,6 +19,7 @@ export function createUI(root, api) {
   function showTitle(save) {
     clear();
     hideHud();
+    try { installMenuBackdrop(); } catch (_) {}
     const el = document.createElement('div');
     el.className = 'screen';
     el.innerHTML = `
@@ -53,6 +55,7 @@ export function createUI(root, api) {
   function showTrackSelect(save, mode) {
     clear();
     hideHud();
+    try { installMenuBackdrop(); } catch (_) {}
     const el = document.createElement('div');
     el.className = 'screen';
     const unlocked = mode === 'career' ? Math.min(save.unlockedTracks, TRACKS.length) : TRACKS.length;
@@ -87,6 +90,7 @@ export function createUI(root, api) {
   function showGarage(save) {
     clear();
     hideHud();
+    try { installMenuBackdrop(); } catch (_) {}
     const c = save.car;
     const el = document.createElement('div');
     el.className = 'screen garage-screen';
@@ -152,6 +156,7 @@ export function createUI(root, api) {
   function showOptions(save) {
     clear();
     hideHud();
+    try { installMenuBackdrop(); } catch (_) {}
     const el = document.createElement('div');
     el.className = 'screen';
     el.innerHTML = `
@@ -235,6 +240,7 @@ export function createUI(root, api) {
   }
 
   function updateHud(info) {
+    hideMenuBackdrop();
     showHud();
     ensureHudDom();
     const w = info.weapon;
@@ -285,6 +291,7 @@ export function createUI(root, api) {
   function showResults(result, save, onContinue) {
     clear();
     hideHud();
+    try { installMenuBackdrop(); } catch (_) {}
     const el = document.createElement('div');
     el.className = 'screen';
     const rows = result.standings.map((s) =>
