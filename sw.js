@@ -1,4 +1,4 @@
-const CACHE = 'radcars-v3-crisp';
+const CACHE = 'radcars-v4-sprites-steer';
 const ASSETS = [
   './',
   './index.html',
@@ -20,7 +20,8 @@ const ASSETS = [
   './js/audio.js',
   './js/render.js',
   './js/ui.js',
-  './js/util.js'
+  './js/util.js',
+  './js/sprites.js'
 ];
 
 self.addEventListener('install', (e) => {

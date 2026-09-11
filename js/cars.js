@@ -17,7 +17,7 @@ export function createCar(opts) {
     isPlayer: !!opts.isPlayer,
     x: opts.x,
     y: opts.y,
-    angle: opts.angle || 0,
+    angle: opts.angle ?? 0,
     vx: 0,
     vy: 0,
     radius: 14,

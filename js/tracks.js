@@ -255,3 +255,58 @@ function pointInPolySimple(px, py, poly) {
   }
   return inside;
 }
+
+/**
+ * Build a readable F1-style staggered starting grid on the start straight.
+ * Cars face `heading` (track start direction). Rows go backward along -heading;
+ * columns offset along the lateral axis. No overlapping.
+ */
+export function buildStartingGrid(track, count = 8) {
+  const line = track.line;
+  if (!line || line.length < 2) {
+    const sp = track.spawns?.[0] || { x: track.width / 2, y: track.height / 2, angle: 0 };
+    return Array.from({ length: count }, (_, i) => ({
+      x: sp.x - i * 36,
+      y: sp.y + ((i % 2) ? 22 : -22),
+      angle: sp.angle ?? 0
+    }));
+  }
+
+  // Prefer existing spawn[0] as pole if present, else racing-line start
+  const base = track.spawns?.[0];
+  let sx, sy, heading;
+  if (base && Number.isFinite(base.angle)) {
+    sx = base.x;
+    sy = base.y;
+    heading = base.angle;
+  } else {
+    sx = line[0].x;
+    sy = line[0].y;
+    heading = Math.atan2(line[1].y - line[0].y, line[1].x - line[0].x);
+  }
+
+  const fx = Math.cos(heading);
+  const fy = Math.sin(heading);
+  const lx = -fy; // left lateral
+  const ly = fx;
+
+  // Staggered 2-wide grid: pole is forward-most. Slot 0 = pole (player).
+  const rowGap = 44;   // along track (behind)
+  const colGap = 28;   // across track
+  const stagger = 18;  // second column set slightly back
+
+  const out = [];
+  for (let i = 0; i < count; i++) {
+    const row = Math.floor(i / 2);
+    const col = (i % 2 === 0) ? -1 : 1; // left / right of centreline
+    const back = row * rowGap + (i % 2) * stagger;
+    // Lateral: alternate sides, slight centre offset so pairs don't stack
+    const lat = col * colGap;
+    out.push({
+      x: sx - fx * back + lx * lat,
+      y: sy - fy * back + ly * lat,
+      angle: heading
+    });
+  }
+  return out;
+}

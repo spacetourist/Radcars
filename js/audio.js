@@ -48,6 +48,8 @@ export function sfx(name) {
     case 'buy': beep(660, 0.06, 'sine', 0.04); beep(880, 0.08, 'sine', 0.035); break;
     case 'click': beep(300, 0.04, 'square', 0.025); break;
     case 'mine': beep(200, 0.06, 'triangle', 0.04, -100); break;
+    case 'countdown': beep(380, 0.12, 'square', 0.05); break;
+    case 'countdownGo': beep(520, 0.1, 'square', 0.06); setTimeout(() => beep(780, 0.22, 'sawtooth', 0.05), 80); break;
     default: break;
   }
 }

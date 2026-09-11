@@ -1,4 +1,4 @@
-import { getTrack } from './tracks.js';
+import { getTrack, buildStartingGrid } from './tracks.js';
 import { createCar, CAR_COLORS, AI_NAMES, updateCheckpoints, syncCarFromSave } from './cars.js';
 import { stepCar, triggerNitro } from './physics.js';
 import { createWeaponsState, tryFire, stepWeapons, cycleWeapon } from './weapons.js';
@@ -7,6 +7,13 @@ import { createRenderer } from './render.js';
 import { sfx } from './audio.js';
 import { placePrize, persistSave } from './career.js';
 import { clamp } from './util.js';
+
+/** Camera zoom: closer at rest, pull out as speed rises (arcade feel). */
+const ZOOM_NEAR = 1.05;
+const ZOOM_FAR = 0.62;
+const ZOOM_GRID = 0.72; // fixed wider view during countdown to show grid
+const ZOOM_LERP_RACE = 0.055;
+const ZOOM_LERP_GRID = 0.08;
 
 export function createGame(canvas, input) {
   const renderer = createRenderer(canvas);
@@ -17,6 +24,7 @@ export function createGame(canvas, input) {
   let world = null;
   let onFinish = null;
   let onPause = null;
+  let lastCountdownDigit = null;
 
   let _fitW = 0, _fitH = 0, _fitDpr = 0;
   function fit() {
@@ -24,7 +32,6 @@ export function createGame(canvas, input) {
     const w = app.clientWidth;
     const h = app.clientHeight;
     const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
-    // Skip no-op resizes — resetting canvas width/height clears buffer and flickers
     if (w === _fitW && h === _fitH && dpr === _fitDpr) return;
     _fitW = w; _fitH = h; _fitDpr = dpr;
     renderer.resize(w, h, dpr);
@@ -39,9 +46,13 @@ export function createGame(canvas, input) {
     const nAI = clamp(aiCount ?? 5, 3, 7);
     const synced = syncCarFromSave(save.car);
 
+    const grid = buildStartingGrid(track, nAI + 1);
+    // Ensure every slot shares the same heading (track start direction)
+    const startHeading = grid[0].angle;
+    for (const g of grid) g.angle = startHeading;
+
     const cars = [];
-    // player at spawn 0
-    const sp0 = track.spawns[0];
+    const sp0 = grid[0];
     cars.push(createCar({
       id: 0,
       name: 'You',
@@ -49,19 +60,23 @@ export function createGame(canvas, input) {
       isPlayer: true,
       x: sp0.x,
       y: sp0.y,
-      angle: sp0.angle,
+      angle: startHeading,
       ...synced,
       nitro: synced.nitro,
       nitroMax: synced.nitroMax
     }));
+    // Re-assert after spread in case anything odd lands on the object
+    cars[0].angle = startHeading;
+    cars[0].x = sp0.x;
+    cars[0].y = sp0.y;
     cars[0].nitroCharges = synced.nitro;
     cars[0].nitroMax = synced.nitroMax;
 
     for (let i = 0; i < nAI; i++) {
-      const sp = track.spawns[i + 1] || {
-        x: sp0.x + (i + 1) * 20,
-        y: sp0.y + ((i % 2) ? 18 : -18),
-        angle: sp0.angle
+      const sp = grid[i + 1] || {
+        x: sp0.x - (i + 1) * 44,
+        y: sp0.y + ((i % 2) ? 28 : -28),
+        angle: startHeading
       };
       const difficulty = track.difficulty;
       const ai = createCar({
@@ -70,7 +85,7 @@ export function createGame(canvas, input) {
         color: CAR_COLORS[(i + 1) % CAR_COLORS.length],
         x: sp.x,
         y: sp.y,
-        angle: sp.angle,
+        angle: startHeading,
         hp: 10000,
         maxHp: 10000,
         engine: Math.min(4, Math.floor(difficulty + Math.random() * 2)),
@@ -88,8 +103,8 @@ export function createGame(canvas, input) {
         aiAggro: 0.4 + Math.random() * 0.5,
         aiSkill: 0.45 + Math.random() * 0.4 + difficulty * 0.05
       });
+      ai.angle = startHeading;
       ai.nitroCharges = ai.nitroCharges ?? ai.nitro ?? 1;
-      // init waypoint near spawn
       let best = 0, bestD = Infinity;
       for (let w = 0; w < track.line.length; w++) {
         const dx = track.line[w].x - ai.x, dy = track.line[w].y - ai.y;
@@ -100,7 +115,6 @@ export function createGame(canvas, input) {
       cars.push(ai);
     }
 
-    // player waypoint
     {
       let best = 0, bestD = Infinity;
       for (let w = 0; w < track.line.length; w++) {
@@ -111,29 +125,38 @@ export function createGame(canvas, input) {
       cars[0].aiWp = best;
     }
 
-    // seed progress from start positions
     for (const c of cars) updateCheckpoints(c, track);
+
+    // Grid camera centre
+    let gx = 0, gy = 0;
+    for (const c of cars) { gx += c.x; gy += c.y; }
+    gx /= cars.length;
+    gy /= cars.length;
 
     world = {
       track,
       cars,
       weapons: createWeaponsState(),
-      cam: { x: cars[0].x, y: cars[0].y, zoom: 0.85 },
+      cam: { x: gx, y: gy, zoom: ZOOM_GRID },
+      gridCam: { x: gx, y: gy },
       player: cars[0],
       race: {
         mode,
         trackIndex,
         totalLaps,
         time: 0,
-        countdown: 3000,
+        countdown: 3800, // 3-2-1 then GO flash
+        goFlash: 0,
         finishedCount: 0,
         over: false,
-        placesAssigned: 0
+        placesAssigned: 0,
+        live: false
       },
       dt: 16,
       save
     };
 
+    lastCountdownDigit = null;
     running = true;
     paused = false;
     last = performance.now();
@@ -163,46 +186,99 @@ export function createGame(canvas, input) {
       }
     }
 
-    // camera follow — smooth zoom lerp avoids blurry continuous rescale
-    const p = world.player;
-    world.cam.x += (p.x - world.cam.x) * 0.14;
-    world.cam.y += (p.y - world.cam.y) * 0.14;
-    const spd = Math.hypot(p.vx, p.vy);
-    const targetZoom = clamp(0.92 - spd * 0.032, 0.7, 0.92);
-    world.cam.zoom += (targetZoom - world.cam.zoom) * 0.06;
-
+    updateCamera(dt);
     renderer.draw(world);
 
-    // countdown overlay
-    if (world.race.countdown > 0) {
-      const c = world.race.countdown;
-      const text = c > 2000 ? '3' : c > 1000 ? '2' : c > 0 ? '1' : 'GO';
-      renderer.drawCountdown(renderer.ctx, text, canvas.clientWidth, canvas.clientHeight);
+    const race = world.race;
+    if (race.countdown > 0 || race.goFlash > 0) {
+      let text = '';
+      if (race.countdown > 0) {
+        const c = race.countdown;
+        text = c > 2800 ? '3' : c > 1800 ? '2' : c > 800 ? '1' : 'GO';
+      } else if (race.goFlash > 0) {
+        text = 'GO';
+      }
+      if (text) {
+        renderer.drawCountdown(renderer.ctx, text, canvas.clientWidth, canvas.clientHeight, {
+          flash: text === 'GO',
+          t: race.goFlash || race.countdown
+        });
+      }
     }
 
     raf = requestAnimationFrame(loop);
+  }
+
+  function updateCamera(dt) {
+    const p = world.player;
+    const race = world.race;
+    // Fixed wider grid view during 3-2-1; after GO hand off to player + speed zoom
+    if (race.countdown > 0) {
+      const g = world.gridCam;
+      world.cam.x += (g.x - world.cam.x) * 0.12;
+      world.cam.y += (g.y - world.cam.y) * 0.12;
+      world.cam.zoom += (ZOOM_GRID - world.cam.zoom) * ZOOM_LERP_GRID;
+      return;
+    }
+
+    // Follow player
+    world.cam.x += (p.x - world.cam.x) * 0.14;
+    world.cam.y += (p.y - world.cam.y) * 0.14;
+
+    // Dynamic zoom: speed up → zoom out (see more track)
+    const spd = Math.hypot(p.vx, p.vy);
+    // spd typically ~0..~5+ with nitro; map comfortably
+    const t = clamp(spd / 4.2, 0, 1);
+    // Ease for arcade feel
+    const eased = t * t * (3 - 2 * t);
+    let targetZoom = ZOOM_NEAR + (ZOOM_FAR - ZOOM_NEAR) * eased;
+    if (p.nitroTimer > 0) {
+      targetZoom = Math.max(ZOOM_FAR, targetZoom - 0.04);
+    }
+    targetZoom = clamp(targetZoom, ZOOM_FAR, ZOOM_NEAR);
+    world.cam.zoom += (targetZoom - world.cam.zoom) * ZOOM_LERP_RACE;
   }
 
   function update(dt) {
     const { track, cars, weapons, race, save } = world;
     const flags = input.consumeFlags();
 
-    if (flags.pause && race.countdown <= 0 && !race.over) {
+    if (flags.pause && race.live && !race.over) {
       paused = true;
       return 'pause';
     }
 
+    // Countdown: cars frozen
     if (race.countdown > 0) {
       race.countdown -= dt;
-      // freeze cars during countdown except tiny settle
+      const c = race.countdown;
+      const digit = c > 2800 ? '3' : c > 1800 ? '2' : c > 800 ? '1' : (c > 0 ? 'GO' : 'GO');
+      if (digit !== lastCountdownDigit) {
+        lastCountdownDigit = digit;
+        if (digit === 'GO') sfx('countdownGo');
+        else sfx('countdown');
+      }
+      if (race.countdown <= 0) {
+        race.countdown = 0;
+        race.goFlash = 700;
+        race.live = true;
+      }
+      // Keep velocities zero
+      for (const car of cars) {
+        car.vx = 0;
+        car.vy = 0;
+      }
       return;
+    }
+
+    if (race.goFlash > 0) {
+      race.goFlash -= dt;
     }
 
     if (race.over) return;
 
     race.time += dt;
 
-    // player input
     const player = world.player;
     if (!player.dead && !player.finished) {
       if (flags.weaponCycle) cycleWeapon(player, flags.weaponCycle);
@@ -220,11 +296,9 @@ export function createGame(canvas, input) {
         brake: flags.brake || input.state.brake
       }, dt, track, cars);
     } else if (!player.finished && player.dead) {
-      // still integrate lightly
       stepCar(player, { steer: 0, accel: false, brake: false }, dt, track, cars);
     }
 
-    // AI
     for (const c of cars) {
       if (c.isPlayer) continue;
       if (c.finished || c.dead) {
@@ -236,7 +310,6 @@ export function createGame(canvas, input) {
       stepCar(c, aiIn, dt, track, cars);
     }
 
-    // wall/car sfx
     for (const c of cars) {
       if (c._wallHit > 0.8) { if (c.isPlayer) sfx('wall'); c._wallHit = 0; }
       if (c._carHit > 0.6) { if (c.isPlayer) sfx('hit'); c._carHit = 0; }
@@ -248,13 +321,11 @@ export function createGame(canvas, input) {
     });
 
     for (const c of cars) {
-      const prevLap = c.lap;
       updateCheckpoints(c, track);
       if (c._justLapped) {
         c._justLapped = false;
         if (c.isPlayer && c.lap < race.totalLaps) sfx('lap');
       }
-      // finish
       if (!c.finished && c.lap >= race.totalLaps) {
         c.finished = true;
         race.placesAssigned++;
@@ -262,14 +333,8 @@ export function createGame(canvas, input) {
         c.finishTime = race.time;
         if (c.isPlayer) sfx('finish');
       }
-      // dead cars get last places eventually
-      if (c.dead && !c.finished) {
-        // allow continue as DNF after all living finish or timeout
-      }
     }
 
-    // end conditions
-    const playerDone = player.finished || (player.dead && race.time > 8000);
     const allDone = cars.every((c) => c.finished || c.dead);
     const timeout = race.time > race.totalLaps * 120000;
     if ((player.finished && (race.placesAssigned >= Math.ceil(cars.length / 2) || race.time - player.finishTime > 5000))
@@ -283,7 +348,6 @@ export function createGame(canvas, input) {
     world.race.over = true;
     const { cars, race, save, track } = world;
 
-    // assign remaining places
     const remaining = cars.filter((c) => !c.finishPlace).sort((a, b) => b.progress - a.progress);
     for (const c of remaining) {
       race.placesAssigned++;
@@ -306,7 +370,6 @@ export function createGame(canvas, input) {
     const player = cars.find((c) => c.isPlayer);
     const playerPlace = player.finishPlace;
 
-    // persist car damage + ammo leftover + cash + nitro leftover
     save.car.hp = Math.max(0, Math.round(player.hp));
     save.car.weapons = { ...player.weapons };
     save.car.nitro = player.nitroCharges;
@@ -317,7 +380,6 @@ export function createGame(canvas, input) {
     if (race.mode === 'career') {
       if (playerPlace === 1) save.careerWins++;
       if (playerPlace <= 3) {
-        // advance
         if (race.trackIndex >= save.careerTrack) {
           save.careerTrack = Math.min(TRACKS_LEN(), race.trackIndex + 1);
           save.unlockedTracks = Math.max(save.unlockedTracks, save.careerTrack + 1);
@@ -339,7 +401,6 @@ export function createGame(canvas, input) {
       mode: race.mode
     };
 
-    // delay briefly then callback
     setTimeout(() => {
       stopRace();
       if (onFinish) onFinish(result);

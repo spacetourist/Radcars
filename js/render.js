@@ -1,4 +1,6 @@
 import { hpColor } from './util.js';
+import { createSpriteBank } from './sprites.js';
+import { CAR_COLORS } from './cars.js';
 
 /** HD remaster renderer: industrial arena, angular cars, visceral FX — crisp, no mush. */
 export function createRenderer(canvas) {
@@ -8,6 +10,9 @@ export function createRenderer(canvas) {
   let fxTime = 0;
   const particles = [];
   let bufW = 0, bufH = 0, lastDpr = 0;
+  const sprites = createSpriteBank();
+  try { sprites.warm(CAR_COLORS); } catch (_) {}
+  const boomAnims = []; // {x,y,frame,age}
 
   function resize(cssW, cssH, dpr) {
     const bw = Math.max(1, Math.floor(cssW * dpr));
@@ -84,6 +89,7 @@ export function createRenderer(canvas) {
       r: 3, ring: true, ringW: 2
     });
     shake = Math.min(8, shake + 3.8);
+    boomAnims.push({ x, y, age: 0, life: 280 });
   }
 
   function stepParticles(dt) {
@@ -103,6 +109,10 @@ export function createRenderer(canvas) {
     }
     for (let i = particles.length - 1; i >= 0; i--) {
       if (particles[i].life <= 0) particles.splice(i, 1);
+    }
+    for (let i = boomAnims.length - 1; i >= 0; i--) {
+      boomAnims[i].age += dt;
+      if (boomAnims[i].age >= boomAnims[i].life) boomAnims.splice(i, 1);
     }
     shake *= Math.pow(0.88, dt / 16);
     if (shake < 0.08) shake = 0;
@@ -154,6 +164,18 @@ export function createRenderer(canvas) {
 
     for (const c of cars) drawCarShadow(ctx, c);
     for (const c of cars) drawCar(ctx, c, fxTime);
+
+    // Sprite boom sheets
+    for (const b of boomAnims) {
+      const fi = Math.min(sprites.booms.length - 1, Math.floor((b.age / b.life) * sprites.booms.length));
+      const img = sprites.booms[fi];
+      if (img) {
+        const s = 48 + (b.age / b.life) * 24;
+        ctx.globalAlpha = Math.max(0, 1 - b.age / b.life);
+        ctx.drawImage(img, b.x - s / 2, b.y - s / 2, s, s);
+        ctx.globalAlpha = 1;
+      }
+    }
 
     for (const p of particles) {
       const a = Math.max(0, p.life / (p.maxLife || 400));
@@ -360,101 +382,51 @@ export function createRenderer(canvas) {
   }
 
   function drawMine(ctx, m, t) {
+    const img = m.armed
+      ? sprites.mines[Math.floor((t * 0.012) % sprites.mines.length)]
+      : (sprites.mines.unarmed || sprites.mines[0]);
+    if (img) {
+      const s = 22;
+      ctx.drawImage(img, m.x - s / 2, m.y - s / 2, s, s);
+      return;
+    }
+    // fallback vector
     ctx.save();
     ctx.translate(m.x, m.y);
-    // Crisp disc — glow via solid rings, not shadowBlur
-    if (m.armed) {
-      const pulse = 0.55 + 0.45 * Math.sin(t * 0.012);
-      ctx.strokeStyle = `rgba(255,34,68,${0.25 * pulse})`;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(0, 0, m.r + 6 + pulse * 2, 0, Math.PI * 2);
-      ctx.stroke();
-    }
-    ctx.beginPath();
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2;
-      const r = i % 2 === 0 ? m.r + 3 : m.r - 1;
-      const x = Math.cos(a) * r, y = Math.sin(a) * r;
-      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    }
-    ctx.closePath();
     ctx.fillStyle = m.armed ? '#ff2244' : '#5a4828';
+    ctx.beginPath();
+    ctx.arc(0, 0, m.r || 6, 0, Math.PI * 2);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.8)';
-    ctx.lineWidth = 1.4;
-    ctx.stroke();
-    if (m.armed) {
-      ctx.fillStyle = '#ffe600';
-      ctx.beginPath();
-      ctx.arc(0, 0, 3, 0, Math.PI * 2);
-      ctx.fill();
-    }
     ctx.restore();
   }
 
   function drawProjectile(ctx, p, t) {
+    const type = p.type === 'super' ? 'super' : p.homing ? 'homing' : 'front';
+    const frames = sprites.projectiles[type] || sprites.projectiles.front;
+    const fi = sprites.carFrameIndex(p.angle);
+    const img = frames[fi];
+    if (img) {
+      const s = 28;
+      ctx.drawImage(img, p.x - s / 2, p.y - s / 2, s, s);
+      return;
+    }
     ctx.save();
     ctx.translate(p.x, p.y);
     ctx.rotate(p.angle);
-    const col = p.type === 'super' ? '#ffe600' : p.homing ? '#ff2bd6' : '#ff8a00';
-    // Outer glow as solid halo (no shadowBlur mush)
-    ctx.globalAlpha = 0.35;
-    ctx.fillStyle = col;
-    ctx.beginPath();
-    ctx.ellipse(0, 0, 16, 7, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-
-    ctx.fillStyle = col;
-    ctx.beginPath();
-    ctx.moveTo(12, 0);
-    ctx.lineTo(4, -4.5);
-    ctx.lineTo(-10, -3.5);
-    ctx.lineTo(-10, 3.5);
-    ctx.lineTo(4, 4.5);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = '#fff';
-    ctx.beginPath();
-    ctx.moveTo(12, 0);
-    ctx.lineTo(5, -3);
-    ctx.lineTo(5, 3);
-    ctx.fill();
-    ctx.fillStyle = shade(col, -40);
-    ctx.fillRect(-10, -6, 5, 2.5);
-    ctx.fillRect(-10, 3.5, 5, 2.5);
-
-    // Deterministic trail (stable, not random strobe)
-    const flick = 0.65 + 0.35 * Math.sin(t * 0.04 + p.x * 0.01);
-    const len = 22 + flick * 6;
-    const grd = ctx.createLinearGradient(-10, 0, -10 - len, 0);
-    grd.addColorStop(0, col);
-    grd.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.globalAlpha = 0.65 * flick;
-    ctx.fillStyle = grd;
-    ctx.beginPath();
-    ctx.moveTo(-10, -2.5);
-    ctx.lineTo(-10 - len, 0);
-    ctx.lineTo(-10, 2.5);
-    ctx.closePath();
-    ctx.fill();
-    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#ff8a00';
+    ctx.fillRect(-8, -3, 16, 6);
     ctx.restore();
   }
 
   function drawCarShadow(ctx, c) {
+    // Soft ground blob only — body shadow is baked into car sprite
     if (c.dead) return;
     ctx.save();
-    ctx.translate(c.x + 4, c.y + 6);
+    ctx.translate(c.x + 3, c.y + 5);
     ctx.rotate(c.angle);
-    ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    angularBody(ctx, -18, -12, 36, 24);
-    ctx.fill();
-    // Soft contact oval under chassis
-    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
     ctx.beginPath();
-    ctx.ellipse(0, 2, 20, 10, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, 2, 18, 9, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
@@ -476,144 +448,33 @@ export function createRenderer(canvas) {
   function drawCar(ctx, c, t) {
     ctx.save();
     ctx.translate(c.x, c.y);
-    ctx.rotate(c.angle);
     if (c.dead) ctx.globalAlpha = 0.4;
 
-    // Controlled silhouette glow — thin ring, not soft blur
-    if (!c.dead) {
-      ctx.strokeStyle = c.isPlayer ? 'rgba(0,232,255,0.35)' : hexAlpha(c.color, 0.28);
-      ctx.lineWidth = c.isPlayer ? 5 : 3.5;
+    const tier = Math.min(4, (c.engine | 0) + (c.ram | 0));
+    const frames = sprites.getCarFrames(c.color, tier, !!c.isPlayer);
+    const fi = sprites.carFrameIndex(c.angle);
+    const img = frames[fi];
+    const drawW = 48, drawH = 48;
+    if (img) {
+      // Sprites already include rotation — no ctx.rotate
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(img, -drawW / 2, -drawH / 2, drawW, drawH);
+      ctx.imageSmoothingEnabled = false;
+    } else {
+      // Fallback vector
+      ctx.rotate(c.angle);
+      ctx.fillStyle = c.color;
       angularBody(ctx, -18, -12, 36, 24);
-      ctx.stroke();
+      ctx.fill();
+      ctx.rotate(-c.angle);
     }
 
-    // main angular body with top-light gradient via layered fills
-    ctx.fillStyle = shade(c.color, -18);
-    angularBody(ctx, -18, -12, 36, 24);
-    ctx.fill();
-    ctx.fillStyle = c.color;
-    ctx.beginPath();
-    ctx.moveTo(-14, -9);
-    ctx.lineTo(14, -7);
-    ctx.lineTo(16, 0);
-    ctx.lineTo(14, 7);
-    ctx.lineTo(-14, 9);
-    ctx.lineTo(-16, 0);
-    ctx.closePath();
-    ctx.fill();
-    // highlight ridge
-    ctx.fillStyle = shade(c.color, 40);
-    ctx.globalAlpha = c.dead ? 0.25 : 0.55;
-    ctx.beginPath();
-    ctx.moveTo(-8, -6);
-    ctx.lineTo(10, -4.5);
-    ctx.lineTo(8, -1);
-    ctx.lineTo(-10, -2.5);
-    ctx.closePath();
-    ctx.fill();
-    ctx.globalAlpha = c.dead ? 0.4 : 1;
-
-    // dark underbody / skirts
-    ctx.fillStyle = shade(c.color, -50);
-    ctx.beginPath();
-    ctx.moveTo(-14, -13.5);
-    ctx.lineTo(8, -13.5);
-    ctx.lineTo(6, -11);
-    ctx.lineTo(-12, -11);
-    ctx.closePath();
-    ctx.fill();
-    ctx.beginPath();
-    ctx.moveTo(-14, 13.5);
-    ctx.lineTo(8, 13.5);
-    ctx.lineTo(6, 11);
-    ctx.lineTo(-12, 11);
-    ctx.closePath();
-    ctx.fill();
-
-    // cabin canopy
-    ctx.fillStyle = 'rgba(8, 12, 20, 0.95)';
-    ctx.beginPath();
-    ctx.moveTo(0, -7);
-    ctx.lineTo(12, -5.5);
-    ctx.lineTo(12, 5.5);
-    ctx.lineTo(0, 7);
-    ctx.lineTo(-4, 5);
-    ctx.lineTo(-4, -5);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = 'rgba(0, 232, 255, 0.28)';
-    ctx.beginPath();
-    ctx.moveTo(2, -4.5);
-    ctx.lineTo(10, -3.5);
-    ctx.lineTo(10, 3.5);
-    ctx.lineTo(2, 4.5);
-    ctx.closePath();
-    ctx.fill();
-    // canopy rim
-    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(0, -7);
-    ctx.lineTo(12, -5.5);
-    ctx.lineTo(12, 5.5);
-    ctx.lineTo(0, 7);
-    ctx.stroke();
-
-    // aggressive nose
-    ctx.fillStyle = shade(c.color, 38);
-    ctx.beginPath();
-    ctx.moveTo(14, -5);
-    ctx.lineTo(19, 0);
-    ctx.lineTo(14, 5);
-    ctx.lineTo(11, 4);
-    ctx.lineTo(11, -4);
-    ctx.closePath();
-    ctx.fill();
-
-    // headlights — solid bright + small halo rects (no shadowBlur)
-    ctx.fillStyle = 'rgba(0,232,255,0.35)';
-    ctx.fillRect(14, -4.2, 5, 3.2);
-    ctx.fillRect(14, 1.0, 5, 3.2);
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(15.5, -3.4, 2.8, 2);
-    ctx.fillRect(15.5, 1.4, 2.8, 2);
-
-    // rear wing
-    ctx.fillStyle = shade(c.color, -58);
-    ctx.fillRect(-19, -10, 5, 20);
-    ctx.fillRect(-21, -11, 9, 3);
-    ctx.fillRect(-21, 8, 9, 3);
-    ctx.fillStyle = c.isPlayer ? '#ff2bd6' : '#b8ff00';
-    ctx.globalAlpha = 0.9;
-    ctx.fillRect(-18.5, -9, 2, 18);
-    ctx.globalAlpha = c.dead ? 0.4 : 1;
-
-    // side neon accent
-    ctx.strokeStyle = c.isPlayer ? 'rgba(0,232,255,0.75)' : hexAlpha(c.color, 0.6);
-    ctx.lineWidth = 1.6;
-    ctx.beginPath();
-    ctx.moveTo(-10, -10.5);
-    ctx.lineTo(10, -10.5);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(-10, 10.5);
-    ctx.lineTo(10, 10.5);
-    ctx.stroke();
-
-    // crisp outline
-    ctx.strokeStyle = 'rgba(0,0,0,0.65)';
-    ctx.lineWidth = 1.4;
-    angularBody(ctx, -18, -12, 36, 24);
-    ctx.stroke();
-    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
-    ctx.lineWidth = 0.9;
-    angularBody(ctx, -17.2, -11.2, 34.4, 22.4);
-    ctx.stroke();
-
+    // Nitro flame (still vector — dynamic)
     if (c.nitroTimer > 0) {
-      // Smooth pulse — not random flicker
+      ctx.save();
+      ctx.rotate(c.angle);
       const flick = 0.78 + 0.22 * Math.sin(t * 0.05);
-      ctx.globalAlpha = flick;
+      ctx.globalAlpha = flick * (c.dead ? 0.4 : 1);
       const len = 22 + 6 * Math.sin(t * 0.07);
       const grd = ctx.createLinearGradient(-18, 0, -18 - len, 0);
       grd.addColorStop(0, 'rgba(255,43,214,0.95)');
@@ -626,16 +487,11 @@ export function createRenderer(canvas) {
       ctx.lineTo(-18, 8);
       ctx.closePath();
       ctx.fill();
-      ctx.fillStyle = '#fff';
-      ctx.globalAlpha = flick * 0.55;
-      ctx.beginPath();
-      ctx.arc(-24 - 3 * Math.sin(t * 0.08), Math.sin(t * 0.09) * 3, 1.8, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.restore();
       ctx.globalAlpha = c.dead ? 0.4 : 1;
     }
 
-    // HP bar
-    ctx.rotate(-c.angle);
+    // HP bar (screen-aligned)
     const pct = Math.max(0, c.hp / c.maxHp);
     ctx.fillStyle = 'rgba(0,0,0,0.7)';
     roundRect(ctx, -16, -27, 32, 6, 1);
@@ -744,19 +600,37 @@ export function createRenderer(canvas) {
     ctx.restore();
   }
 
-  function drawCountdown(ctx, text, W, H) {
+  function drawCountdown(ctx, text, W, H, opts = {}) {
     ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.32)';
+    const flash = !!opts.flash || text === 'GO';
+    ctx.fillStyle = flash ? 'rgba(0,0,0,0.18)' : 'rgba(0,0,0,0.28)';
     ctx.fillRect(0, 0, W, H);
-    ctx.font = '400 78px "Black Ops One", Impact, "Arial Black", sans-serif';
+
+    const pulse = flash ? 1.08 + 0.06 * Math.sin((opts.t || 0) * 0.02) : 1;
+    const size = (text === 'GO' ? 92 : 86) * pulse;
+    ctx.font = `400 ${size}px "Black Ops One", Impact, "Arial Black", sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillText(text, W / 2 + 4, H / 2 + 4);
+
+    // Hazard flash bars
+    if (flash) {
+      ctx.fillStyle = 'rgba(184,255,0,0.12)';
+      ctx.fillRect(0, H * 0.35, W, H * 0.3);
+    }
+
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillText(text, W / 2 + 5, H / 2 + 5);
     ctx.fillStyle = '#ff2bd6';
-    ctx.fillText(text, W / 2 - 2, H / 2);
-    ctx.fillStyle = '#00e8ff';
+    ctx.fillText(text, W / 2 - 3, H / 2);
+    ctx.fillStyle = flash ? '#b8ff00' : '#00e8ff';
     ctx.fillText(text, W / 2, H / 2);
+
+    // Thin neon ring
+    ctx.strokeStyle = flash ? 'rgba(184,255,0,0.55)' : 'rgba(0,232,255,0.4)';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(W / 2, H / 2, 70 * pulse, 0, Math.PI * 2);
+    ctx.stroke();
     ctx.restore();
   }
 

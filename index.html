@@ -22,9 +22,12 @@
     <canvas id="game"></canvas>
     <div id="ui"></div>
     <div id="touch-controls" class="hidden">
-      <div class="tc-left">
-        <button type="button" id="btn-left" class="tc-btn tc-steer" data-action="left">◀</button>
-        <button type="button" id="btn-right" class="tc-btn tc-steer" data-action="right">▶</button>
+      <div class="tc-steer-wrap" id="steer-slider" aria-label="Steering">
+        <div class="tc-steer-track">
+          <div class="tc-steer-notch"></div>
+          <div class="tc-steer-thumb" id="steer-thumb"></div>
+        </div>
+        <div class="tc-steer-label">STEER</div>
       </div>
       <div class="tc-right">
         <button type="button" id="btn-accel" class="tc-btn tc-accel" data-action="accel">GAS</button>

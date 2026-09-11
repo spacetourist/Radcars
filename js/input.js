@@ -10,14 +10,23 @@ export function createInput() {
     pausePressed: false,
     weaponCycle: 0,
     left: false,
-    right: false
+    right: false,
+    /** Continuous steer from slider / keys in [-1, 1] */
+    sliderSteer: 0,
+    sliderActive: false
   };
 
   const keys = new Set();
 
   function syncSteer() {
-    state.steer = (state.right || keys.has('ArrowRight') || keys.has('d') || keys.has('D') ? 1 : 0)
-      - (state.left || keys.has('ArrowLeft') || keys.has('a') || keys.has('A') ? 1 : 0);
+    // Keyboard / leftover left-right still work; slider overrides while dragged
+    if (state.sliderActive) {
+      state.steer = state.sliderSteer;
+      return;
+    }
+    const keyR = keys.has('ArrowRight') || keys.has('d') || keys.has('D') || state.right;
+    const keyL = keys.has('ArrowLeft') || keys.has('a') || keys.has('A') || state.left;
+    state.steer = (keyR ? 1 : 0) - (keyL ? 1 : 0);
   }
 
   function onKeyDown(e) {
@@ -46,7 +55,6 @@ export function createInput() {
   window.addEventListener('keydown', onKeyDown, { passive: false });
   window.addEventListener('keyup', onKeyUp);
 
-  // Touch / mouse buttons
   const held = new Map();
 
   function bindButton(el, action) {
@@ -67,7 +75,6 @@ export function createInput() {
     el.addEventListener('pointerup', up);
     el.addEventListener('pointerleave', up);
     el.addEventListener('pointercancel', up);
-    // mouse emulate
     el.addEventListener('mousedown', down);
     el.addEventListener('mouseup', up);
     el.addEventListener('mouseleave', up);
@@ -93,17 +100,121 @@ export function createInput() {
     }
   }
 
+  function bindSteerSlider() {
+    const root = document.getElementById('steer-slider');
+    const thumb = document.getElementById('steer-thumb');
+    if (!root || !thumb) return;
+
+    let pointerId = null;
+    let springRaf = 0;
+
+    function setThumb(norm) {
+      // norm in [-1, 1]
+      const n = Math.max(-1, Math.min(1, norm));
+      state.sliderSteer = n;
+      syncSteer();
+      const pct = (n + 1) * 50; // 0..100
+      thumb.style.left = pct + '%';
+      root.classList.toggle('tc-steer-active', Math.abs(n) > 0.02);
+    }
+
+    function normFromClientX(clientX) {
+      const rect = root.getBoundingClientRect();
+      const pad = 28; // thumb radius-ish
+      const x = clientX - rect.left;
+      const t = (x - pad) / Math.max(1, rect.width - pad * 2);
+      return Math.max(-1, Math.min(1, t * 2 - 1));
+    }
+
+    function cancelSpring() {
+      if (springRaf) {
+        cancelAnimationFrame(springRaf);
+        springRaf = 0;
+      }
+    }
+
+    function springToCentre() {
+      cancelSpring();
+      const step = () => {
+        const v = state.sliderSteer;
+        if (Math.abs(v) < 0.02) {
+          setThumb(0);
+          state.sliderActive = false;
+          syncSteer();
+          springRaf = 0;
+          return;
+        }
+        setThumb(v * 0.72);
+        springRaf = requestAnimationFrame(step);
+      };
+      springRaf = requestAnimationFrame(step);
+    }
+
+    const onDown = (ev) => {
+      ev.preventDefault();
+      cancelSpring();
+      state.sliderActive = true;
+      pointerId = ev.pointerId;
+      try { root.setPointerCapture(pointerId); } catch (_) {}
+      setThumb(normFromClientX(ev.clientX));
+      root.classList.add('active');
+    };
+
+    const onMove = (ev) => {
+      if (!state.sliderActive) return;
+      if (pointerId != null && ev.pointerId !== pointerId) return;
+      ev.preventDefault();
+      setThumb(normFromClientX(ev.clientX));
+    };
+
+    const onUp = (ev) => {
+      if (pointerId != null && ev.pointerId !== pointerId) return;
+      ev.preventDefault();
+      pointerId = null;
+      root.classList.remove('active');
+      try { root.releasePointerCapture(ev.pointerId); } catch (_) {}
+      springToCentre();
+    };
+
+    root.addEventListener('pointerdown', onDown);
+    root.addEventListener('pointermove', onMove);
+    root.addEventListener('pointerup', onUp);
+    root.addEventListener('pointercancel', onUp);
+    // Mouse desktop testing (in case pointer events partial)
+    root.addEventListener('mousedown', (ev) => {
+      ev.preventDefault();
+      cancelSpring();
+      state.sliderActive = true;
+      setThumb(normFromClientX(ev.clientX));
+      root.classList.add('active');
+      const move = (e) => { e.preventDefault(); setThumb(normFromClientX(e.clientX)); };
+      const up = (e) => {
+        e.preventDefault();
+        window.removeEventListener('mousemove', move);
+        window.removeEventListener('mouseup', up);
+        root.classList.remove('active');
+        springToCentre();
+      };
+      window.addEventListener('mousemove', move);
+      window.addEventListener('mouseup', up);
+    });
+
+    setThumb(0);
+  }
+
   function bindTouchUI() {
     const root = document.getElementById('touch-controls');
     if (!root) return;
     root.querySelectorAll('[data-action]').forEach((btn) => {
       bindButton(btn, btn.getAttribute('data-action'));
     });
+    bindSteerSlider();
   }
 
   bindTouchUI();
 
   function consumeFlags() {
+    syncSteer();
     const out = {
       steer: state.steer,
       accel: state.accel,
