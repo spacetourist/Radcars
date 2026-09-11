@@ -1,4 +1,4 @@
-const CACHE = 'radcars-v4-sprites-steer';
+const CACHE = 'radcars-v5-mobile-controls';
 const ASSETS = [
   './',
   './index.html',

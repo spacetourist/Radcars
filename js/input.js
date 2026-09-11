@@ -108,10 +108,24 @@ export function createInput() {
     let pointerId = null;
     let springRaf = 0;
 
+    /** Map raw slider [-1,1] → gameplay steer with deadzone + ease-in.
+     *  Thumb follows finger (raw); only the value sent to physics is shaped.
+     *  Deadzone ~0.1, remapped quadratic ease-in, max scale 0.72 vs keyboard. */
+    function curveSteer(raw) {
+      const DZ = 0.1;
+      const MAX = 0.72;
+      const a = Math.abs(raw);
+      if (a < DZ) return 0;
+      const t = (a - DZ) / (1 - DZ); // 0..1 past deadzone
+      const shaped = t * t;          // ease-in near centre
+      return Math.sign(raw) * shaped * MAX;
+    }
+
     function setThumb(norm) {
-      // norm in [-1, 1]
+      // norm in [-1, 1] — visual / spring uses raw; gameplay uses curve
       const n = Math.max(-1, Math.min(1, norm));
-      state.sliderSteer = n;
+      state.sliderSteer = curveSteer(n);
+      state._sliderRaw = n;
       syncSteer();
       const pct = (n + 1) * 50; // 0..100
       thumb.style.left = pct + '%';
@@ -120,7 +134,7 @@ export function createInput() {
 
     function normFromClientX(clientX) {
       const rect = root.getBoundingClientRect();
-      const pad = 28; // thumb radius-ish
+      const pad = 32; // thumb radius-ish (matches wider thumb)
       const x = clientX - rect.left;
       const t = (x - pad) / Math.max(1, rect.width - pad * 2);
       return Math.max(-1, Math.min(1, t * 2 - 1));
@@ -136,7 +150,7 @@ export function createInput() {
     function springToCentre() {
       cancelSpring();
       const step = () => {
-        const v = state.sliderSteer;
+        const v = state._sliderRaw ?? 0;
         if (Math.abs(v) < 0.02) {
           setThumb(0);
           state.sliderActive = false;
