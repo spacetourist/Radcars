@@ -1,4 +1,4 @@
-const CACHE = 'radcars-v6-heading-steer';
+const CACHE = 'radcars-v7-start-straight';
 const ASSETS = [
   './',
   './index.html',

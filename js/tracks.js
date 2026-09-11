@@ -49,20 +49,29 @@ export const TRACKS = [
       const outer = ovalPoints(cx, cy, 720, 420, 56);
       const inner = ovalPoints(cx, cy, 420, 200, 48);
       const line = ovalPoints(cx, cy, 570, 310, 64);
-      // Start on right side; race direction follows racing-line CCW (~+π/2)
-      // Heading must match racing-line tangent at start (line[0]→line[1] ≈ +π/2),
-      // not a hard-coded -π/2 which faced the wrong way on Neon Loop.
-      const startHeading = Math.atan2(line[1].y - line[0].y, line[1].x - line[0].x);
+      // Start on the TOP of the ellipse — longest flat stretch — facing +X (right).
+      // ovalPoints traces clockwise on canvas (y-down); at top, forward tangent ≈ 0.
+      const startIndex = Math.round((3 / 4) * line.length) % line.length; // 48 of 64
+      const p0 = line[startIndex];
+      const p1 = line[(startIndex + 1) % line.length];
+      const startHeading = Math.atan2(p1.y - p0.y, p1.x - p0.x);
+      const fx = Math.cos(startHeading), fy = Math.sin(startHeading);
+      const lx = -fy, ly = fx;
       const spawns = [];
       for (let i = 0; i < 8; i++) {
+        const row = Math.floor(i / 2);
+        const col = (i % 2 === 0) ? -1 : 1;
+        const back = row * 44 + (i % 2) * 18;
+        const lat = col * 26;
         spawns.push({
-          x: cx + 570,
-          y: cy + 40 + i * 28,
+          x: p0.x - fx * back + lx * lat,
+          y: p0.y - fy * back + ly * lat,
           angle: startHeading
         });
       }
       const checkpoints = [];
       for (let i = 0; i < 8; i++) {
+        // Gate 0 at top (start/finish), then around clockwise
         const a = -Math.PI / 2 + (i / 8) * Math.PI * 2;
         checkpoints.push({
           x: cx + Math.cos(a) * 570,
@@ -71,7 +80,7 @@ export const TRACKS = [
           ny: Math.sin(a)
         });
       }
-      return { outer, inner, line, spawns, checkpoints, startIndex: 0 };
+      return { outer, inner, line, spawns, checkpoints, startIndex };
     })()
   },
   {
@@ -119,7 +128,7 @@ export const TRACKS = [
         const len = Math.hypot(dx, dy) || 1;
         return { x: p.x, y: p.y, nx: dx / len, ny: dy / len };
       });
-      return { outer, inner, line: dense, spawns, checkpoints, startIndex: 0 };
+      return { outer, inner, line: dense, spawns, checkpoints, startIndex: 10 };
     })()
   },
   {
@@ -215,7 +224,7 @@ export const TRACKS = [
         const len = Math.hypot(dx, dy) || 1;
         return { x: p.x, y: p.y, nx: dx / len, ny: dy / len };
       });
-      return { outer, inner, line: dense, spawns, checkpoints, startIndex: 0 };
+      return { outer, inner, line: dense, spawns, checkpoints, startIndex: 12 };
     })()
   }
 ];
@@ -259,76 +268,129 @@ function pointInPolySimple(px, py, poly) {
   return inside;
 }
 
-/**
- * Build a readable F1-style staggered starting grid on the start straight.
- * Cars face `heading` (track start direction). Rows go backward along -heading;
- * columns offset along the lateral axis. No overlapping.
- */
-/** Forward racing-line heading near a world point (pole / start). */
-function racingLineHeading(line, nearX, nearY) {
-  if (!line || line.length < 2) return 0;
-  let best = 0;
-  let bestD = Infinity;
-  for (let i = 0; i < line.length; i++) {
-    const dx = line[i].x - nearX;
-    const dy = line[i].y - nearY;
-    const d = dx * dx + dy * dy;
-    if (d < bestD) {
-      bestD = d;
-      best = i;
-    }
-  }
-  const a = line[best];
-  const b = line[(best + 1) % line.length];
+/** Forward racing-line heading at a line index. */
+function lineHeadingAt(line, idx) {
+  const a = line[idx % line.length];
+  const b = line[(idx + 1) % line.length];
   return Math.atan2(b.y - a.y, b.x - a.x);
 }
 
+/**
+ * Find the flattest racing-line stretch (lowest cumulative curvature over a window).
+ * Used when track.startIndex is not set.
+ */
+function findFlattestStartIndex(line, window = 8) {
+  const n = line.length;
+  let bestIdx = 0;
+  let bestScore = Infinity;
+  for (let i = 0; i < n; i++) {
+    let score = 0;
+    let prev = null;
+    for (let k = 0; k < window; k++) {
+      const a = line[(i + k) % n];
+      const b = line[(i + k + 1) % n];
+      const ang = Math.atan2(b.y - a.y, b.x - a.x);
+      if (prev != null) {
+        let d = ang - prev;
+        while (d > Math.PI) d -= Math.PI * 2;
+        while (d < -Math.PI) d += Math.PI * 2;
+        score += Math.abs(d);
+      }
+      prev = ang;
+    }
+    if (score < bestScore) {
+      bestScore = score;
+      bestIdx = i;
+    }
+  }
+  return bestIdx;
+}
+
+/**
+ * Build a readable F1-style staggered starting grid on the start straight.
+ * Cars all share one heading (forward tangent). Rows go backward along -heading;
+ * columns offset laterally. Positions stay on asphalt when possible.
+ */
 export function buildStartingGrid(track, count = 8) {
   const line = track.line;
   if (!line || line.length < 2) {
     const sp = track.spawns?.[0] || { x: track.width / 2, y: track.height / 2, angle: 0 };
+    const ang = sp.angle ?? 0;
     return Array.from({ length: count }, (_, i) => ({
       x: sp.x - i * 36,
       y: sp.y + ((i % 2) ? 22 : -22),
-      angle: sp.angle ?? 0
+      angle: ang
     }));
   }
 
-  // Pole position from spawn[0] if present, else racing-line start.
-  // Heading ALWAYS from racing-line forward tangent near the pole — never trust
-  // spawn.angle alone (Neon Loop had angle: -π/2 while line[0]→line[1] ≈ +π/2).
-  const base = track.spawns?.[0];
-  const sx = base ? base.x : line[0].x;
-  const sy = base ? base.y : line[0].y;
-  const heading = racingLineHeading(line, sx, sy);
-
-  // Keep track spawn metadata in sync so start-line art / anything else matches.
-  if (track.spawns) {
-    for (const sp of track.spawns) sp.angle = heading;
+  const n = line.length;
+  let startIdx;
+  if (typeof track.startIndex === 'number') {
+    startIdx = ((track.startIndex % n) + n) % n;
+  } else {
+    startIdx = findFlattestStartIndex(line, 8);
   }
+
+  const pole = line[startIdx];
+  const sx = pole.x;
+  const sy = pole.y;
+  const heading = lineHeadingAt(line, startIdx);
 
   const fx = Math.cos(heading);
   const fy = Math.sin(heading);
   const lx = -fy; // left lateral
   const ly = fx;
 
-  // Staggered 2-wide grid: pole is forward-most. Slot 0 = pole (player).
-  const rowGap = 44;   // along track (behind)
-  const colGap = 28;   // across track
-  const stagger = 18;  // second column set slightly back
+  // Staggered 2-wide grid: pole forward-most. Slot 0 = pole (player).
+  const rowGap = 44;
+  const colGap = 26; // modest so cars stay between inner/outer on narrow straights
+  const stagger = 18;
 
   const out = [];
   for (let i = 0; i < count; i++) {
     const row = Math.floor(i / 2);
-    const col = (i % 2 === 0) ? -1 : 1; // left / right of centreline
+    const col = (i % 2 === 0) ? -1 : 1;
     const back = row * rowGap + (i % 2) * stagger;
-    // Lateral: alternate sides, slight centre offset so pairs don't stack
-    const lat = col * colGap;
-    out.push({
-      x: sx - fx * back + lx * lat,
-      y: sy - fy * back + ly * lat,
-      angle: heading
-    });
+    let lat = col * colGap;
+    let x = sx - fx * back + lx * lat;
+    let y = sy - fy * back + ly * lat;
+    // Clamp lateral / longitudinal so cars stay on asphalt (no wrapping off the straight)
+    if (!isOnTrack(track, x, y)) {
+      let placed = false;
+      for (let t = 0.85; t >= 0.1 && !placed; t -= 0.15) {
+        const tx = sx - fx * back + lx * (lat * t);
+        const ty = sy - fy * back + ly * (lat * t);
+        if (isOnTrack(track, tx, ty)) {
+          x = tx; y = ty; placed = true;
+        }
+      }
+      for (let b = back; b >= 0 && !placed; b -= 12) {
+        for (const t of [0.5, 0.25, 0]) {
+          const tx = sx - fx * b + lx * (lat * t);
+          const ty = sy - fy * b + ly * (lat * t);
+          if (isOnTrack(track, tx, ty)) {
+            x = tx; y = ty; placed = true;
+            break;
+          }
+        }
+      }
+      if (!placed) {
+        x = sx - fx * Math.min(back, 20) + lx * (col * 10);
+        y = sy - fy * Math.min(back, 20) + ly * (col * 10);
+      }
+    }
+    out.push({ x, y, angle: heading });
   }
+
+  // Keep spawn metadata in sync for start-line art
+  if (track.spawns && track.spawns.length) {
+    for (let i = 0; i < track.spawns.length; i++) {
+      const g = out[i] || out[out.length - 1];
+      track.spawns[i].x = g.x;
+      track.spawns[i].y = g.y;
+      track.spawns[i].angle = heading;
+    }
+  }
+
   return out;
 }

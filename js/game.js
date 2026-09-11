@@ -115,6 +115,18 @@ export function createGame(canvas, input) {
       cars.push(ai);
     }
 
+    // Force every car to the shared grid heading (player + AI)
+    for (let i = 0; i < cars.length; i++) {
+      const g = grid[i];
+      if (g) {
+        cars[i].angle = g.angle;
+        cars[i].x = g.x;
+        cars[i].y = g.y;
+      } else {
+        cars[i].angle = startHeading;
+      }
+    }
+
     {
       let best = 0, bestD = Infinity;
       for (let w = 0; w < track.line.length; w++) {
