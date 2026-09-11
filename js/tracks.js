@@ -49,13 +49,16 @@ export const TRACKS = [
       const outer = ovalPoints(cx, cy, 720, 420, 56);
       const inner = ovalPoints(cx, cy, 420, 200, 48);
       const line = ovalPoints(cx, cy, 570, 310, 64);
-      // Start on right side going up (counterclockwise-ish: start bottom of right)
+      // Start on right side; race direction follows racing-line CCW (~+π/2)
+      // Heading must match racing-line tangent at start (line[0]→line[1] ≈ +π/2),
+      // not a hard-coded -π/2 which faced the wrong way on Neon Loop.
+      const startHeading = Math.atan2(line[1].y - line[0].y, line[1].x - line[0].x);
       const spawns = [];
       for (let i = 0; i < 8; i++) {
         spawns.push({
           x: cx + 570,
           y: cy + 40 + i * 28,
-          angle: -Math.PI / 2
+          angle: startHeading
         });
       }
       const checkpoints = [];
@@ -261,6 +264,25 @@ function pointInPolySimple(px, py, poly) {
  * Cars face `heading` (track start direction). Rows go backward along -heading;
  * columns offset along the lateral axis. No overlapping.
  */
+/** Forward racing-line heading near a world point (pole / start). */
+function racingLineHeading(line, nearX, nearY) {
+  if (!line || line.length < 2) return 0;
+  let best = 0;
+  let bestD = Infinity;
+  for (let i = 0; i < line.length; i++) {
+    const dx = line[i].x - nearX;
+    const dy = line[i].y - nearY;
+    const d = dx * dx + dy * dy;
+    if (d < bestD) {
+      bestD = d;
+      best = i;
+    }
+  }
+  const a = line[best];
+  const b = line[(best + 1) % line.length];
+  return Math.atan2(b.y - a.y, b.x - a.x);
+}
+
 export function buildStartingGrid(track, count = 8) {
   const line = track.line;
   if (!line || line.length < 2) {
@@ -272,17 +294,17 @@ export function buildStartingGrid(track, count = 8) {
     }));
   }
 
-  // Prefer existing spawn[0] as pole if present, else racing-line start
+  // Pole position from spawn[0] if present, else racing-line start.
+  // Heading ALWAYS from racing-line forward tangent near the pole — never trust
+  // spawn.angle alone (Neon Loop had angle: -π/2 while line[0]→line[1] ≈ +π/2).
   const base = track.spawns?.[0];
-  let sx, sy, heading;
-  if (base && Number.isFinite(base.angle)) {
-    sx = base.x;
-    sy = base.y;
-    heading = base.angle;
-  } else {
-    sx = line[0].x;
-    sy = line[0].y;
-    heading = Math.atan2(line[1].y - line[0].y, line[1].x - line[0].x);
+  const sx = base ? base.x : line[0].x;
+  const sy = base ? base.y : line[0].y;
+  const heading = racingLineHeading(line, sx, sy);
+
+  // Keep track spawn metadata in sync so start-line art / anything else matches.
+  if (track.spawns) {
+    for (const sp of track.spawns) sp.angle = heading;
   }
 
   const fx = Math.cos(heading);

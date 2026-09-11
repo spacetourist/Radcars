@@ -31,7 +31,7 @@ export function stepCar(car, input, dt, track, others) {
 
   // Turn rate falls with speed ≈ *(4-speed)
   const turnFactor = Math.max(0.35, 4 - Math.min(speed, 3.5));
-  const turnRate = 0.0028 * turnFactor * (0.65 + Math.min(1, speed / 1.2));
+  const turnRate = 0.0028 * 0.75 * turnFactor * (0.65 + Math.min(1, speed / 1.2));
   car.angle = normalizeAngle(car.angle + steer * turnRate * dt);
 
   // Accel along facing
