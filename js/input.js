@@ -110,14 +110,14 @@ export function createInput() {
 
     /** Map raw slider [-1,1] → gameplay steer with deadzone + ease-in.
      *  Thumb follows finger (raw); only the value sent to physics is shaped.
-     *  Deadzone ~0.18, cubic ease-in (t³), max scale 0.32 vs keyboard. */
+     *  Mild deadzone, quadratic ease-in, max ~0.78 — corners work without twitch. */
     function curveSteer(raw) {
-      const DZ = 0.18;
-      const MAX = 0.32;
+      const DZ = 0.1;
+      const MAX = 0.78;
       const a = Math.abs(raw);
       if (a < DZ) return 0;
       const t = (a - DZ) / (1 - DZ); // 0..1 past deadzone
-      const shaped = t * t * t;      // cubic ease-in near centre
+      const shaped = t * t;            // quadratic: calm centre, usable mid-throw
       return Math.sign(raw) * shaped * MAX;
     }
 
