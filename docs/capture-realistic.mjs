@@ -32,10 +32,8 @@ async function gotoFresh(page) {
 async function waitPack(page) {
   await page.waitForFunction(() => {
     return window.__RAD_PACK_READY__ === true;
-  }, { timeout: 20000 }).catch(() => {});
-  // Also poll via module side-channel if we expose it
+  }, { timeout: 25000 }).catch(() => {});
   const ready = await page.evaluate(async () => {
-    // Dynamic import of pack status
     try {
       const m = await import('/js/assetPack.js?t=' + Date.now());
       if (!m.isPackReady()) await m.loadAssetPack();
@@ -74,40 +72,50 @@ const page = await browser.newPage();
 await page.setViewport({ width: 1280, height: 720, deviceScaleFactor: 1 });
 page.on('pageerror', (e) => console.error('PAGEERR', e.message));
 page.on('console', (m) => {
-  if (m.type() === 'error' || m.text().includes('assetPack')) console.log('CONSOLE', m.type(), m.text());
+  if (m.type() === 'error' || m.text().includes('assetPack') || m.text().includes('PACK')) {
+    console.log('CONSOLE', m.type(), m.text());
+  }
 });
 
 await gotoFresh(page);
 await waitPack(page);
 
-// Neon Loop grid
+// Neon Loop grid — pack v2
 await startTrack(page, 0);
-await sleep(900);
-await shot(page, '12-realistic-grid');
+await sleep(1100);
+await shot(page, '14-pack-v2-grid');
 
-// Mid-race
-await sleep(4800);
-await shot(page, '13-realistic-race');
+// Mid-race (multiple AI colours on grid)
+await sleep(5200);
+await shot(page, '15-pack-v2-race');
 
-// Quick sanity: pack cars used?
 const info = await page.evaluate(async () => {
   const m = await import('/js/assetPack.js');
   const p = m.getAssetPack();
+  const carKeys = p && p.cars ? Object.keys(p.cars) : [];
+  const cars = {};
+  for (const k of carKeys) {
+    const c = p.cars[k];
+    cars[k] = c ? { w: c.width, h: c.height } : null;
+  }
   return {
     ready: m.isPackReady(),
-    cars: p && p.cars ? {
-      cyan: !!(p.cars.cyan && p.cars.cyan.width),
-      pink: !!(p.cars.pink && p.cars.pink.width),
-      lime: !!(p.cars.lime && p.cars.lime.width),
-      cyanSize: p.cars.cyan ? [p.cars.cyan.width, p.cars.cyan.height] : null
-    } : null,
+    pack: p && p.name,
+    colorMap: m.PACK_CAR_COLOR_MAP,
+    cars,
+    carCount: carKeys.filter((k) => p.cars[k]).length,
     scenery: p && p.scenery ? {
       warehouse: !!(p.scenery.warehouse && p.scenery.warehouse.width),
       grandstand: !!(p.scenery.grandstand && p.scenery.grandstand.width),
-      warehouseSm: p.scenery.warehouseSm ? [p.scenery.warehouseSm.width, p.scenery.warehouseSm.height] : null
+      tower: !!(p.scenery.tower && p.scenery.tower.width),
+      crowd: !!(p.scenery.crowd && p.scenery.crowd.width),
+      tyrewall: !!(p.scenery.tyrewall && p.scenery.tyrewall.width),
+      props: !!(p.scenery.props && p.scenery.props.width),
+      towerSm: p.scenery.towerSm ? [p.scenery.towerSm.width, p.scenery.towerSm.height] : null
     } : null,
     skyline: !!(p && p.skyline),
-    asphalt: !!(p && p.asphalt)
+    asphalt: !!(p && p.asphalt),
+    windowInfo: typeof window !== 'undefined' ? window.__RAD_PACK_INFO__ : null
   };
 });
 console.log('pack info', JSON.stringify(info, null, 2));

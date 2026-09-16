@@ -1,1 +1,29 @@
-{"pack":"realistic-v1","chroma":"#FF00FF","files":{"bg":["bg/bg-neon-skyline.png"],"cars":["cars/car-cyan.png","cars/car-pink.png","cars/car-lime.png"],"scenery":["scenery/scenery-warehouse.png","scenery/scenery-grandstand.png"],"textures":["tex-asphalt.png"]}}
+{
+  "pack": "realistic-v2.1",
+  "chromaDefault": "#FF00FF",
+  "notes": "Cars/scenery may already have baked RGBA alpha from chromakey. Magenta car used green screen (#00FF00) before bake. Prefer alpha if present; else chroma. Map hex colours to files. v2.1 adds crowd, tyrewall, props with baked RGBA.",
+  "carsByColor": {
+    "#00e8ff": "cars/car-cyan.png",
+    "#ff2b6a": "cars/car-pink.png",
+    "#b8ff00": "cars/car-lime.png",
+    "#ffe600": "cars/car-yellow.png",
+    "#ff2bd6": "cars/car-magenta.png",
+    "#ff8a00": "cars/car-orange.png",
+    "#40c0ff": "cars/car-sky.png",
+    "#f0f0f0": "cars/car-white.png"
+  },
+  "scenery": [
+    "scenery/scenery-warehouse.png",
+    "scenery/scenery-grandstand.png",
+    "scenery/scenery-tower.png",
+    "scenery/scenery-crowd.png",
+    "scenery/scenery-tyrewall.png",
+    "scenery/scenery-props.png"
+  ],
+  "bg": [
+    "bg/bg-neon-skyline.png"
+  ],
+  "textures": [
+    "tex-asphalt.png"
+  ]
+}

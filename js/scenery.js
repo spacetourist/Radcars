@@ -605,7 +605,7 @@ function paintStreetlamp(ctx, tw, th, theme, variant) {
 export function createScenerySprites(theme) {
   const buildings = { warehouse: [], tower: [], shop: [], billboard: [], chimney: [], water: [], stand: [], standBlock: [] };
   const characters = [];
-  const props = { barrel: [], cone: [], light: [], fence: [], palm: [], lamp: [] };
+  const props = { barrel: [], cone: [], light: [], fence: [], palm: [], lamp: [], tyrewall: [] };
 
   for (let v = 0; v < 6; v++) {
     let c;
@@ -633,14 +633,14 @@ export function createScenerySprites(theme) {
     c = makeCanvas(48, 64); paintStreetlamp(c.ctx, 48, 64, theme, v); props.lamp.push(c.canvas);
   }
 
-  // Prefer realistic pack art for warehouse / grandstand (keep placement geometry)
-  applyPackBuildingArt(buildings);
+  // Prefer realistic pack art for warehouse / tower / grandstand / crowd / props
+  applyPackBuildingArt(buildings, characters, props);
 
   return { buildings, characters, props, theme };
 }
 
-/** Swap warehouse / stand / standBlock sources when pack sprites are ready. */
-function applyPackBuildingArt(buildings) {
+/** Swap warehouse / tower / stand / crowd / props when pack sprites are ready. */
+function applyPackBuildingArt(buildings, characters, props) {
   const pack = getAssetPack();
   if (!pack || !pack.ready || !pack.scenery) return;
   const sc = pack.scenery;
@@ -649,8 +649,14 @@ function applyPackBuildingArt(buildings) {
     if (sc.warehouseSm) variants.push(sc.warehouseSm);
     if (sc.warehouseMd) variants.push(sc.warehouseMd);
     if (sc.warehouse && variants.length < 2) variants.push(fitPackSprite(sc.warehouse, 100, 80));
-    // Keep a couple procedural as rare spice at end? Prefer pack only — requirement: prefer generated.
     buildings.warehouse = variants.length ? variants : buildings.warehouse;
+  }
+  if (sc.towerSm || sc.towerMd || sc.tower) {
+    const variants = [];
+    if (sc.towerSm) variants.push(sc.towerSm);
+    if (sc.towerMd) variants.push(sc.towerMd);
+    if (sc.tower && variants.length < 2) variants.push(fitPackSprite(sc.tower, 56, 128));
+    buildings.tower = variants.length ? variants : buildings.tower;
   }
   if (sc.stand || sc.grandstand) {
     const stand = sc.stand || fitPackSprite(sc.grandstand, 160, 80);
@@ -659,6 +665,34 @@ function applyPackBuildingArt(buildings) {
   if (sc.standBlock || sc.grandstand) {
     const block = sc.standBlock || fitPackSprite(sc.grandstand, 240, 120);
     buildings.standBlock = [block];
+  }
+  // Crowd strip → prefer over procedural character stamps at landmarks
+  if (characters && (sc.crowdSm || sc.crowdMd || sc.crowdLg || sc.crowd)) {
+    const variants = [];
+    if (sc.crowdSm) variants.push(sc.crowdSm);
+    if (sc.crowdMd) variants.push(sc.crowdMd);
+    if (sc.crowdLg) variants.push(sc.crowdLg);
+    if (sc.crowd && !variants.length) variants.push(fitPackSprite(sc.crowd, 96, 44));
+    if (variants.length) {
+      characters.length = 0;
+      for (const v of variants) characters.push(v);
+    }
+  }
+  // Props sheet → cones/barrels at pits/start; tyrewall for apex stacks
+  if (props) {
+    if (sc.propCone || sc.propBarrel || sc.propsSm || sc.props) {
+      const cone = sc.propCone || sc.propsSm || fitPackSprite(sc.props, 28, 32);
+      const barrel = sc.propBarrel || sc.propsMd || fitPackSprite(sc.props, 32, 36);
+      if (cone) props.cone = [cone];
+      if (barrel) props.barrel = [barrel];
+    }
+    if (sc.tyrewallSm || sc.tyrewallMd || sc.tyrewall) {
+      const variants = [];
+      if (sc.tyrewallSm) variants.push(sc.tyrewallSm);
+      if (sc.tyrewallMd) variants.push(sc.tyrewallMd);
+      if (sc.tyrewall && !variants.length) variants.push(fitPackSprite(sc.tyrewall, 64, 40));
+      props.tyrewall = variants.length ? variants : (props.tyrewall || []);
+    }
   }
 }
 
@@ -979,6 +1013,42 @@ export function buildTrackScenery(track) {
         if (!tryPlace(track, x, y, 8)) continue;
         if (pointInPoly(x, y, track.outer)) continue;
         addItem(near, pick(sprites.props.fence, rnd), x, y, 1.0, 'near');
+      }
+    }
+  }
+
+  // Tyre wall stacks at tight apexes (corner / chicane / kink / hairpin)
+  const apexLms = landmarks.filter((lm) =>
+    lm.kind === 'corner' || lm.kind === 'chicane' || lm.kind === 'kink' ||
+    (lm.id && /hairpin|apex/i.test(lm.id)));
+  const tyreSprites = (sprites.props.tyrewall && sprites.props.tyrewall.length)
+    ? sprites.props.tyrewall
+    : null;
+  if (tyreSprites) {
+    for (const lm of apexLms) {
+      const cx = track.width * 0.5, cy = track.height * 0.5;
+      const dx = lm.x - cx, dy = lm.y - cy;
+      const len = Math.hypot(dx, dy) || 1;
+      const nx = dx / len, ny = dy / len;
+      const tx = -ny, ty = nx;
+      const nStacks = lm.kind === 'chicane' || lm.kind === 'kink' ? 5 : 3;
+      for (let i = 0; i < nStacks; i++) {
+        const lat = (i - (nStacks - 1) * 0.5) * 28 + (rnd() - 0.5) * 8;
+        const out = 16 + rnd() * 14;
+        const x = lm.x + nx * out + tx * lat;
+        const y = lm.y + ny * out + ty * lat;
+        if (!tryPlace(track, x, y, 10)) continue;
+        if (pointInPoly(x, y, track.outer)) continue;
+        const img = pick(tyreSprites, rnd);
+        addItem(near, img, x, y, 0.95 + rnd() * 0.25, 'near');
+      }
+      // Inner-apex stack (toward track center) when pad allows
+      for (let i = 0; i < 2; i++) {
+        const x = lm.x - nx * (12 + i * 10) + tx * (rnd() - 0.5) * 20;
+        const y = lm.y - ny * (12 + i * 10) + ty * (rnd() - 0.5) * 20;
+        if (!tryPlace(track, x, y, 8)) continue;
+        if (pointInPoly(x, y, track.inner)) continue;
+        addItem(near, pick(tyreSprites, rnd), x, y, 0.85 + rnd() * 0.2, 'near');
       }
     }
   }

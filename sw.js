@@ -1,4 +1,4 @@
-const CACHE = 'radcars-v13-realistic-pack';
+const CACHE = 'radcars-v14-realistic-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -29,8 +29,17 @@ const ASSETS = [
   './assets/generated/cars/car-cyan.png',
   './assets/generated/cars/car-pink.png',
   './assets/generated/cars/car-lime.png',
+  './assets/generated/cars/car-yellow.png',
+  './assets/generated/cars/car-magenta.png',
+  './assets/generated/cars/car-orange.png',
+  './assets/generated/cars/car-sky.png',
+  './assets/generated/cars/car-white.png',
   './assets/generated/scenery/scenery-warehouse.png',
   './assets/generated/scenery/scenery-grandstand.png',
+  './assets/generated/scenery/scenery-tower.png',
+  './assets/generated/scenery/scenery-crowd.png',
+  './assets/generated/scenery/scenery-tyrewall.png',
+  './assets/generated/scenery/scenery-props.png',
   './assets/generated/tex-asphalt.png'
 ];
 
