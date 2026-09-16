@@ -83,11 +83,11 @@ await waitPack(page);
 // Neon Loop grid — pack v2
 await startTrack(page, 0);
 await sleep(1100);
-await shot(page, '18-no-outlines-grid');
+await shot(page, '20-composition-grid');
 
 // Mid-race (multiple AI colours on grid)
-await sleep(5200);
-await shot(page, '19-no-outlines-race');
+await sleep(5800);
+await shot(page, '21-composition-race');
 
 const info = await page.evaluate(async () => {
   const m = await import('/js/assetPack.js');
@@ -123,11 +123,33 @@ const info = await page.evaluate(async () => {
       standBlock: p.scenery.standBlock ? [p.scenery.standBlock.width, p.scenery.standBlock.height] : null
     } : null,
     skyline: !!(p && p.skyline),
+      skylineRel: p && p.skylineRel,
+      sceneryHasSkylineKey: p && p.scenery ? Object.keys(p.scenery).filter(k => /skyline|arena|horizon|REF/i.test(k)) : [],
     asphalt: !!(p && p.asphalt),
     windowInfo: typeof window !== 'undefined' ? window.__RAD_PACK_INFO__ : null
   };
 });
 console.log('pack info', JSON.stringify(info, null, 2));
+
+
+// Assert: pack.skyline never appears as a scenery stamp key / REF not loaded
+const stampCheck = await page.evaluate(async () => {
+  const m = await import('/js/assetPack.js');
+  const p = m.getAssetPack();
+  const keys = p && p.scenery ? Object.keys(p.scenery) : [];
+  const badKeys = keys.filter((k) => /skyline|horizon|arena|REF|neon-skyline/i.test(k));
+  return {
+    skylineRel: p && p.skylineRel,
+    skylineIsHorizon: !!(p && p.skylineRel && /horizon/i.test(p.skylineRel)),
+    badSceneryKeys: badKeys,
+    refNotInScenery: !keys.some((k) => /REF|arena/i.test(k)),
+    skylineW: p && p.skyline ? p.skyline.width : 0,
+    skylineH: p && p.skyline ? p.skyline.height : 0
+  };
+});
+console.log('stampCheck', JSON.stringify(stampCheck, null, 2));
+if (!stampCheck.skylineIsHorizon) console.error('FAIL: skyline is not horizon');
+if (stampCheck.badSceneryKeys.length) console.error('FAIL: skyline-like keys in scenery', stampCheck.badSceneryKeys);
 
 await browser.close();
 console.log('done');

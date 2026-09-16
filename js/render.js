@@ -266,7 +266,7 @@ export function createRenderer(canvas) {
         tctx.drawImage(src, 0, 0, tw, th);
         // Desaturate / darken slightly into asphalt
         tctx.globalCompositeOperation = 'source-atop';
-        tctx.fillStyle = 'rgba(18, 20, 24, 0.55)';
+        tctx.fillStyle = 'rgba(22, 18, 14, 0.38)';
         tctx.fillRect(0, 0, tw, th);
         asphaltPattern = ctx.createPattern(c, 'repeat');
       } catch (_) {
@@ -278,7 +278,7 @@ export function createRenderer(canvas) {
     ctx.beginPath();
     pathPoly(ctx, track.outer);
     ctx.clip();
-    ctx.globalAlpha = 0.18;
+    ctx.globalAlpha = 0.34;
     ctx.fillStyle = asphaltPattern;
     ctx.fillRect(0, 0, track.width, track.height);
     ctx.restore();
@@ -342,38 +342,55 @@ export function createRenderer(canvas) {
       }
     }
 
-    // Worn racing groove — lighter rubber band (v1.1: stronger, still flat at race zoom)
+    // Worn racing groove — stronger rubber band (v18 composition)
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+    ctx.lineWidth = 46;
+    ctx.beginPath();
+    pathPoly(ctx, track.line);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(235, 220, 185, 0.28)';
+    ctx.lineWidth = 28;
+    ctx.beginPath();
+    pathPoly(ctx, track.line);
+    ctx.closePath();
+    ctx.stroke();
     ctx.strokeStyle = 'rgba(255,255,255,0.12)';
-    ctx.lineWidth = 40;
+    ctx.lineWidth = 13;
     ctx.beginPath();
     pathPoly(ctx, track.line);
     ctx.closePath();
     ctx.stroke();
-    ctx.strokeStyle = 'rgba(230, 218, 195, 0.20)';
-    ctx.lineWidth = 24;
-    ctx.beginPath();
-    pathPoly(ctx, track.line);
-    ctx.closePath();
-    ctx.stroke();
-    ctx.strokeStyle = 'rgba(255,255,255,0.09)';
-    ctx.lineWidth = 11;
-    ctx.beginPath();
-    pathPoly(ctx, track.line);
-    ctx.closePath();
-    ctx.stroke();
-    // faint worn core
-    ctx.strokeStyle = 'rgba(245, 235, 210, 0.11)';
-    ctx.lineWidth = 6;
+    // worn core
+    ctx.strokeStyle = 'rgba(250, 238, 210, 0.16)';
+    ctx.lineWidth = 7;
     ctx.beginPath();
     pathPoly(ctx, track.line);
     ctx.closePath();
     ctx.stroke();
 
+    // Skid marks — dark rubber streaks offset from racing line
+    ctx.strokeStyle = 'rgba(8, 8, 10, 0.22)';
+    ctx.lineWidth = 3.2;
+    ctx.setLineDash([28, 42, 14, 55]);
+    ctx.beginPath();
+    pathPoly(ctx, track.line);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(12, 10, 8, 0.16)';
+    ctx.lineWidth = 2.4;
+    ctx.setLineDash([18, 60, 10, 48]);
+    ctx.beginPath();
+    pathPoly(ctx, track.line);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.setLineDash([]);
+
     // Dual lane dashes (subtle)
-    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
-    ctx.lineWidth = 2.2;
+    ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+    ctx.lineWidth = 2.4;
     ctx.setLineDash([18, 16]);
     ctx.beginPath();
     pathPoly(ctx, track.line);
@@ -405,26 +422,23 @@ export function createRenderer(canvas) {
     // Vintage tyre-wall stacks at tightest outer apexes
     drawTyreWallStacks(ctx, track);
 
-    // Outer edge: soft dashed safety glow (track.wall identity colour)
-    ctx.strokeStyle = 'rgba(18, 22, 28, 0.95)'; // dark physical rail
-    ctx.lineWidth = 5;
+    // Outer edge: dark physical rail only — cyan dashed neon retired (v18)
+    ctx.strokeStyle = 'rgba(12, 14, 18, 0.98)';
+    ctx.lineWidth = 7;
     strokeLoop(ctx, track.outer);
-    ctx.strokeStyle = hexAlpha(track.wall, 0.2);
-    ctx.lineWidth = 11;
+    ctx.strokeStyle = 'rgba(36, 40, 48, 0.9)';
+    ctx.lineWidth = 3.2;
     strokeLoop(ctx, track.outer);
-    ctx.save();
-    ctx.setLineDash([5, 10]);
-    ctx.strokeStyle = hexAlpha(track.wall, 0.55);
-    ctx.lineWidth = 2.4;
+    // Warm sodium accent only (not track.wall cyan/pink identity glow)
+    ctx.strokeStyle = 'rgba(255, 170, 70, 0.07)';
+    ctx.lineWidth = 2;
     strokeLoop(ctx, track.outer);
-    ctx.setLineDash([]);
-    ctx.restore();
 
-    // Inner wall: subdued rail under block kerbs
-    ctx.strokeStyle = hexAlpha(track.wall, 0.55);
-    ctx.lineWidth = 2.5;
+    // Inner wall: dark rail under block kerbs (no neon wall colour)
+    ctx.strokeStyle = 'rgba(22, 26, 32, 0.92)';
+    ctx.lineWidth = 2.8;
     strokeLoop(ctx, track.inner);
-    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
     ctx.lineWidth = 1;
     strokeLoop(ctx, track.inner);
 
@@ -528,10 +542,10 @@ export function createRenderer(canvas) {
     // Low service hut silhouette marks (identity colours)
     ctx.fillStyle = 'rgba(30, 36, 46, 0.85)';
     ctx.fillRect(cx - 30, cy - 20, 70, 36);
-    ctx.fillStyle = hexAlpha(track.wall || '#00e8ff', 0.14);
+    ctx.fillStyle = 'rgba(255, 190, 90, 0.10)';
     ctx.fillRect(cx - 24, cy - 12, 16, 10);
     ctx.fillRect(cx + 4, cy - 12, 16, 10);
-    ctx.fillStyle = hexAlpha(track.accent || '#ff2bd6', 0.12);
+    ctx.fillStyle = 'rgba(255, 170, 70, 0.12)';
     ctx.fillRect(cx - 30, cy - 22, 70, 2);
 
     // Grit
@@ -610,7 +624,7 @@ export function createRenderer(canvas) {
         ctx.strokeStyle = 'rgba(255,255,255,0.55)';
         ctx.lineWidth = 2;
         ctx.strokeRect(-13, -22, 26, 44);
-        ctx.fillStyle = hexAlpha(track.wall || '#00e8ff', 0.14);
+        ctx.fillStyle = 'rgba(255, 190, 100, 0.12)';
         ctx.fillRect(-13, -22, 26, 44);
         // box number tick
         ctx.fillStyle = 'rgba(255,255,255,0.65)';
@@ -715,7 +729,7 @@ export function createRenderer(canvas) {
         ctx.ellipse(tx, ty, 3, 2.1, 0, 0, Math.PI * 2);
         ctx.fill();
         if (r === rows - 1) {
-          ctx.strokeStyle = hexAlpha(track.wall || '#00e8ff', 0.7);
+          ctx.strokeStyle = 'rgba(255, 180, 90, 0.35)';
           ctx.lineWidth = 1.8;
           ctx.beginPath();
           ctx.ellipse(tx, ty, 6, 4, 0, 0.15, Math.PI - 0.15);
@@ -772,9 +786,12 @@ export function createRenderer(canvas) {
         ctx.save();
         ctx.translate(x, y);
         ctx.rotate(ang);
-        ctx.globalAlpha = 0.7 + 0.3 * intensity;
-        ctx.fillStyle = light ? '#f2f2f2' : '#d0122a';
-        ctx.fillRect(-6.5, -3.8, 13, 7.5);
+        ctx.globalAlpha = 0.82 + 0.18 * intensity;
+        ctx.fillStyle = light ? '#f6f6f6' : '#c8102e';
+        ctx.fillRect(-7.5, -4.6, 15, 9.2);
+        // Soft shadow edge so kerbs pop off asphalt
+        ctx.fillStyle = 'rgba(0,0,0,0.28)';
+        ctx.fillRect(-7.5, 3.2, 15, 1.6);
         ctx.restore();
       }
     }
@@ -874,7 +891,7 @@ export function createRenderer(canvas) {
     ctx.lineWidth = 7;
     ctx.beginPath(); ctx.moveTo(topA.x, topA.y); ctx.lineTo(topB.x, topB.y); ctx.stroke();
     // Neon lights on bar
-    ctx.fillStyle = hexAlpha(track.wall || '#00e8ff', 0.95);
+    ctx.fillStyle = 'rgba(255, 200, 120, 0.55)';
     for (let i = 0; i <= 6; i++) {
       const t = i / 6;
       const x = topA.x + (topB.x - topA.x) * t;
@@ -887,7 +904,7 @@ export function createRenderer(canvas) {
     ctx.fillStyle = 'rgba(12,16,24,0.75)';
     const midY = topA.y + 8;
     ctx.fillRect(Math.min(topA.x, topB.x) + 12, midY, Math.abs(topB.x - topA.x) - 24, 10);
-    ctx.fillStyle = hexAlpha(track.wall || '#00e8ff', 0.35);
+    ctx.fillStyle = 'rgba(255, 180, 90, 0.18)';
     ctx.fillRect(Math.min(topA.x, topB.x) + 12, midY, Math.abs(topB.x - topA.x) - 24, 2);
   }
 
@@ -964,10 +981,11 @@ export function createRenderer(canvas) {
     const frames = sprites.getCarFrames(c.color, tier, !!c.isPlayer);
     const fi = sprites.carFrameIndex(c.angle);
     const img = frames[fi];
-    // Far / grid zoom: bump on-screen size so cars aren't tiny dots
-    let drawW = 48, drawH = 48;
-    if (zoom != null && zoom < 0.85) {
-      const bump = Math.min(1.4, 1.25 + (0.85 - zoom) * 0.5);
+    // Race zoom: ~2× chassis so detail reads mid-race (v18 composition)
+    // Far/grid LOD stays a touch larger so overview isn't candy dots
+    let drawW = 112, drawH = 112;
+    if (zoom != null && zoom < 1.1) {
+      const bump = Math.min(1.22, 1.05 + (1.1 - zoom) * 0.4);
       drawW *= bump;
       drawH *= bump;
     }

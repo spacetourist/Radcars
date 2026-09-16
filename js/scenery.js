@@ -100,7 +100,7 @@ function themeFor(track) {
   if (id === 'gridlock') {
     return {
       skyTop: '#070a12', skyMid: '#0c1424', skyBot: '#141a22',
-      ground: '#0c1014', groundHi: '#141820',
+      ground: '#121410', groundHi: '#1c1c16',
       neonA: wall, neonB: accent, neonC: '#ffe600',
       brick: '#2a3038', brickHi: '#3a4250', metal: '#1a1e26',
       window: '#1a2838', glowWin: wall
@@ -109,7 +109,7 @@ function themeFor(track) {
   if (id === 'razor_hairpin') {
     return {
       skyTop: '#0e0816', skyMid: '#1a0e22', skyBot: '#1e1420',
-      ground: '#100c14', groundHi: '#1a1420',
+      ground: '#141210', groundHi: '#1e1a16',
       neonA: wall, neonB: accent, neonC: '#b8ff00',
       brick: '#2c2030', brickHi: '#3c3040', metal: '#1c1420',
       window: '#281828', glowWin: wall
@@ -118,18 +118,18 @@ function themeFor(track) {
   if (id === 'cargo_dock') {
     return {
       skyTop: '#08140c', skyMid: '#0e1a14', skyBot: '#142018',
-      ground: '#0a100c', groundHi: '#141c14',
+      ground: '#101410', groundHi: '#1a1e16',
       neonA: wall, neonB: accent, neonC: '#ff8a00',
       brick: '#243028', brickHi: '#344038', metal: '#141c16',
       window: '#182820', glowWin: accent
     };
   }
   return {
-    skyTop: '#061018', skyMid: '#0c1a2c', skyBot: '#141c28',
-    ground: '#0e141c', groundHi: '#181e28',
-    neonA: wall, neonB: accent, neonC: '#b8ff00',
+    skyTop: '#061018', skyMid: '#0c1a2c', skyBot: '#1a1820',
+    ground: '#161410', groundHi: '#242018',
+    neonA: wall, neonB: accent, neonC: '#ffb84a',
     brick: '#262c36', brickHi: '#363c48', metal: '#1a1e28',
-    window: '#1a2434', glowWin: wall
+    window: '#1a2434', glowWin: '#ffb84a'
   };
 }
 
@@ -520,17 +520,18 @@ function paintLight(ctx, tw, th, theme, variant) {
   ctx.fillRect(w / 2 - 2, 16, 4, h - 18);
   ctx.fillStyle = shade(theme.metal, 40);
   ctx.fillRect(w / 2 - 10, 8, 20, 10);
-  const glow = variant % 2 ? theme.neonA : theme.neonC;
-  ctx.fillStyle = hexAlpha(glow, 0.35);
+  // Warm sodium / soft fill — neon beams dialled back (v18)
+  const glow = variant % 2 ? '#ffb84a' : '#ffe0a0';
+  ctx.fillStyle = hexAlpha(glow, 0.18);
   ctx.beginPath();
   ctx.moveTo(w / 2 - 10, 18);
   ctx.lineTo(w / 2 + 10, 18);
-  ctx.lineTo(w / 2 + 16, h);
-  ctx.lineTo(w / 2 - 16, h);
+  ctx.lineTo(w / 2 + 14, h);
+  ctx.lineTo(w / 2 - 14, h);
   ctx.closePath();
   ctx.fill();
   ctx.fillStyle = glow;
-  ctx.globalAlpha = 0.9;
+  ctx.globalAlpha = 0.75;
   ctx.fillRect(w / 2 - 8, 10, 16, 5);
   ctx.globalAlpha = 1;
 }
@@ -592,14 +593,15 @@ function paintStreetlamp(ctx, tw, th, theme, variant) {
   ctx.strokeStyle = shade(theme.metal, 25);
   ctx.lineWidth = 3;
   ctx.stroke();
-  const glow = variant % 2 ? theme.neonB : theme.neonA;
+  // Sodium bulb + soft halo (no cyan/pink neon clash)
+  const glow = variant % 2 ? '#ffc05a' : '#ffe8b0';
   ctx.fillStyle = glow;
   ctx.beginPath();
-  ctx.arc(w / 2 + 22, 16, 5, 0, Math.PI * 2);
+  ctx.arc(w / 2 + 22, 16, 4.5, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = hexAlpha(glow, 0.2);
+  ctx.fillStyle = hexAlpha(glow, 0.14);
   ctx.beginPath();
-  ctx.arc(w / 2 + 22, 16, 14, 0, Math.PI * 2);
+  ctx.arc(w / 2 + 22, 16, 12, 0, Math.PI * 2);
   ctx.fill();
 }
 
@@ -682,31 +684,24 @@ function applyPackBuildingArt(buildings, characters, props) {
       buildings.standLarge = [sc.standLarge || fitPackSprite(sc.grandstandLarge, 300, 150)];
     }
   }
-  // Crowd: dense pack (v2.3) for landmark masses; thin strip only as filler
+  // Crowd: dense pack ONLY at S/F + major apexes — thin colourful strips retired (v18)
   if (characters) {
     const dense = [];
     if (sc.crowdDenseLg) dense.push(sc.crowdDenseLg);
     if (sc.crowdDenseMd) dense.push(sc.crowdDenseMd);
     if (sc.crowdDenseSm) dense.push(sc.crowdDenseSm);
     if (sc.crowdDense && !dense.length) dense.push(fitPackSprite(sc.crowdDense, 160, 72));
-    const thin = [];
-    if (sc.crowdSm) thin.push(sc.crowdSm);
-    if (sc.crowdMd) thin.push(sc.crowdMd);
-    if (sc.crowdLg) thin.push(sc.crowdLg);
-    if (sc.crowd && !thin.length) thin.push(fitPackSprite(sc.crowd, 96, 44));
-    if (dense.length || thin.length) {
+    // Fallback: if no dense sheet, use largest crowd cut only (never thin strip sheet)
+    if (!dense.length && sc.crowdLg) dense.push(sc.crowdLg);
+    if (!dense.length && sc.crowd) dense.push(fitPackSprite(sc.crowd, 140, 64));
+    if (dense.length) {
       characters.length = 0;
-      // Mark dense canvases so placement can prefer them at S/F + apexes
       for (const v of dense) {
         try { v.__radCrowd = 'dense'; } catch (_) {}
         characters.push(v);
       }
-      for (const v of thin) {
-        try { v.__radCrowd = 'thin'; } catch (_) {}
-        characters.push(v);
-      }
       buildings._crowdDense = dense;
-      buildings._crowdThin = thin.length ? thin : dense;
+      buildings._crowdThin = []; // retired
     }
   }
   // Props sheet → cones/barrels at pits/start; tyrewall for apex stacks
@@ -760,10 +755,11 @@ function fitPackSprite(source, maxW, maxH) {
 
 function pickCrowd(sprites, rnd, preferDense) {
   const dense = sprites.buildings && sprites.buildings._crowdDense;
-  const thin = sprites.buildings && sprites.buildings._crowdThin;
-  if (preferDense && dense && dense.length) return pick(dense, rnd);
-  if (thin && thin.length) return pick(thin, rnd);
-  return pick(sprites.characters, rnd);
+  if (dense && dense.length) return pick(dense, rnd);
+  // Never fall back to thin strip sheets
+  const chars = (sprites.characters || []).filter((c) => c && c.__radCrowd !== 'thin');
+  if (chars.length) return pick(chars, rnd);
+  return null;
 }
 
 function pick(arr, rnd) {
@@ -779,15 +775,14 @@ function addItem(list, img, x, y, scale, layer, sortY, kind) {
     k = sy;
     sy = y;
   }
-  // Cap landscape crowd strips so they don't stretch into flat colourful slabs
+  // Retire thin colourful crowd strips; keep dense pack masses (v18)
   let s = scale;
-  if (k === 'crowd' || (!k && img.width / Math.max(1, img.height) > 2.2 && img.width > 70)) {
+  if (img.__radCrowd === 'thin') return;
+  if (k === 'crowd' || (!k && img.width / Math.max(1, img.height) > 2.4 && img.width > 70)) {
     k = 'crowd';
     const aspect = img.width / Math.max(1, img.height);
-    if (aspect > 2.2) {
-      const targetH = Math.min(img.height * s, 36);
-      s = targetH / img.height;
-    }
+    // Dense pack sheets may be wide; only drop unmarked/thin landscape strips
+    if (img.__radCrowd !== 'dense' && aspect > 2.2) return;
   }
   list.push({
     img,
@@ -808,6 +803,26 @@ function tryPlace(track, x, y, pad) {
   if (isOnAsphalt(track, x + pad, y) || isOnAsphalt(track, x - pad, y)) return false;
   if (isOnAsphalt(track, x, y + pad) || isOnAsphalt(track, x, y - pad)) return false;
   return true;
+}
+
+/** Cap identical stamp repeats within a radius; returns false if too many matches nearby. */
+function stampOk(placed, img, x, y, radius, maxSame) {
+  if (!img || !placed) return true;
+  let n = 0;
+  const r2 = radius * radius;
+  for (const p of placed) {
+    if (p.img !== img) continue;
+    const dx = p.x - x, dy = p.y - y;
+    if (dx * dx + dy * dy < r2) {
+      n++;
+      if (n >= maxSame) return false;
+    }
+  }
+  return true;
+}
+
+function varyScale(rnd, lo, hi) {
+  return lo + rnd() * (hi - lo);
 }
 
 /**
@@ -857,9 +872,12 @@ export function buildTrackScenery(track) {
     return Math.min(1.5, e.len / 80);
   }
 
-  // Far skyline buildings — further out; denser near landmarks
+  // Stamp variety tracker — break necklace of identical warehouse/tower/palm/billboard
+  const stampLog = [];
+
+  // Far skyline buildings — further out; denser near landmarks; vary scale 0.7–1.4
   for (const e of edges) {
-    const steps = Math.max(2, Math.floor(e.len / 60));
+    const steps = Math.max(2, Math.floor(e.len / 72)); // slightly sparser than pre-v18
     for (let s = 0; s < steps; s++) {
       const t = (s + 0.5) / steps;
       const bx = e.ax + (e.bx - e.ax) * t;
@@ -873,30 +891,33 @@ export function buildTrackScenery(track) {
       if (pointInPoly(x, y, track.inner)) continue;
       const { boost } = landmarkBoost(x, y);
       // Thin mid-straights: skip more when far from landmarks
-      if (boost < 0.15 && rnd() > 0.45) continue;
-      if (boost < 0.35 && rnd() > 0.7) continue;
+      if (boost < 0.15 && rnd() > 0.4) continue;
+      if (boost < 0.35 && rnd() > 0.65) continue;
       const roll = rnd();
       let img, scale;
       if (proceduralCut) {
-        // Prefer pack tower/warehouse/billboard; rare chimney/water
-        if (roll < 0.38) { img = pick(sprites.buildings.tower, rnd); scale = 0.85 + rnd() * 0.45; }
-        else if (roll < 0.72) { img = pick(sprites.buildings.warehouse, rnd); scale = 0.9 + rnd() * 0.35; }
-        else if (roll < 0.82) { img = pick(sprites.buildings.billboard, rnd); scale = 0.7 + rnd() * 0.3; }
-        else if (roll < 0.91) { img = pick(sprites.buildings.chimney, rnd); scale = 0.8 + rnd() * 0.4; }
-        else { img = pick(sprites.buildings.water, rnd); scale = 0.75 + rnd() * 0.35; }
-      } else if (roll < 0.28) { img = pick(sprites.buildings.tower, rnd); scale = 0.85 + rnd() * 0.45; }
-      else if (roll < 0.55) { img = pick(sprites.buildings.warehouse, rnd); scale = 0.9 + rnd() * 0.35; }
-      else if (roll < 0.7) { img = pick(sprites.buildings.chimney, rnd); scale = 0.8 + rnd() * 0.4; }
-      else if (roll < 0.85) { img = pick(sprites.buildings.water, rnd); scale = 0.75 + rnd() * 0.35; }
-      else { img = pick(sprites.buildings.billboard, rnd); scale = 0.7 + rnd() * 0.3; }
-      addItem(far, img, x, y, scale * (1 + boost * 0.15), 'far', y + (img.height * scale) * 0.5);
+        // Prefer pack tower/warehouse/billboard; rare chimney/water — cycle kinds
+        if (roll < 0.30) { img = pick(sprites.buildings.tower, rnd); scale = varyScale(rnd, 0.7, 1.35); }
+        else if (roll < 0.58) { img = pick(sprites.buildings.warehouse, rnd); scale = varyScale(rnd, 0.75, 1.3); }
+        else if (roll < 0.74) { img = pick(sprites.buildings.billboard, rnd); scale = varyScale(rnd, 0.7, 1.2); }
+        else if (roll < 0.88) { img = pick(sprites.buildings.chimney, rnd); scale = varyScale(rnd, 0.75, 1.35); }
+        else { img = pick(sprites.buildings.water, rnd); scale = varyScale(rnd, 0.7, 1.25); }
+      } else if (roll < 0.28) { img = pick(sprites.buildings.tower, rnd); scale = varyScale(rnd, 0.7, 1.35); }
+      else if (roll < 0.55) { img = pick(sprites.buildings.warehouse, rnd); scale = varyScale(rnd, 0.75, 1.3); }
+      else if (roll < 0.7) { img = pick(sprites.buildings.chimney, rnd); scale = varyScale(rnd, 0.75, 1.35); }
+      else if (roll < 0.85) { img = pick(sprites.buildings.water, rnd); scale = varyScale(rnd, 0.7, 1.25); }
+      else { img = pick(sprites.buildings.billboard, rnd); scale = varyScale(rnd, 0.7, 1.2); }
+      if (!stampOk(stampLog, img, x, y, 110, 1)) continue;
+      const sc = Math.min(1.4, scale * (1 + boost * 0.12));
+      addItem(far, img, x, y, sc, 'far', y + (img.height * sc) * 0.5);
+      stampLog.push({ img, x, y });
     }
   }
 
   // Mid buildings — closer to track; cluster at landmarks
   for (const e of edges) {
     const dens = 0.75 + straightness(e) * 0.35;
-    const steps = Math.max(2, Math.floor((e.len / 48) * dens));
+    const steps = Math.max(2, Math.floor((e.len / 56) * dens));
     for (let s = 0; s < steps; s++) {
       const t = (s + rnd() * 0.6) / steps;
       const bx = e.ax + (e.bx - e.ax) * t;
@@ -915,52 +936,54 @@ export function buildTrackScenery(track) {
       let img, scale;
       if (nearStart && roll < 0.4) {
         img = pick(sprites.buildings.stand, rnd);
-        scale = 0.95 + rnd() * 0.3;
+        scale = varyScale(rnd, 0.9, 1.35);
       } else if (boost > 0.5 && nearest && nearest.kind === 'pit' && roll < 0.45) {
         img = pick(sprites.buildings.warehouse, rnd);
-        scale = 0.85 + rnd() * 0.3;
+        scale = varyScale(rnd, 0.8, 1.3);
       } else if (proceduralCut) {
-        // Pack-ready: shops/chimneys rare; favour warehouse/billboard/tower
+        // Pack-ready: shops/chimneys rare; favour warehouse/billboard/tower — less necklace
         if (roll < 0.08) {
           img = pick(sprites.buildings.shop, rnd);
-          scale = 0.85 + rnd() * 0.3;
-        } else if (roll < 0.42) {
+          scale = varyScale(rnd, 0.75, 1.25);
+        } else if (roll < 0.36) {
           img = pick(sprites.buildings.warehouse, rnd);
-          scale = 0.7 + rnd() * 0.3;
-        } else if (roll < 0.62) {
+          scale = varyScale(rnd, 0.7, 1.3);
+        } else if (roll < 0.58) {
           img = pick(sprites.buildings.billboard, rnd);
-          scale = 0.65 + rnd() * 0.25;
-        } else if (roll < 0.88) {
+          scale = varyScale(rnd, 0.7, 1.25);
+        } else if (roll < 0.82) {
           img = pick(sprites.buildings.tower, rnd);
-          scale = 0.55 + rnd() * 0.25;
+          scale = varyScale(rnd, 0.7, 1.35);
         } else {
           img = pick(sprites.buildings.chimney, rnd);
-          scale = 0.6 + rnd() * 0.25;
+          scale = varyScale(rnd, 0.7, 1.3);
         }
       } else if (roll < 0.3) {
         img = pick(sprites.buildings.shop, rnd);
-        scale = 0.85 + rnd() * 0.3;
-      } else if (roll < 0.55) {
+        scale = varyScale(rnd, 0.75, 1.25);
+      } else if (roll < 0.52) {
         img = pick(sprites.buildings.warehouse, rnd);
-        scale = 0.7 + rnd() * 0.3;
+        scale = varyScale(rnd, 0.7, 1.3);
       } else if (roll < 0.7) {
         img = pick(sprites.buildings.billboard, rnd);
-        scale = 0.65 + rnd() * 0.25;
-      } else if (roll < 0.85) {
+        scale = varyScale(rnd, 0.7, 1.25);
+      } else if (roll < 0.88) {
         img = pick(sprites.buildings.tower, rnd);
-        scale = 0.55 + rnd() * 0.25;
+        scale = varyScale(rnd, 0.7, 1.35);
       } else {
         img = pick(sprites.buildings.chimney, rnd);
-        scale = 0.6 + rnd() * 0.25;
+        scale = varyScale(rnd, 0.7, 1.3);
       }
+      if (!stampOk(stampLog, img, x, y, 85, 1)) continue;
       addItem(mid, img, x, y, scale, 'mid', y + img.height * scale * 0.45);
+      stampLog.push({ img, x, y });
     }
   }
 
-  // Near props + crowds along outer wall — crowds bias to landmarks
+  // Near props along outer wall — NO thin crowd strips (v18). Crowds only with grandstands.
   for (const e of edges) {
-    const dens = 0.85 + straightness(e) * 0.5;
-    const steps = Math.max(3, Math.floor((e.len / 32) * dens));
+    const dens = 0.7 + straightness(e) * 0.35;
+    const steps = Math.max(2, Math.floor((e.len / 40) * dens));
     for (let s = 0; s < steps; s++) {
       const t = (s + 0.3 + rnd() * 0.4) / steps;
       const bx = e.ax + (e.bx - e.ax) * t;
@@ -971,30 +994,19 @@ export function buildTrackScenery(track) {
       if (!tryPlace(track, x, y, 12)) continue;
       if (pointInPoly(x, y, track.outer)) continue;
       const { boost } = landmarkBoost(x, y);
-      if (boost < 0.1 && rnd() > 0.4) continue;
-      const crowdBias = 0.18 + boost * 0.55;
-      if (rnd() < crowdBias) {
-        const preferDense = boost > 0.35;
-        const n = 2 + (rnd() * (boost > 0.4 ? 5 : 3)) | 0;
-        for (let k = 0; k < n; k++) {
-          const img = pickCrowd(sprites, rnd, preferDense);
-          const scale = preferDense ? (0.95 + rnd() * 0.35) : (0.85 + rnd() * 0.35);
-          addItem(near, img,
-            x + (rnd() - 0.5) * 22,
-            y + (rnd() - 0.5) * 10,
-            scale, 'near', 'crowd');
-        }
-      } else {
-        const roll = rnd();
-        let img, scale;
-        if (roll < 0.2) { img = pick(sprites.props.barrel, rnd); scale = 0.9 + rnd() * 0.2; }
-        else if (roll < 0.35) { img = pick(sprites.props.cone, rnd); scale = 0.9 + rnd() * 0.25; }
-        else if (roll < 0.5) { img = pick(sprites.props.light, rnd); scale = 0.85 + rnd() * 0.25; }
-        else if (roll < 0.65) { img = pick(sprites.props.fence, rnd); scale = 0.9 + rnd() * 0.2; }
-        else if (roll < 0.8) { img = pick(sprites.props.lamp, rnd); scale = 0.85 + rnd() * 0.25; }
-        else { img = pick(sprites.props.palm, rnd); scale = 0.8 + rnd() * 0.35; }
-        addItem(near, img, x, y, scale, 'near');
-      }
+      if (boost < 0.1 && rnd() > 0.35) continue;
+      const roll = rnd();
+      let img, scale;
+      // Fewer neon lamps; prefer props + palms with scale variety
+      if (roll < 0.26) { img = pick(sprites.props.barrel, rnd); scale = varyScale(rnd, 0.75, 1.25); }
+      else if (roll < 0.48) { img = pick(sprites.props.cone, rnd); scale = varyScale(rnd, 0.75, 1.3); }
+      else if (roll < 0.64) { img = pick(sprites.props.fence, rnd); scale = varyScale(rnd, 0.8, 1.25); }
+      else if (roll < 0.70) { img = pick(sprites.props.light, rnd); scale = varyScale(rnd, 0.7, 1.05); }
+      else if (roll < 0.76) { img = pick(sprites.props.lamp, rnd); scale = varyScale(rnd, 0.7, 1.05); }
+      else { img = pick(sprites.props.palm, rnd); scale = varyScale(rnd, 0.7, 1.4); }
+      if (!stampOk(stampLog, img, x, y, 70, 1)) continue;
+      addItem(near, img, x, y, scale, 'near');
+      stampLog.push({ img, x, y });
     }
   }
 
@@ -1046,12 +1058,13 @@ export function buildTrackScenery(track) {
         if (!inInner && !inOuter && !tryPlace(track, x, y, pad)) continue;
         addItem(mid, imgLarge, x, y, 1.9, 'mid', y + 110);
         placedStartBlock = true;
-        for (let k = 0; k < 8; k++) {
+        for (let k = 0; k < 6; k++) {
           const cimg = pickCrowd(sprites, rnd, true);
+          if (!cimg) continue;
           addItem(near, cimg,
-            x + (rnd() - 0.5) * 120,
+            x + (rnd() - 0.5) * 100,
             y + (inInner ? -20 : 28) + rnd() * 24,
-            1.1 + rnd() * 0.35, 'near', 'crowd');
+            varyScale(rnd, 1.15, 1.4), 'near', 'crowd');
         }
         break;
       }
@@ -1228,26 +1241,34 @@ export function buildTrackScenery(track) {
       if (nearWall) continue;
       const roll = rnd();
       let img, scale;
-      if (roll < 0.25) { img = pick(sprites.props.barrel, rnd); scale = 0.85 + rnd() * 0.2; }
-      else if (roll < 0.45) { img = pick(sprites.props.cone, rnd); scale = 0.8 + rnd() * 0.2; }
-      else if (roll < 0.6) { img = pick(sprites.props.fence, rnd); scale = 0.75 + rnd() * 0.2; }
-      else if (roll < 0.75) { img = pick(sprites.props.lamp, rnd); scale = 0.7 + rnd() * 0.2; }
-      else if (roll < 0.88) { img = pick(sprites.buildings.warehouse, rnd); scale = 0.45 + rnd() * 0.2; }
-      else { img = pick(sprites.props.light, rnd); scale = 0.75 + rnd() * 0.2; }
+      if (roll < 0.28) { img = pick(sprites.props.barrel, rnd); scale = varyScale(rnd, 0.7, 1.2); }
+      else if (roll < 0.5) { img = pick(sprites.props.cone, rnd); scale = varyScale(rnd, 0.7, 1.2); }
+      else if (roll < 0.68) { img = pick(sprites.props.fence, rnd); scale = varyScale(rnd, 0.7, 1.15); }
+      else if (roll < 0.78) { img = pick(sprites.props.lamp, rnd); scale = varyScale(rnd, 0.7, 1.1); }
+      else if (roll < 0.92) { img = pick(sprites.buildings.warehouse, rnd); scale = varyScale(rnd, 0.7, 1.15); }
+      else { img = pick(sprites.props.light, rnd); scale = varyScale(rnd, 0.7, 1.1); }
+      if (!stampOk(stampLog, img, x, y, 55, 1)) continue;
       addItem(near, img, x, y, scale, 'near');
+      stampLog.push({ img, x, y });
     }
   }
 
-  // Sparse fill in world corners / off-track pockets
-  for (let i = 0; i < 40; i++) {
+  // Sparse fill in world corners / off-track pockets — varied kinds + scale
+  for (let i = 0; i < 36; i++) {
     const x = rnd() * (track.width + 160) - 80;
     const y = rnd() * (track.height + 160) - 80;
     if (!tryPlace(track, x, y, 50)) continue;
     if (pointInPoly(x, y, track.outer)) continue;
-    const img = rnd() < 0.5
-      ? pick(sprites.buildings.warehouse, rnd)
-      : pick(sprites.buildings.tower, rnd);
-    addItem(far, img, x, y, 0.7 + rnd() * 0.4, 'far');
+    const roll = rnd();
+    let img;
+    if (roll < 0.35) img = pick(sprites.buildings.warehouse, rnd);
+    else if (roll < 0.65) img = pick(sprites.buildings.tower, rnd);
+    else if (roll < 0.85) img = pick(sprites.buildings.billboard, rnd);
+    else img = pick(sprites.buildings.chimney, rnd);
+    if (!stampOk(stampLog, img, x, y, 130, 1)) continue;
+    const scale = varyScale(rnd, 0.7, 1.35);
+    addItem(far, img, x, y, scale, 'far');
+    stampLog.push({ img, x, y });
   }
 
   // Sort for painter's algorithm within layer
@@ -1337,40 +1358,83 @@ function buildSkylineStrip(theme, track) {
 }
 
 function buildGroundPlate(track, theme) {
-  // Half-res plate covering world + margin
-  const margin = 200;
+  // Wide plate: infield + outfield + beyond stamp ring — kill black void (v18)
+  const margin = 560;
   const sw = Math.ceil((track.width + margin * 2) / 2);
   const sh = Math.ceil((track.height + margin * 2) / 2);
   const { canvas, ctx } = makeCanvas(sw, sh);
-  const g = ctx.createRadialGradient(sw * 0.5, sh * 0.45, 20, sw * 0.5, sh * 0.5, Math.max(sw, sh) * 0.65);
-  g.addColorStop(0, theme.groundHi);
-  g.addColorStop(0.55, theme.ground);
-  g.addColorStop(1, shade(theme.ground, -12));
+  const g = ctx.createRadialGradient(sw * 0.5, sh * 0.45, 30, sw * 0.5, sh * 0.5, Math.max(sw, sh) * 0.72);
+  g.addColorStop(0, theme.groundHi || '#242018');
+  g.addColorStop(0.4, theme.ground || '#161410');
+  g.addColorStop(0.75, shade(theme.ground || '#161410', -8));
+  g.addColorStop(1, shade(theme.ground || '#161410', -18));
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, sw, sh);
 
-  // industrial grit
   const rnd = mulberry32(hashStr((track.id || '') + '-gnd'));
-  ctx.fillStyle = 'rgba(255,255,255,0.03)';
-  for (let i = 0; i < 400; i++) {
-    ctx.fillRect(rnd() * sw, rnd() * sh, 1 + (rnd() > 0.9 ? 1 : 0), 1);
-  }
-  // faint grid
-  ctx.strokeStyle = 'rgba(255,230,0,0.03)';
+
+  // Industrial plate panels across whole world (under + around track)
+  ctx.strokeStyle = 'rgba(255,255,255,0.045)';
   ctx.lineWidth = 1;
-  for (let x = 0; x < sw; x += 24) {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, sh);
-    ctx.stroke();
+  const panel = 28;
+  for (let x = 0; x < sw; x += panel) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, sh); ctx.stroke();
   }
-  for (let y = 0; y < sh; y += 24) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(sw, y);
-    ctx.stroke();
+  for (let y = 0; y < sh; y += panel) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(sw, y); ctx.stroke();
   }
-  // asphalt hole will be drawn by track; here we only fill void
+  // Darker seam every 4 panels
+  ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+  for (let x = 0; x < sw; x += panel * 4) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, sh); ctx.stroke();
+  }
+  for (let y = 0; y < sh; y += panel * 4) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(sw, y); ctx.stroke();
+  }
+
+  // Optional pack asphalt tile over entire plate (not just racing surface)
+  try {
+    const pack = getAssetPack();
+    if (pack && pack.ready && pack.asphalt) {
+      const tw = 96, th = 54;
+      const tile = document.createElement('canvas');
+      tile.width = tw; tile.height = th;
+      const tctx = tile.getContext('2d');
+      tctx.imageSmoothingEnabled = true;
+      tctx.drawImage(pack.asphalt, 0, 0, tw, th);
+      tctx.globalCompositeOperation = 'source-atop';
+      tctx.fillStyle = 'rgba(18, 16, 12, 0.45)';
+      tctx.fillRect(0, 0, tw, th);
+      const pat = ctx.createPattern(tile, 'repeat');
+      if (pat) {
+        ctx.globalAlpha = 0.42;
+        ctx.fillStyle = pat;
+        ctx.fillRect(0, 0, sw, sh);
+        ctx.globalAlpha = 1;
+      }
+    }
+  } catch (_) {}
+
+  // Warm sodium pools + grit so plate isn't flat black
+  for (let i = 0; i < 18; i++) {
+    const cx = rnd() * sw, cy = rnd() * sh;
+    const r = 40 + rnd() * 90;
+    const rg = ctx.createRadialGradient(cx, cy, 4, cx, cy, r);
+    rg.addColorStop(0, 'rgba(255, 170, 80, 0.05)');
+    rg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = rg;
+    ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
+  }
+  ctx.fillStyle = 'rgba(255,255,255,0.035)';
+  for (let i = 0; i < 700; i++) {
+    ctx.fillRect(rnd() * sw, rnd() * sh, 1 + (rnd() > 0.88 ? 1 : 0), 1);
+  }
+  ctx.fillStyle = 'rgba(0,0,0,0.08)';
+  for (let i = 0; i < 120; i++) {
+    const bw = 18 + rnd() * 50, bh = 10 + rnd() * 28;
+    ctx.fillRect(rnd() * sw, rnd() * sh, bw, bh);
+  }
+
   canvas._margin = margin;
   canvas._scale = 2;
   return canvas;
@@ -1383,23 +1447,44 @@ export function drawArenaBackground(ctx, scenery, cam, W, H) {
   const packSky = (pack && pack.ready && pack.skyline) ? pack.skyline : null;
 
   if (packSky) {
-    // Full-bleed neon skyline from pack (no chroma); soft cover + light parallax
-    const parallax = 0.12;
-    const scale = Math.max(W / packSky.width, (H * 0.72) / packSky.height);
+    // Full-bleed horizon ONLY (v2.4) — sky + city band; warm ground underlay kills void
+    const parallax = 0.06;
+    // Base fill: deep night sky (never leave raw canvas black)
+    const sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, theme.skyTop || '#040810');
+    sky.addColorStop(0.45, theme.skyMid || '#0a1424');
+    sky.addColorStop(1, theme.ground || '#161410');
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, H);
+
+    // Scale to full width; park building bases on screen horizon (~42%)
+    const scale = (W / packSky.width) * 1.08;
     const dw = packSky.width * scale;
     const dh = packSky.height * scale;
-    const ox = (W - dw) * 0.5 - ((cam.x * parallax) % Math.max(1, dw * 0.15));
-    const oy = H * 0.02 - (cam.y * parallax * 0.04) - dh * 0.08;
+    const ox = (W - dw) * 0.5 - ((cam.x * parallax) % Math.max(1, dw * 0.1));
+    const horizonY = H * 0.40;
+    // Asset: sky upper ~65%, city ~20%, black foot ~15% — base ≈ 0.82 of image
+    const buildingBase = 0.82;
+    const oy = horizonY - dh * buildingBase - (cam.y * parallax * 0.02);
     ctx.imageSmoothingEnabled = true;
     ctx.globalAlpha = 1;
     ctx.drawImage(packSky, ox, oy, dw, dh);
-    // Fade lower edge into ground colour so world plate reads cleanly
-    const fade = ctx.createLinearGradient(0, H * 0.45, 0, H);
-    fade.addColorStop(0, 'rgba(0,0,0,0)');
-    fade.addColorStop(0.55, hexAlpha(theme.skyBot, 0.35));
-    fade.addColorStop(1, theme.skyBot);
-    ctx.fillStyle = fade;
-    ctx.fillRect(0, H * 0.45, W, H * 0.55);
+
+    // Warm industrial underlay below horizon (replaces asset black foot + void)
+    const gnd = ctx.createLinearGradient(0, horizonY - 8, 0, H);
+    gnd.addColorStop(0, 'rgba(22, 20, 16, 0)');
+    gnd.addColorStop(0.12, theme.groundHi || '#242018');
+    gnd.addColorStop(1, theme.ground || '#161410');
+    ctx.fillStyle = gnd;
+    ctx.fillRect(0, horizonY - 8, W, H - horizonY + 8);
+
+    // Soft sodium wash along skyline so city reads
+    ctx.globalCompositeOperation = 'screen';
+    ctx.globalAlpha = 0.14;
+    ctx.fillStyle = '#ffc070';
+    ctx.fillRect(0, horizonY - H * 0.08, W, H * 0.12);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.globalAlpha = 1;
   } else {
     const sky = ctx.createLinearGradient(0, 0, 0, H);
     sky.addColorStop(0, theme.skyTop);
@@ -1423,10 +1508,10 @@ export function drawArenaBackground(ctx, scenery, cam, W, H) {
     }
   }
 
-  // Horizon glow
-  const hg = ctx.createRadialGradient(W * 0.5, H * 0.55, 10, W * 0.5, H * 0.5, Math.max(W, H) * 0.55);
-  hg.addColorStop(0, hexAlpha(theme.neonA, 0.06));
-  hg.addColorStop(0.5, hexAlpha(theme.neonB, 0.03));
+  // Soft warm fill (sodium) — neon dialled to accent only
+  const hg = ctx.createRadialGradient(W * 0.5, H * 0.58, 10, W * 0.5, H * 0.55, Math.max(W, H) * 0.6);
+  hg.addColorStop(0, 'rgba(255, 180, 90, 0.05)');
+  hg.addColorStop(0.45, 'rgba(255, 140, 60, 0.025)');
   hg.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = hg;
   ctx.fillRect(0, 0, W, H);
@@ -1458,13 +1543,10 @@ function drawLayer(ctx, items, cam, W, H, zoom, pad) {
     const top = it.y - it.h;
     if (left + it.w < minX || left > maxX || top + it.h < minY || top > maxY) continue;
     let dw = it.w, dh = it.h;
-    // Mid zoom: prefer larger crowd stamp at modest scale (avoid flat slabs)
-    if (it.kind === 'crowd' && zoom >= 0.75 && zoom < 1.05) {
+    // Skip leftover thin crowd strips if any slipped through
+    if (it.kind === 'crowd') {
       const aspect = (it.img.width || 1) / Math.max(1, it.img.height || 1);
-      if (aspect > 2.2) {
-        dh = Math.min(dh, 40 / zoom * 0.85);
-        dw = dh * aspect;
-      }
+      if (aspect > 2.6 && it.h < 42) continue;
     }
     ctx.drawImage(it.img, left + (it.w - dw) * 0.5, top + (it.h - dh), dw, dh);
   }

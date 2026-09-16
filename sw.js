@@ -1,4 +1,4 @@
-const CACHE = 'radcars-v17-crowd-v23';
+const CACHE = 'radcars-v18-composition';
 const ASSETS = [
   './',
   './index.html',
@@ -25,7 +25,7 @@ const ASSETS = [
   './js/scenery.js',
   './js/assetPack.js',
   './assets/generated/manifest.json',
-  './assets/generated/bg/bg-neon-skyline.png',
+  './assets/generated/bg/bg-skyline-horizon.png',
   './assets/generated/cars/car-cyan.png',
   './assets/generated/cars/car-pink.png',
   './assets/generated/cars/car-lime.png',

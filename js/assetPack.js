@@ -503,7 +503,8 @@ export function loadAssetPack() {
     if (manifest && manifest.carsByColor) syncColorMap(manifest.carsByColor);
 
     const carsByColor = (manifest && manifest.carsByColor) || _carsByColor;
-    const sceneryList = (manifest && Array.isArray(manifest.scenery))
+    // Scenery stamps ONLY — never allow bg/* into this list (v2.4 art direction)
+    const rawSceneryList = (manifest && Array.isArray(manifest.scenery))
       ? manifest.scenery
       : [
           'scenery/scenery-warehouse.png',
@@ -517,7 +518,31 @@ export function loadAssetPack() {
           'scenery/scenery-crowd-dense.png',
           'scenery/scenery-grandstand-large.png'
         ];
-    const bgRel = (manifest && manifest.bg && manifest.bg[0]) || 'bg/bg-neon-skyline.png';
+    const sceneryList = rawSceneryList.filter((rel) => {
+      const s = String(rel || '');
+      if (/^bg\//i.test(s)) return false;
+      if (/REF-ONLY|arena-scene|neon-skyline/i.test(s)) return false;
+      return true;
+    });
+    const bgRoles = (manifest && manifest.bgRoles) || {};
+    // Race backdrop: prefer horizon; never REF-ONLY / arena-scene
+    function pickRaceBackdropRel() {
+      const candidates = [];
+      if (manifest && Array.isArray(manifest.bg)) candidates.push(...manifest.bg);
+      candidates.push('bg/bg-skyline-horizon.png');
+      for (const rel of candidates) {
+        const role = bgRoles[rel] || '';
+        if (/doNotUseAsRaceBackdrop|referenceMoodOnly|doNotStamp/i.test(role)) continue;
+        if (/REF-ONLY|arena-scene/i.test(rel)) continue;
+        if (/horizon|skyline/i.test(rel) || role === 'screenSpaceBackdropOnly') return rel;
+      }
+      for (const rel of candidates) {
+        if (/REF-ONLY|arena-scene|neon-skyline/i.test(rel)) continue;
+        return rel;
+      }
+      return 'bg/bg-skyline-horizon.png';
+    }
+    const bgRel = pickRaceBackdropRel();
     const asphaltRel = (manifest && manifest.textures && manifest.textures[0]) || 'tex-asphalt.png';
 
     async function tryProcessed(rel, processOpts) {
@@ -571,8 +596,16 @@ export function loadAssetPack() {
       tryPlain(bgRel),
       tryPlain(asphaltRel)
     ]);
+    // pack.skyline = full-bleed screen-space backdrop ONLY — never stamped / never in pack.scenery
     pack.skyline = skyline;
+    pack.skylineRel = bgRel;
     pack.asphalt = asphalt;
+    // Explicit: strip any accidental bg keys from scenery (chroma/fitScenery must never touch bg)
+    for (const k of Object.keys(pack.scenery)) {
+      if (/^(neon-skyline|skyline-horizon|arena-scene|skyline)$/i.test(k) || /REF/i.test(k)) {
+        delete pack.scenery[k];
+      }
+    }
 
     const warehouse = pack.scenery.warehouse;
     const grandstand = pack.scenery.grandstand;
@@ -667,7 +700,10 @@ export function loadAssetPack() {
             billboard: !!billboard
           },
           skyline: !!skyline,
-          asphalt: !!asphalt
+          skylineRel: bgRel,
+          tower: !!tower,
+          asphalt: !!asphalt,
+          bgRoles
         };
       }
     } catch (_) {}

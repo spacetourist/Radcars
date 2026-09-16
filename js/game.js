@@ -8,10 +8,10 @@ import { sfx } from './audio.js';
 import { placePrize, persistSave } from './career.js';
 import { clamp } from './util.js';
 
-/** Camera zoom: closer at rest, pull out as speed rises (arcade feel). */
-const ZOOM_NEAR = 1.05;
-const ZOOM_FAR = 0.62;
-const ZOOM_GRID = 0.72; // fixed wider view during countdown to show grid
+/** Camera zoom: tighter race framing so chassis reads mid-race (v18 composition). */
+const ZOOM_NEAR = 1.58;
+const ZOOM_FAR = 1.05;
+const ZOOM_GRID = 0.88; // countdown still shows grid, slightly closer than pre-v18
 const ZOOM_LERP_RACE = 0.055;
 const ZOOM_LERP_GRID = 0.08;
 
