@@ -3,6 +3,9 @@ import { setMuted, unlockAudio, isMuted } from './audio.js';
 import { createInput } from './input.js';
 import { createUI } from './ui.js';
 import { createGame } from './game.js';
+import { loadAssetPack } from './assetPack.js';
+
+loadAssetPack(); // kick off pack ASAP (progressive swap in renderer)
 
 const canvas = document.getElementById('game');
 const uiRoot = document.getElementById('ui');

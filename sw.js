@@ -1,4 +1,4 @@
-const CACHE = 'radcars-v11-steer-calm';
+const CACHE = 'radcars-v13-realistic-pack';
 const ASSETS = [
   './',
   './index.html',
@@ -22,7 +22,16 @@ const ASSETS = [
   './js/ui.js',
   './js/util.js',
   './js/sprites.js',
-  './js/scenery.js'
+  './js/scenery.js',
+  './js/assetPack.js',
+  './assets/generated/manifest.json',
+  './assets/generated/bg/bg-neon-skyline.png',
+  './assets/generated/cars/car-cyan.png',
+  './assets/generated/cars/car-pink.png',
+  './assets/generated/cars/car-lime.png',
+  './assets/generated/scenery/scenery-warehouse.png',
+  './assets/generated/scenery/scenery-grandstand.png',
+  './assets/generated/tex-asphalt.png'
 ];
 
 self.addEventListener('install', (e) => {

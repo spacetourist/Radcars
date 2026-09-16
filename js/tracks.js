@@ -252,37 +252,43 @@ export const TRACKS = [
     difficulty: 2,
     bg: '#0c1018',
     asphalt: '#1a1e28',
-    wall: '#b8ff00',
+    wall: '#b8ff00', // lime identity
     accent: '#ff8a00',
     width: 1700,
     height: 1100,
     lapsDefault: 3,
     ...(() => {
-      // Rounded-rect ring with slight mid-straight bulges + hairpin pinch at SE
-      const outer = [
-        { x: 100, y: 90 }, { x: 400, y: 70 }, { x: 850, y: 70 }, { x: 1300, y: 70 },
-        { x: 1580, y: 100 }, { x: 1610, y: 280 }, { x: 1620, y: 550 },
-        { x: 1600, y: 820 }, { x: 1560, y: 1000 }, { x: 1300, y: 1030 },
-        { x: 850, y: 1035 }, { x: 400, y: 1025 }, { x: 110, y: 1000 },
-        { x: 70, y: 780 }, { x: 70, y: 550 }, { x: 80, y: 280 }
+      // Rounded-rect city ring: pit bay on north, hairpin pinch SE, soft corner radii
+      const outerCorners = [
+        { x: 110, y: 100 }, { x: 420, y: 72 }, { x: 820, y: 58 }, { x: 980, y: 28 }, // pit recess
+        { x: 1120, y: 28 }, { x: 1280, y: 68 }, { x: 1520, y: 95 },
+        { x: 1605, y: 260 }, { x: 1625, y: 520 }, { x: 1605, y: 780 },
+        // SE hairpin — outer swings wide then snaps
+        { x: 1540, y: 980 }, { x: 1380, y: 1045 }, { x: 1180, y: 1060 },
+        { x: 850, y: 1045 }, { x: 420, y: 1025 }, { x: 120, y: 990 },
+        { x: 65, y: 760 }, { x: 60, y: 520 }, { x: 75, y: 280 }
       ];
-      const inner = [
-        { x: 340, y: 290 }, { x: 850, y: 275 }, { x: 1320, y: 290 },
-        { x: 1360, y: 400 }, { x: 1370, y: 550 }, { x: 1355, y: 720 },
-        { x: 1300, y: 810 }, { x: 850, y: 825 }, { x: 380, y: 815 },
-        { x: 330, y: 700 }, { x: 320, y: 550 }, { x: 330, y: 400 }
+      const innerCorners = [
+        { x: 350, y: 300 }, { x: 820, y: 280 }, { x: 1280, y: 295 },
+        { x: 1355, y: 390 }, { x: 1375, y: 540 }, { x: 1350, y: 700 },
+        // SE hairpin pinch — inner pushes out toward outer
+        { x: 1280, y: 820 }, { x: 1180, y: 860 }, { x: 980, y: 855 },
+        { x: 850, y: 835 }, { x: 400, y: 820 }, { x: 335, y: 690 },
+        { x: 320, y: 540 }, { x: 335, y: 400 }
       ];
-      // Racing line with a soft kink on the top straight and wider mid-straights
-      const corners = [
-        { x: 210, y: 175 }, { x: 500, y: 160 }, { x: 900, y: 155 },
-        { x: 1280, y: 165 }, { x: 1485, y: 200 },
-        { x: 1505, y: 400 }, { x: 1510, y: 550 }, { x: 1495, y: 750 },
-        { x: 1460, y: 920 }, { x: 1200, y: 935 }, { x: 850, y: 940 },
-        { x: 450, y: 930 }, { x: 210, y: 900 },
-        { x: 185, y: 700 }, { x: 185, y: 550 }, { x: 195, y: 350 }
+      const outer = densifyLoop(outerCorners, 8);
+      const inner = densifyLoop(innerCorners, 8);
+      const lineCorners = [
+        { x: 220, y: 185 }, { x: 520, y: 155 }, { x: 900, y: 140 },
+        { x: 1050, y: 125 }, { x: 1300, y: 160 }, { x: 1480, y: 200 },
+        { x: 1515, y: 400 }, { x: 1520, y: 560 }, { x: 1490, y: 760 },
+        // hairpin racing line (tight apex)
+        { x: 1420, y: 930 }, { x: 1280, y: 970 }, { x: 1100, y: 955 },
+        { x: 850, y: 940 }, { x: 450, y: 925 }, { x: 210, y: 890 },
+        { x: 180, y: 680 }, { x: 175, y: 520 }, { x: 190, y: 340 }
       ];
-      const dense = densifyLoop(corners, 10);
-      const startIndex = 8;
+      const dense = densifyLoop(lineCorners, 10);
+      const startIndex = 12; // north straight near pit
       const spawns = [];
       const p0 = dense[startIndex];
       const p1 = dense[(startIndex + 1) % dense.length];
@@ -304,9 +310,15 @@ export const TRACKS = [
         const len = Math.hypot(dx, dy) || 1;
         return { x: p.x, y: p.y, nx: dx / len, ny: dy / len };
       });
-      const landmarks = landmarksFromLine(dense, startIndex, [
-        { id: 'pit', x: 900, y: 55, kind: 'pit', index: startIndex }
-      ]);
+      const hairIdx = Math.round(dense.length * 0.55) % dense.length;
+      const landmarks = [
+        { id: 'start_finish', x: p0.x, y: p0.y, index: startIndex, kind: 'start' },
+        { id: 'pit', x: 1050, y: 20, kind: 'pit', index: startIndex },
+        { id: 'hairpin', x: dense[hairIdx].x, y: dense[hairIdx].y, kind: 'chicane', index: hairIdx },
+        { id: 'corner_ne', x: 1480, y: 200, kind: 'corner', index: Math.round(dense.length * 0.2) },
+        { id: 'corner_sw', x: 210, y: 890, kind: 'corner', index: Math.round(dense.length * 0.75) },
+        { id: 'corner_nw', x: 190, y: 340, kind: 'corner', index: Math.round(dense.length * 0.9) }
+      ];
       return { outer, inner, line: dense, spawns, checkpoints, startIndex, landmarks };
     })()
   },
@@ -322,42 +334,55 @@ export const TRACKS = [
     height: 1200,
     lapsDefault: 3,
     ...(() => {
+      // Twin-apex peanut: two tight lobes linked by a pinched waist
       const outer = [];
       const inner = [];
       const line = [];
-      const n = 80;
+      const n = 96;
+      const cx = 900, cy = 600;
       for (let i = 0; i < n; i++) {
-        const t = i / n;
-        const a = t * Math.PI * 2;
-        // Stronger peanut pinch + asymmetric lobe for a readable hairpin
-        const pinch = 1 + 0.42 * Math.cos(2 * a);
-        const widthMul = 1 - 0.14 * Math.cos(2 * a);
-        const rxo = 780 * pinch * (1 + (widthMul - 1) * 0.4);
-        const ryo = 480 * (1 + (widthMul - 1) * 0.35);
-        const rxi = 460 * pinch * (1 - (widthMul - 1) * 0.7);
-        const ryi = 230 * (1 - (widthMul - 1) * 0.7);
+        const a = (i / n) * Math.PI * 2;
+        // Peanut: stretch on cos(2a), waist pinch mid-lobes
+        const lobe = 1 + 0.48 * Math.cos(2 * a);
+        const waist = 1 - 0.18 * Math.max(0, Math.cos(4 * a));
+        const widthMul = 1 - 0.16 * Math.cos(2 * a); // tighter at apexes
+        let rxo = 760 * lobe * waist * (1 + (widthMul - 1) * 0.35);
+        let ryo = 470 * waist * (1 + (widthMul - 1) * 0.3);
+        let rxi = 430 * lobe * waist * (1 - (widthMul - 1) * 0.75);
+        let ryi = 210 * waist * (1 - (widthMul - 1) * 0.75);
+        // Twin apex sharpening near a≈0 and a≈π (east/west lobes)
+        const apexE = angleBump(a, -0.35, 0.35);
+        const apexW = angleBump(a, Math.PI - 0.35, Math.PI + 0.35);
+        const apex = Math.max(apexE, apexW);
+        if (apex > 0) {
+          rxo -= 40 * apex;
+          ryo -= 55 * apex;
+          rxi += 35 * apex;
+          ryi += 48 * apex;
+        }
         const rxl = (rxo + rxi) * 0.5;
         const ryl = (ryo + ryi) * 0.5;
-        const cx = 900, cy = 600;
-        // Soft kink on the eastern lobe
-        const kink = Math.max(0, Math.sin(a) * Math.cos(a - 0.2));
-        const kx = -Math.sin(a) * 18 * kink;
-        const ky = Math.cos(a) * 12 * kink;
-        outer.push({ x: cx + Math.cos(a) * rxo + kx * 0.5, y: cy + Math.sin(a) * ryo + ky * 0.5 });
-        inner.push({ x: cx + Math.cos(a) * rxi + kx * 0.3, y: cy + Math.sin(a) * ryi + ky * 0.3 });
+        // Soft S between apexes
+        const kink = Math.sin(2 * a) * 0.35;
+        const kx = -Math.sin(a) * 22 * kink;
+        const ky = Math.cos(a) * 14 * kink;
+        outer.push({ x: cx + Math.cos(a) * rxo + kx * 0.4, y: cy + Math.sin(a) * ryo + ky * 0.4 });
+        inner.push({ x: cx + Math.cos(a) * rxi + kx * 0.25, y: cy + Math.sin(a) * ryi + ky * 0.25 });
         line.push({ x: cx + Math.cos(a) * rxl + kx, y: cy + Math.sin(a) * ryl + ky });
       }
-      const startIndex = 0;
+      const startIndex = Math.round(n * 0.25) % n; // northish between apexes
       const spawns = [];
-      const heading = Math.atan2(line[1].y - line[0].y, line[1].x - line[0].x);
+      const p0 = line[startIndex];
+      const p1 = line[(startIndex + 1) % n];
+      const heading = Math.atan2(p1.y - p0.y, p1.x - p0.x);
       const fx = Math.cos(heading), fy = Math.sin(heading);
       const lx = -fy, ly = fx;
       for (let i = 0; i < 8; i++) {
         const row = Math.floor(i / 2);
         const col = (i % 2 === 0) ? -1 : 1;
         spawns.push({
-          x: line[0].x - fx * (row * 44 + (i % 2) * 18) + lx * col * 24,
-          y: line[0].y - fy * (row * 44 + (i % 2) * 18) + ly * col * 24,
+          x: p0.x - fx * (row * 44 + (i % 2) * 18) + lx * col * 24,
+          y: p0.y - fy * (row * 44 + (i % 2) * 18) + ly * col * 24,
           angle: heading
         });
       }
@@ -370,9 +395,14 @@ export const TRACKS = [
         const len = Math.hypot(dx, dy) || 1;
         checkpoints.push({ x: p.x, y: p.y, nx: dx / len, ny: dy / len });
       }
-      const landmarks = landmarksFromLine(line, startIndex, [
-        { id: 'hairpin', x: line[(n * 0.5) | 0].x, y: line[(n * 0.5) | 0].y, kind: 'chicane', index: (n * 0.5) | 0 }
-      ]);
+      const iE = 0, iW = (n * 0.5) | 0;
+      const landmarks = [
+        { id: 'start_finish', x: p0.x, y: p0.y, index: startIndex, kind: 'start' },
+        { id: 'apex_east', x: line[iE].x, y: line[iE].y, kind: 'corner', index: iE },
+        { id: 'apex_west', x: line[iW].x, y: line[iW].y, kind: 'corner', index: iW },
+        { id: 'waist_south', x: line[(n * 0.25) | 0].x, y: line[(n * 0.25) | 0].y, kind: 'kink', index: (n * 0.25) | 0 },
+        { id: 'waist_north', x: line[(n * 0.75) | 0].x, y: line[(n * 0.75) | 0].y, kind: 'kink', index: (n * 0.75) | 0 }
+      ];
       return { outer, inner, line, spawns, checkpoints, startIndex, landmarks };
     })()
   },
@@ -388,31 +418,37 @@ export const TRACKS = [
     height: 1050,
     lapsDefault: 3,
     ...(() => {
-      // Asymmetric dock circuit with a short pit notch on the north outer wall
-      const outer = [
-        { x: 60, y: 70 }, { x: 700, y: 55 }, { x: 1100, y: 50 },
-        { x: 1400, y: 55 }, { x: 1585, y: 80 }, { x: 1595, y: 400 },
-        { x: 1590, y: 700 }, { x: 1575, y: 970 }, { x: 1200, y: 995 },
-        { x: 920, y: 990 }, { x: 900, y: 720 }, { x: 880, y: 640 },
-        { x: 400, y: 630 }, { x: 80, y: 620 }, { x: 55, y: 350 }
+      // Quay straight (long N), warehouse 90° SE block, narrow pinch mid-west cut
+      const outerCorners = [
+        { x: 55, y: 80 }, { x: 400, y: 55 }, { x: 750, y: 48 },
+        { x: 980, y: 22 }, { x: 1100, y: 22 }, // pit notch on quay
+        { x: 1350, y: 50 }, { x: 1580, y: 85 },
+        // warehouse 90° — hard SE industrial corner
+        { x: 1605, y: 320 }, { x: 1605, y: 620 }, { x: 1595, y: 880 },
+        { x: 1580, y: 1000 }, { x: 1280, y: 1020 }, { x: 980, y: 1010 },
+        // narrow pinch / dock cut
+        { x: 920, y: 780 }, { x: 900, y: 620 }, { x: 860, y: 560 },
+        { x: 420, y: 550 }, { x: 70, y: 540 }, { x: 45, y: 300 }
       ];
-      // Pit recess notch (push north wall out mid-straight)
-      outer.splice(2, 0, { x: 980, y: 28 }, { x: 1080, y: 28 });
-      const inner = [
-        { x: 290, y: 250 }, { x: 850, y: 235 }, { x: 1250, y: 240 },
-        { x: 1360, y: 260 }, { x: 1375, y: 500 }, { x: 1365, y: 780 },
-        { x: 1200, y: 815 }, { x: 1125, y: 810 }, { x: 1120, y: 460 },
-        { x: 900, y: 450 }, { x: 300, y: 450 }, { x: 285, y: 350 }
+      const innerCorners = [
+        { x: 280, y: 250 }, { x: 700, y: 230 }, { x: 1100, y: 225 },
+        { x: 1320, y: 250 }, { x: 1365, y: 380 }, { x: 1370, y: 650 },
+        { x: 1355, y: 820 }, { x: 1220, y: 860 }, { x: 1120, y: 850 },
+        // pinch — inner pushes toward outer on west cut
+        { x: 1105, y: 520 }, { x: 980, y: 480 }, { x: 420, y: 470 },
+        { x: 290, y: 460 }, { x: 275, y: 340 }
       ];
-      const corners = [
-        { x: 170, y: 155 }, { x: 550, y: 140 }, { x: 1000, y: 135 },
-        { x: 1400, y: 150 }, { x: 1485, y: 280 },
-        { x: 1485, y: 520 }, { x: 1475, y: 820 }, { x: 1300, y: 900 },
-        { x: 1020, y: 905 }, { x: 1010, y: 540 },
-        { x: 700, y: 530 }, { x: 180, y: 530 }, { x: 165, y: 340 }
+      const outer = densifyLoop(outerCorners, 8);
+      const inner = densifyLoop(innerCorners, 8);
+      const lineCorners = [
+        { x: 160, y: 160 }, { x: 500, y: 135 }, { x: 900, y: 120 },
+        { x: 1040, y: 110 }, { x: 1400, y: 145 }, { x: 1495, y: 280 },
+        { x: 1500, y: 520 }, { x: 1490, y: 820 }, { x: 1350, y: 930 },
+        { x: 1100, y: 940 }, { x: 1020, y: 700 }, { x: 1000, y: 530 },
+        { x: 700, y: 515 }, { x: 180, y: 510 }, { x: 155, y: 320 }
       ];
-      const dense = densifyLoop(corners, 12);
-      const startIndex = 10;
+      const dense = densifyLoop(lineCorners, 12);
+      const startIndex = 18; // quay straight
       const spawns = [];
       const p0 = dense[startIndex];
       const p1 = dense[(startIndex + 1) % dense.length];
@@ -434,10 +470,15 @@ export const TRACKS = [
         const len = Math.hypot(dx, dy) || 1;
         return { x: p.x, y: p.y, nx: dx / len, ny: dy / len };
       });
-      const landmarks = landmarksFromLine(dense, startIndex, [
-        { id: 'pit', x: 1030, y: 40, kind: 'pit', index: startIndex + 5 },
-        { id: 'dock_cut', x: 1010, y: 700, kind: 'kink', index: (dense.length * 0.55) | 0 }
-      ]);
+      const pinchIdx = Math.round(dense.length * 0.62) % dense.length;
+      const whIdx = Math.round(dense.length * 0.35) % dense.length;
+      const landmarks = [
+        { id: 'start_finish', x: p0.x, y: p0.y, index: startIndex, kind: 'start' },
+        { id: 'pit', x: 1040, y: 18, kind: 'pit', index: startIndex + 4 },
+        { id: 'warehouse_corner', x: dense[whIdx].x, y: dense[whIdx].y, kind: 'corner', index: whIdx },
+        { id: 'dock_pinch', x: dense[pinchIdx].x, y: dense[pinchIdx].y, kind: 'kink', index: pinchIdx },
+        { id: 'quay_east', x: 1495, y: 280, kind: 'corner', index: Math.round(dense.length * 0.22) }
+      ];
       return { outer, inner, line: dense, spawns, checkpoints, startIndex, landmarks };
     })()
   }

@@ -9,6 +9,7 @@ import {
   drawSceneryMid,
   drawSceneryNear
 } from './scenery.js';
+import { loadAssetPack, getAssetPack, onPackReady } from './assetPack.js';
 
 /** HD remaster renderer: industrial arena, angular cars, visceral FX — crisp, no mush. */
 export function createRenderer(canvas) {
@@ -19,9 +20,25 @@ export function createRenderer(canvas) {
   const particles = [];
   let bufW = 0, bufH = 0, lastDpr = 0;
   const sprites = createSpriteBank();
+  try { if (typeof window !== 'undefined') window.__RAD_SPRITES__ = sprites; } catch (_) {}
   try { sprites.warm(CAR_COLORS); } catch (_) {}
   const sceneryCache = createSceneryCache();
   const boomAnims = []; // {x,y,frame,age}
+  let asphaltPattern = null;
+  let asphaltPatternTried = false;
+
+  // Progressive: procedural until pack ready, then swap sheets / scenery
+  loadAssetPack().then(() => {
+    sprites.invalidatePackCars();
+    try { sprites.warm(CAR_COLORS); } catch (_) {}
+    sceneryCache.clear();
+    asphaltPattern = null;
+    asphaltPatternTried = false;
+  }).catch(() => {});
+  onPackReady(() => {
+    sprites.invalidatePackCars();
+    sceneryCache.clear();
+  });
 
   function resize(cssW, cssH, dpr) {
     const bw = Math.max(1, Math.floor(cssW * dpr));
@@ -233,24 +250,63 @@ export function createRenderer(canvas) {
     drawMinimap(ctx, track, cars, W, H);
   }
 
-  function drawTrack(ctx, track) {
-    // Soft runoff apron outside outer wall (gravel/dirt) — behind asphalt
+  function maybeFillAsphaltTexture(ctx, track) {
+    const pack = getAssetPack();
+    if (!pack || !pack.ready || !pack.asphalt) return;
+    if (!asphaltPatternTried) {
+      asphaltPatternTried = true;
+      try {
+        // Downscale tile so pattern reads as grit, not a huge photo under race zoom
+        const src = pack.asphalt;
+        const tw = 128, th = 72;
+        const c = document.createElement('canvas');
+        c.width = tw; c.height = th;
+        const tctx = c.getContext('2d');
+        tctx.imageSmoothingEnabled = true;
+        tctx.drawImage(src, 0, 0, tw, th);
+        // Desaturate / darken slightly into asphalt
+        tctx.globalCompositeOperation = 'source-atop';
+        tctx.fillStyle = 'rgba(18, 20, 24, 0.55)';
+        tctx.fillRect(0, 0, tw, th);
+        asphaltPattern = ctx.createPattern(c, 'repeat');
+      } catch (_) {
+        asphaltPattern = null;
+      }
+    }
+    if (!asphaltPattern) return;
     ctx.save();
     ctx.beginPath();
-    // Expanded outer ring approx via stroked wide path then filled differently:
-    // Draw apron as thick stroke centered on outer wall, clipped outside asphalt
+    pathPoly(ctx, track.outer);
+    ctx.clip();
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle = asphaltPattern;
+    ctx.fillRect(0, 0, track.width, track.height);
+    ctx.restore();
+  }
+
+  function drawTrack(ctx, track) {
+    // Soft runoff apron outside outer wall — dark gravel so wall glow isn't sole outer language
+    ctx.save();
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
-    ctx.strokeStyle = 'rgba(28, 24, 18, 0.92)';
-    ctx.lineWidth = 46;
+    // Deep base gravel band (wider + denser than v1)
+    ctx.strokeStyle = 'rgba(22, 18, 14, 0.96)';
+    ctx.lineWidth = 62;
     strokeLoop(ctx, track.outer);
-    ctx.strokeStyle = 'rgba(42, 36, 28, 0.55)';
-    ctx.lineWidth = 28;
+    ctx.strokeStyle = 'rgba(38, 32, 24, 0.72)';
+    ctx.lineWidth = 44;
     strokeLoop(ctx, track.outer);
-    // gravel grit
-    ctx.strokeStyle = 'rgba(70, 58, 40, 0.25)';
-    ctx.lineWidth = 18;
-    ctx.setLineDash([3, 7]);
+    ctx.strokeStyle = 'rgba(52, 44, 32, 0.45)';
+    ctx.lineWidth = 30;
+    strokeLoop(ctx, track.outer);
+    // gravel grit / stones
+    ctx.strokeStyle = 'rgba(78, 64, 44, 0.38)';
+    ctx.lineWidth = 20;
+    ctx.setLineDash([2, 5]);
+    strokeLoop(ctx, track.outer);
+    ctx.setLineDash([1, 9]);
+    ctx.strokeStyle = 'rgba(95, 78, 52, 0.22)';
+    ctx.lineWidth = 12;
     strokeLoop(ctx, track.outer);
     ctx.setLineDash([]);
     ctx.restore();
@@ -264,6 +320,9 @@ export function createRenderer(canvas) {
     asphaltGrad.addColorStop(1, shade(track.asphalt, 4));
     ctx.fillStyle = asphaltGrad;
     ctx.fill();
+
+    // Optional pack asphalt tile — very subtle; skip if muddy at race zoom
+    maybeFillAsphaltTexture(ctx, track);
 
     ctx.save();
     ctx.beginPath();
@@ -283,23 +342,30 @@ export function createRenderer(canvas) {
       }
     }
 
-    // Worn racing groove — lighter rubber band along racing line
-    ctx.strokeStyle = 'rgba(255,255,255,0.07)';
-    ctx.lineWidth = 34;
+    // Worn racing groove — lighter rubber band (v1.1: stronger, still flat at race zoom)
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 40;
     ctx.beginPath();
     pathPoly(ctx, track.line);
     ctx.closePath();
     ctx.stroke();
-    ctx.strokeStyle = 'rgba(220, 210, 190, 0.11)';
-    ctx.lineWidth = 18;
+    ctx.strokeStyle = 'rgba(230, 218, 195, 0.20)';
+    ctx.lineWidth = 24;
     ctx.beginPath();
     pathPoly(ctx, track.line);
     ctx.closePath();
     ctx.stroke();
-    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-    ctx.lineWidth = 8;
+    ctx.strokeStyle = 'rgba(255,255,255,0.09)';
+    ctx.lineWidth = 11;
+    ctx.beginPath();
+    pathPoly(ctx, track.line);
+    ctx.closePath();
+    ctx.stroke();
+    // faint worn core
+    ctx.strokeStyle = 'rgba(245, 235, 210, 0.11)';
+    ctx.lineWidth = 6;
     ctx.beginPath();
     pathPoly(ctx, track.line);
     ctx.closePath();
@@ -333,7 +399,13 @@ export function createRenderer(canvas) {
     // Red/white (or accent) block kerbs on INNER apexes
     drawBlockKerbs(ctx, track);
 
-    // Outer edge: soft cyan dashed safety glow only (no solid editor outline)
+    // Pit recess readability — painted boxes + parallel lane stripe
+    drawPitLaneMarkings(ctx, track);
+
+    // Vintage tyre-wall stacks at tightest outer apexes
+    drawTyreWallStacks(ctx, track);
+
+    // Outer edge: soft dashed safety glow (track.wall identity colour)
     ctx.strokeStyle = 'rgba(18, 22, 28, 0.95)'; // dark physical rail
     ctx.lineWidth = 5;
     strokeLoop(ctx, track.outer);
@@ -453,13 +525,13 @@ export function createRenderer(canvas) {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Low service hut silhouette marks
+    // Low service hut silhouette marks (identity colours)
     ctx.fillStyle = 'rgba(30, 36, 46, 0.85)';
     ctx.fillRect(cx - 30, cy - 20, 70, 36);
-    ctx.fillStyle = 'rgba(0,232,255,0.12)';
+    ctx.fillStyle = hexAlpha(track.wall || '#00e8ff', 0.14);
     ctx.fillRect(cx - 24, cy - 12, 16, 10);
     ctx.fillRect(cx + 4, cy - 12, 16, 10);
-    ctx.fillStyle = 'rgba(255,43,214,0.1)';
+    ctx.fillStyle = hexAlpha(track.accent || '#ff2bd6', 0.12);
     ctx.fillRect(cx - 30, cy - 22, 70, 2);
 
     // Grit
@@ -472,7 +544,189 @@ export function createRenderer(canvas) {
     ctx.restore();
   }
 
-  /** Block kerbs along high-curvature / landmark apexes on the inner wall. */
+  /** Painted pit boxes + short parallel lane stripe at pit landmark / recess. */
+  function drawPitLaneMarkings(ctx, track) {
+    const pits = (track.landmarks || []).filter((lm) => lm.kind === 'pit' || lm.id === 'pit');
+    if (!pits.length || !track.outer || track.outer.length < 4) return;
+    const outer = track.outer;
+    const n = outer.length;
+    const cx = track.width * 0.5, cy = track.height * 0.5;
+
+    for (const pit of pits) {
+      // Nearest outer-wall index to pit landmark
+      let best = 0, bd = Infinity;
+      for (let i = 0; i < n; i++) {
+        const d = Math.hypot(outer[i].x - pit.x, outer[i].y - pit.y);
+        if (d < bd) { bd = d; best = i; }
+      }
+      const span = Math.max(8, Math.min(18, Math.floor(n * 0.08)));
+      const boxes = 5;
+      // Parallel lane stripe just inside outer wall through pit bay
+      ctx.save();
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(255,255,255,0.38)';
+      ctx.lineWidth = 3.2;
+      ctx.setLineDash([16, 8]);
+      ctx.beginPath();
+      let started = false;
+      for (let k = -span; k <= span; k++) {
+        const i = (best + k + n) % n;
+        const a = outer[(i - 1 + n) % n];
+        const b = outer[i];
+        const c = outer[(i + 1) % n];
+        const ang = Math.atan2(c.y - a.y, c.x - a.x);
+        let ox = Math.cos(ang + Math.PI / 2);
+        let oy = Math.sin(ang + Math.PI / 2);
+        // Inward toward track center
+        if ((b.x - cx) * ox + (b.y - cy) * oy > 0) { ox = -ox; oy = -oy; }
+        const px = b.x + ox * 22;
+        const py = b.y + oy * 22;
+        if (!started) { ctx.moveTo(px, py); started = true; }
+        else ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Painted pit box rectangles along the bay
+      for (let b = 0; b < boxes; b++) {
+        const t = (b + 0.5) / boxes;
+        const k = Math.round(-span + t * span * 2);
+        const i = (best + k + n) % n;
+        const p0 = outer[(i - 1 + n) % n];
+        const p1 = outer[i];
+        const p2 = outer[(i + 1) % n];
+        const ang = Math.atan2(p2.y - p0.y, p2.x - p0.x);
+        let ox = Math.cos(ang + Math.PI / 2);
+        let oy = Math.sin(ang + Math.PI / 2);
+        if ((p1.x - cx) * ox + (p1.y - cy) * oy > 0) { ox = -ox; oy = -oy; }
+        const bx = p1.x + ox * 14;
+        const by = p1.y + oy * 14;
+        ctx.save();
+        ctx.translate(bx, by);
+        ctx.rotate(ang);
+        ctx.fillStyle = 'rgba(255,255,255,0.07)';
+        ctx.fillRect(-13, -22, 26, 44);
+        ctx.strokeStyle = 'rgba(255,255,255,0.55)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(-13, -22, 26, 44);
+        ctx.fillStyle = hexAlpha(track.wall || '#00e8ff', 0.14);
+        ctx.fillRect(-13, -22, 26, 44);
+        // box number tick
+        ctx.fillStyle = 'rgba(255,255,255,0.65)';
+        ctx.fillRect(-9, 16, 18, 2.5);
+        ctx.strokeStyle = hexAlpha(track.accent || '#ff2bd6', 0.5);
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(-13, -22); ctx.lineTo(13, -22); ctx.stroke();
+        ctx.restore();
+      }
+      ctx.restore();
+    }
+  }
+
+  /** 2–3 tyre-wall stacks at the tightest outer apexes (vintage circuit cue). */
+  function drawTyreWallStacks(ctx, track) {
+    const poly = track.outer;
+    if (!poly || poly.length < 6) return;
+    const n = poly.length;
+    const cx = track.width * 0.5, cy = track.height * 0.5;
+    const scored = [];
+    for (let i = 0; i < n; i++) {
+      const a = poly[(i - 1 + n) % n];
+      const b = poly[i];
+      const c = poly[(i + 1) % n];
+      const a0 = Math.atan2(b.y - a.y, b.x - a.x);
+      const a1 = Math.atan2(c.y - b.y, c.x - b.x);
+      let d = a1 - a0;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      const turn = Math.abs(d);
+      if (turn < 0.055) continue;
+      scored.push({ i, turn, x: b.x, y: b.y });
+    }
+    scored.sort((a, b) => b.turn - a.turn);
+    // Prefer landmark corners when available
+    const picks = [];
+    const minSep = 120;
+    const tryAdd = (p) => {
+      for (const q of picks) {
+        if (Math.hypot(p.x - q.x, p.y - q.y) < minSep) return;
+      }
+      picks.push(p);
+    };
+    if (track.landmarks) {
+      for (const lm of track.landmarks) {
+        if (lm.kind !== 'corner' && lm.kind !== 'chicane' && lm.kind !== 'kink') continue;
+        let best = null, bd = Infinity;
+        for (const s of scored) {
+          const d = Math.hypot(s.x - lm.x, s.y - lm.y);
+          if (d < bd) { bd = d; best = s; }
+        }
+        if (best && bd < 180) tryAdd(best);
+        if (picks.length >= 3) break;
+      }
+    }
+    for (const s of scored) {
+      if (picks.length >= 3) break;
+      tryAdd(s);
+    }
+    for (const p of picks.slice(0, 3)) {
+      const i = p.i;
+      const a = poly[(i - 1 + n) % n];
+      const c = poly[(i + 1) % n];
+      const ang = Math.atan2(c.y - a.y, c.x - a.x);
+      let ox = Math.cos(ang + Math.PI / 2);
+      let oy = Math.sin(ang + Math.PI / 2);
+      // Place just outside outer wall
+      if ((p.x - cx) * ox + (p.y - cy) * oy < 0) { ox = -ox; oy = -oy; }
+      const sx = p.x + ox * 22;
+      const sy = p.y + oy * 22;
+      drawTyreStack(ctx, sx, sy, ang, track);
+    }
+  }
+
+  function drawTyreStack(ctx, x, y, ang, track) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(ang);
+    ctx.scale(1.35, 1.35);
+    // Contact shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.beginPath();
+    ctx.ellipse(0, 8, 22, 9, 0, 0, Math.PI * 2);
+    ctx.fill();
+    const rows = 3;
+    const cols = 4;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const tx = (c - 1.5) * 11;
+        const ty = -r * 9 + (c % 2) * 1.5;
+        ctx.fillStyle = r === rows - 1 ? '#222228' : '#141418';
+        ctx.beginPath();
+        ctx.ellipse(tx, ty, 8, 5.6, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(70,70,78,0.95)';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.ellipse(tx, ty, 8, 5.6, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(28,28,32,0.95)';
+        ctx.beginPath();
+        ctx.ellipse(tx, ty, 3, 2.1, 0, 0, Math.PI * 2);
+        ctx.fill();
+        if (r === rows - 1) {
+          ctx.strokeStyle = hexAlpha(track.wall || '#00e8ff', 0.7);
+          ctx.lineWidth = 1.8;
+          ctx.beginPath();
+          ctx.ellipse(tx, ty, 6, 4, 0, 0.15, Math.PI - 0.15);
+          ctx.stroke();
+        }
+      }
+    }
+    ctx.restore();
+  }
+
+    /** Block kerbs along high-curvature / landmark apexes on the inner wall. */
   function drawBlockKerbs(ctx, track) {
     const poly = track.inner;
     if (!poly || poly.length < 4) return;

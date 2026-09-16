@@ -2,7 +2,10 @@
  * Pre-rendered sprite bank for Radcars.
  * Cars / mines / projectiles / boom frames generated once at init to offscreen canvases,
  * then drawn with drawImage for solid mobile perf.
+ * Prefer realistic pack sprites (chroma-keyed) when assetPack is ready; procedural fallback.
  */
+
+import { getPackCarSprite, isPackReady } from './assetPack.js';
 
 function shade(hex, amt) {
   const c = hex.replace('#', '');
@@ -234,9 +237,11 @@ function paintCarBody(ctx, color, opts = {}) {
 const ROT_FRAMES = 36;
 const CAR_SIZE = 96; // offscreen sheet cell (2x crisp)
 const CAR_HALF = CAR_SIZE / 2;
+/** Max draw size of pack car inside the 96 cell (match procedural ~36×24 @2x). */
+const PACK_FIT = 84;
 
-function carKey(color, tier, isPlayer) {
-  return `${color}|${tier}|${isPlayer ? 1 : 0}`;
+function carKey(color, tier, isPlayer, packTag) {
+  return `${color}|${tier}|${isPlayer ? 1 : 0}|${packTag || 'proc'}`;
 }
 
 function buildCarFrames(color, tier, isPlayer) {
@@ -248,6 +253,33 @@ function buildCarFrames(color, tier, isPlayer) {
     ctx.scale(2, 2); // paint at 2x for HD
     ctx.rotate(angle);
     paintCarBody(ctx, color, { tier, isPlayer });
+    frames[i] = canvas;
+  }
+  return frames;
+}
+
+/**
+ * Build 36 rotation frames from a facing-+X pack base (already chroma-keyed + cropped).
+ */
+function buildCarFramesFromPack(base) {
+  const frames = new Array(ROT_FRAMES);
+  const sw = base.width || 1;
+  const sh = base.height || 1;
+  const scale = Math.min(PACK_FIT / sw, PACK_FIT / sh);
+  const dw = sw * scale;
+  const dh = sh * scale;
+  for (let i = 0; i < ROT_FRAMES; i++) {
+    const { canvas, ctx } = makeCanvas(CAR_SIZE, CAR_SIZE);
+    const angle = (i / ROT_FRAMES) * Math.PI * 2;
+    ctx.translate(CAR_HALF, CAR_HALF);
+    ctx.rotate(angle);
+    ctx.imageSmoothingEnabled = true;
+    // Soft contact shadow under art
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.beginPath();
+    ctx.ellipse(1, dh * 0.12, dw * 0.42, dh * 0.28, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.drawImage(base, -dw / 2, -dh / 2, dw, dh);
     frames[i] = canvas;
   }
   return frames;
@@ -388,6 +420,7 @@ function buildBoomFrames() {
 
 /**
  * Create and cache the full sprite bank. Call once at renderer init.
+ * Progressive: procedural until pack ready; call invalidatePackCars() after load.
  */
 export function createSpriteBank() {
   const carCache = new Map();
@@ -395,11 +428,24 @@ export function createSpriteBank() {
   const projectiles = buildProjectileFrames();
   const booms = buildBoomFrames();
 
+  function packTagFor(color, isPlayer) {
+    if (!isPackReady()) return 'proc';
+    const spr = getPackCarSprite(color, isPlayer);
+    return spr ? 'pack' : 'proc';
+  }
+
   function getCarFrames(color, tier = 0, isPlayer = false) {
-    const key = carKey(color, tier, isPlayer);
+    const tag = packTagFor(color, isPlayer);
+    const key = carKey(color, tier, isPlayer, tag);
     let frames = carCache.get(key);
     if (!frames) {
-      frames = buildCarFrames(color, tier, isPlayer);
+      const base = tag === 'pack' ? getPackCarSprite(color, isPlayer) : null;
+      if (base) {
+        // Pack art already carries colour; tier ignored for sheet (same silhouette)
+        frames = buildCarFramesFromPack(base);
+      } else {
+        frames = buildCarFrames(color, tier, isPlayer);
+      }
       carCache.set(key, frames);
     }
     return frames;
@@ -419,6 +465,10 @@ export function createSpriteBank() {
     mines,
     projectiles,
     booms,
+    /** Drop pack/proc car sheets so next draw rebuilds with current pack state. */
+    invalidatePackCars() {
+      carCache.clear();
+    },
     /** Warm common colours so first race doesn't hitch */
     warm(colors = []) {
       for (const col of colors) {

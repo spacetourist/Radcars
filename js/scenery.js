@@ -1,3 +1,5 @@
+import { getAssetPack, isPackReady } from './assetPack.js';
+
 /**
  * Radcars scenery — procedural pre-rendered buildings, crowds, props + skyline.
  * Classic arcade industrial neon attitude; original designs (no third-party IP).
@@ -350,6 +352,66 @@ function paintGrandstand(ctx, tw, th, theme, variant) {
   ctx.stroke();
 }
 
+/** Large solid grandstand mass — reads as architecture, not crowd stamps. */
+function paintGrandstandBlock(ctx, tw, th, theme, variant) {
+  const w = tw, h = th;
+  // Base podium / shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.fillRect(4, h - 10, w - 8, 8);
+  // Concrete body
+  ctx.fillStyle = shade(theme.metal, -8);
+  ctx.fillRect(0, 18, w, h - 28);
+  ctx.fillStyle = shade(theme.metal, 12);
+  ctx.fillRect(0, 18, w, 8);
+  // Tiered seating bands
+  const tiers = 5;
+  for (let t = 0; t < tiers; t++) {
+    const y = 28 + t * ((h - 48) / tiers);
+    const inset = 6 + t * 3;
+    ctx.fillStyle = shade(theme.brick, t * 6 - 6);
+    ctx.fillRect(inset, y, w - inset * 2, (h - 48) / tiers - 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(inset, y + (h - 48) / tiers - 4, w - inset * 2, 2);
+    // Dense crowd row (small stamps that still read as mass with the block)
+    for (let i = 0; i < 14; i++) {
+      const cx = inset + 6 + i * ((w - inset * 2 - 12) / 13);
+      const cols = [theme.neonA, theme.neonB, theme.neonC, '#fff', '#ff8a00', '#4a90ff'];
+      ctx.fillStyle = cols[(i + variant + t) % cols.length];
+      ctx.globalAlpha = 0.7;
+      ctx.fillRect(cx, y + 3, 3.5, 6);
+      ctx.beginPath();
+      ctx.arc(cx + 1.75, y + 2, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  }
+  // Roof canopy — large mass
+  ctx.fillStyle = shade(theme.metal, -20);
+  ctx.beginPath();
+  ctx.moveTo(-4, 22);
+  ctx.lineTo(w * 0.5, 2);
+  ctx.lineTo(w + 4, 22);
+  ctx.lineTo(w - 8, 28);
+  ctx.lineTo(8, 28);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = hexAlpha(theme.neonA, 0.65);
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(-4, 22);
+  ctx.lineTo(w * 0.5, 2);
+  ctx.lineTo(w + 4, 22);
+  ctx.stroke();
+  // Fascia stripe
+  ctx.fillStyle = hexAlpha(theme.neonB, 0.55);
+  ctx.fillRect(10, 26, w - 20, 3);
+  // Support columns
+  ctx.fillStyle = shade(theme.metal, 25);
+  ctx.fillRect(14, h - 22, 6, 14);
+  ctx.fillRect(w / 2 - 3, h - 22, 6, 14);
+  ctx.fillRect(w - 20, h - 22, 6, 14);
+}
+
 function paintCharacter(ctx, tw, th, theme, variant) {
   const w = tw, h = th;
   const cx = w / 2;
@@ -541,7 +603,7 @@ function paintStreetlamp(ctx, tw, th, theme, variant) {
 }
 
 export function createScenerySprites(theme) {
-  const buildings = { warehouse: [], tower: [], shop: [], billboard: [], chimney: [], water: [], stand: [] };
+  const buildings = { warehouse: [], tower: [], shop: [], billboard: [], chimney: [], water: [], stand: [], standBlock: [] };
   const characters = [];
   const props = { barrel: [], cone: [], light: [], fence: [], palm: [], lamp: [] };
 
@@ -554,6 +616,7 @@ export function createScenerySprites(theme) {
     c = makeCanvas(40, 110); paintChimney(c.ctx, 40, 110, theme, v); buildings.chimney.push(c.canvas);
     c = makeCanvas(64, 100); paintWaterTower(c.ctx, 64, 100, theme); buildings.water.push(c.canvas);
     c = makeCanvas(140, 72); paintGrandstand(c.ctx, 140, 72, theme, v); buildings.stand.push(c.canvas);
+    c = makeCanvas(220, 110); paintGrandstandBlock(c.ctx, 220, 110, theme, v); buildings.standBlock.push(c.canvas);
   }
   for (let v = 0; v < 12; v++) {
     const c = makeCanvas(28, 40);
@@ -569,7 +632,47 @@ export function createScenerySprites(theme) {
     c = makeCanvas(48, 64); paintPalm(c.ctx, 48, 64, theme, v); props.palm.push(c.canvas);
     c = makeCanvas(48, 64); paintStreetlamp(c.ctx, 48, 64, theme, v); props.lamp.push(c.canvas);
   }
+
+  // Prefer realistic pack art for warehouse / grandstand (keep placement geometry)
+  applyPackBuildingArt(buildings);
+
   return { buildings, characters, props, theme };
+}
+
+/** Swap warehouse / stand / standBlock sources when pack sprites are ready. */
+function applyPackBuildingArt(buildings) {
+  const pack = getAssetPack();
+  if (!pack || !pack.ready || !pack.scenery) return;
+  const sc = pack.scenery;
+  if (sc.warehouseSm || sc.warehouseMd || sc.warehouse) {
+    const variants = [];
+    if (sc.warehouseSm) variants.push(sc.warehouseSm);
+    if (sc.warehouseMd) variants.push(sc.warehouseMd);
+    if (sc.warehouse && variants.length < 2) variants.push(fitPackSprite(sc.warehouse, 100, 80));
+    // Keep a couple procedural as rare spice at end? Prefer pack only — requirement: prefer generated.
+    buildings.warehouse = variants.length ? variants : buildings.warehouse;
+  }
+  if (sc.stand || sc.grandstand) {
+    const stand = sc.stand || fitPackSprite(sc.grandstand, 160, 80);
+    buildings.stand = [stand];
+  }
+  if (sc.standBlock || sc.grandstand) {
+    const block = sc.standBlock || fitPackSprite(sc.grandstand, 240, 120);
+    buildings.standBlock = [block];
+  }
+}
+
+function fitPackSprite(source, maxW, maxH) {
+  if (!source) return null;
+  const sw = source.width || 1;
+  const sh = source.height || 1;
+  const s = Math.min(maxW / sw, maxH / sh);
+  const dw = Math.max(1, Math.round(sw * s));
+  const dh = Math.max(1, Math.round(sh * s));
+  const { canvas, ctx } = makeCanvas(dw, dh);
+  ctx.clearRect(0, 0, dw, dh);
+  ctx.drawImage(source, 0, 0, dw, dh);
+  return canvas;
 }
 
 function pick(arr, rnd) {
@@ -757,30 +860,57 @@ export function buildTrackScenery(track) {
     }
   }
 
-  // Few large grandstands facing the start straight (+ pit / major corners)
+  // One clear grandstand BLOCK facing start/finish + smaller stands at pit / corners
   const standAnchors = landmarks.filter((lm) =>
     lm.kind === 'start' || lm.id === 'start_finish' || lm.kind === 'pit' || lm.kind === 'corner');
+  let placedStartBlock = false;
   for (const lm of standAnchors) {
     const isStart = lm.kind === 'start' || lm.id === 'start_finish';
-    const count = isStart ? 4 : (lm.kind === 'pit' ? 2 : 1);
-    // Face outward from track center
     const cx = track.width * 0.5, cy = track.height * 0.5;
     const dx = lm.x - cx, dy = lm.y - cy;
     const len = Math.hypot(dx, dy) || 1;
     const nx = dx / len, ny = dy / len;
     const tx = -ny, ty = nx;
+
+    if (isStart && !placedStartBlock) {
+      // Single large mass opposite the grid (outward from center)
+      const x = lm.x + nx * 125;
+      const y = lm.y + ny * 125;
+      // Prefer placing the block even if pad is tight — try softer pad
+      if ((tryPlace(track, x, y, 36) || tryPlace(track, x, y, 20)) && !pointInPoly(x, y, track.outer)) {
+        const img = pick(sprites.buildings.standBlock, rnd);
+        addItem(mid, img, x, y, 1.65, 'mid', y + 90);
+        placedStartBlock = true;
+        for (let k = 0; k < 14; k++) {
+          const cimg = pick(sprites.characters, rnd);
+          addItem(near, cimg,
+            x + (rnd() - 0.5) * 100,
+            y + 28 + rnd() * 24,
+            0.95 + rnd() * 0.3, 'near');
+        }
+      }
+      // flanking smaller stands
+      for (const side of [-1, 1]) {
+        const fx = lm.x + nx * 95 + tx * side * 130;
+        const fy = lm.y + ny * 95 + ty * side * 130;
+        if (!tryPlace(track, fx, fy, 28)) continue;
+        if (pointInPoly(fx, fy, track.outer)) continue;
+        addItem(mid, pick(sprites.buildings.stand, rnd), fx, fy, 1.05, 'mid');
+      }
+      continue;
+    }
+
+    const count = lm.kind === 'pit' ? 2 : 1;
     for (let i = 0; i < count; i++) {
-      const lat = (i - (count - 1) * 0.5) * (isStart ? 70 : 55);
-      const out = isStart ? (95 + i * 8) : 80;
+      const lat = (i - (count - 1) * 0.5) * 55;
+      const out = 80;
       const x = lm.x + nx * out + tx * lat;
       const y = lm.y + ny * out + ty * lat;
       if (!tryPlace(track, x, y, 28)) continue;
       if (pointInPoly(x, y, track.outer)) continue;
       const img = pick(sprites.buildings.stand, rnd);
-      const scale = isStart ? (1.15 + rnd() * 0.2) : (1.0 + rnd() * 0.15);
-      addItem(mid, img, x, y, scale, 'mid');
-      const crowdN = isStart ? 10 : 5;
-      for (let k = 0; k < crowdN; k++) {
+      addItem(mid, img, x, y, 1.0 + rnd() * 0.15, 'mid');
+      for (let k = 0; k < 5; k++) {
         const cimg = pick(sprites.characters, rnd);
         addItem(near, cimg,
           x + (rnd() - 0.5) * 70,
@@ -1022,25 +1152,48 @@ function buildGroundPlate(track, theme) {
 /** Draw screen-space sky + parallax skyline behind the world. */
 export function drawArenaBackground(ctx, scenery, cam, W, H) {
   const theme = scenery.theme;
-  const sky = ctx.createLinearGradient(0, 0, 0, H);
-  sky.addColorStop(0, theme.skyTop);
-  sky.addColorStop(0.45, theme.skyMid);
-  sky.addColorStop(1, theme.skyBot);
-  ctx.fillStyle = sky;
-  ctx.fillRect(0, 0, W, H);
+  const pack = getAssetPack();
+  const packSky = (pack && pack.ready && pack.skyline) ? pack.skyline : null;
 
-  // Parallax skyline (camera-influenced)
-  const img = scenery.skyline;
-  if (img) {
-    const parallax = 0.15;
-    const ox = -((cam.x * parallax) % img.width);
-    const oy = H * 0.28 - (cam.y * parallax * 0.05);
-    ctx.globalAlpha = 0.95;
+  if (packSky) {
+    // Full-bleed neon skyline from pack (no chroma); soft cover + light parallax
+    const parallax = 0.12;
+    const scale = Math.max(W / packSky.width, (H * 0.72) / packSky.height);
+    const dw = packSky.width * scale;
+    const dh = packSky.height * scale;
+    const ox = (W - dw) * 0.5 - ((cam.x * parallax) % Math.max(1, dw * 0.15));
+    const oy = H * 0.02 - (cam.y * parallax * 0.04) - dh * 0.08;
     ctx.imageSmoothingEnabled = true;
-    for (let i = -1; i <= 2; i++) {
-      ctx.drawImage(img, ox + i * img.width, oy, img.width, img.height * 0.85);
-    }
     ctx.globalAlpha = 1;
+    ctx.drawImage(packSky, ox, oy, dw, dh);
+    // Fade lower edge into ground colour so world plate reads cleanly
+    const fade = ctx.createLinearGradient(0, H * 0.45, 0, H);
+    fade.addColorStop(0, 'rgba(0,0,0,0)');
+    fade.addColorStop(0.55, hexAlpha(theme.skyBot, 0.35));
+    fade.addColorStop(1, theme.skyBot);
+    ctx.fillStyle = fade;
+    ctx.fillRect(0, H * 0.45, W, H * 0.55);
+  } else {
+    const sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, theme.skyTop);
+    sky.addColorStop(0.45, theme.skyMid);
+    sky.addColorStop(1, theme.skyBot);
+    ctx.fillStyle = sky;
+    ctx.fillRect(0, 0, W, H);
+
+    // Parallax procedural skyline
+    const img = scenery.skyline;
+    if (img) {
+      const parallax = 0.15;
+      const ox = -((cam.x * parallax) % img.width);
+      const oy = H * 0.28 - (cam.y * parallax * 0.05);
+      ctx.globalAlpha = 0.95;
+      ctx.imageSmoothingEnabled = true;
+      for (let i = -1; i <= 2; i++) {
+        ctx.drawImage(img, ox + i * img.width, oy, img.width, img.height * 0.85);
+      }
+      ctx.globalAlpha = 1;
+    }
   }
 
   // Horizon glow
@@ -1223,8 +1376,10 @@ export function createSceneryCache() {
   return {
     get(track) {
       if (!track) return null;
-      if (cached && cached.trackId === track.id) return cached;
+      const packGen = isPackReady() ? 1 : 0;
+      if (cached && cached.trackId === track.id && cached._packGen === packGen) return cached;
       cached = buildTrackScenery(track);
+      cached._packGen = packGen;
       return cached;
     },
     clear() { cached = null; }
