@@ -1,4 +1,4 @@
-const CACHE = 'radcars-v15-scenery-polish';
+const CACHE = 'radcars-v17-crowd-v23';
 const ASSETS = [
   './',
   './index.html',
@@ -38,6 +38,8 @@ const ASSETS = [
   './assets/generated/scenery/scenery-grandstand.png',
   './assets/generated/scenery/scenery-tower.png',
   './assets/generated/scenery/scenery-crowd.png',
+  './assets/generated/scenery/scenery-grandstand-large.png',
+  './assets/generated/scenery/scenery-crowd-dense.png',
   './assets/generated/scenery/scenery-tyrewall.png',
   './assets/generated/scenery/scenery-props.png',
   './assets/generated/scenery/scenery-palms.png',

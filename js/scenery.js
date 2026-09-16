@@ -228,8 +228,9 @@ function paintNeonShop(ctx, tw, th, theme, variant) {
   ctx.fillRect(38, 22, 12, 4);
   ctx.fillStyle = hexAlpha(theme.glowWin, 0.35);
   ctx.fillRect(10, 40, w - 24, h - 56);
-  ctx.strokeStyle = hexAlpha(neon, 0.6);
-  ctx.lineWidth = 2;
+  // Soft dark edge only — never bright neon AA outline boxes
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+  ctx.lineWidth = 1;
   ctx.strokeRect(10, 40, w - 24, h - 56);
   ctx.fillStyle = '#080a0e';
   ctx.fillRect(w * 0.4, h - 36, 14, 24);
@@ -256,8 +257,9 @@ function paintBillboard(ctx, tw, th, theme, variant) {
   ctx.fillRect(w * 0.5, 20, w * 0.28, 6);
   ctx.fillRect(w * 0.5, 30, w * 0.2, 4);
   ctx.globalAlpha = 1;
-  ctx.strokeStyle = cols[(variant + 1) % 3];
-  ctx.lineWidth = 2;
+  // Soft plate edge — never cyan/pink/yellow AA neon box
+  ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+  ctx.lineWidth = 1;
   ctx.strokeRect(4, 8, w - 8, h * 0.42);
 }
 
@@ -549,8 +551,7 @@ function paintFence(ctx, tw, th, theme) {
   ctx.moveTo(2, h * 0.55);
   ctx.lineTo(w - 2, h * 0.55);
   ctx.stroke();
-  ctx.strokeStyle = hexAlpha(theme.neonC, 0.4);
-  ctx.strokeRect(1, 6, w - 2, h - 10);
+  // No neon AA outline box around fence panel
 }
 
 function paintPalm(ctx, tw, th, theme, variant) {
@@ -603,7 +604,7 @@ function paintStreetlamp(ctx, tw, th, theme, variant) {
 }
 
 export function createScenerySprites(theme) {
-  const buildings = { warehouse: [], tower: [], shop: [], billboard: [], chimney: [], water: [], stand: [], standBlock: [] };
+  const buildings = { warehouse: [], tower: [], shop: [], billboard: [], chimney: [], water: [], stand: [], standBlock: [], standLarge: [], _crowdDense: [], _crowdThin: [] };
   const characters = [];
   const props = { barrel: [], cone: [], light: [], fence: [], palm: [], lamp: [], tyrewall: [] };
 
@@ -671,20 +672,41 @@ function applyPackBuildingArt(buildings, characters, props) {
     const stand = sc.stand || fitPackSprite(sc.grandstand, 160, 80);
     buildings.stand = [stand];
   }
-  if (sc.standBlock || sc.grandstand) {
-    const block = sc.standBlock || fitPackSprite(sc.grandstand, 240, 120);
+  // v2.3: large grandstand → standBlock / standLarge for S/F mass
+  if (sc.standLarge || sc.standBlock || sc.grandstandLarge || sc.grandstand) {
+    const block = sc.standLarge || sc.standBlock
+      || (sc.grandstandLarge && fitPackSprite(sc.grandstandLarge, 300, 150))
+      || fitPackSprite(sc.grandstand, 240, 120);
     buildings.standBlock = [block];
+    if (sc.standLarge || sc.grandstandLarge) {
+      buildings.standLarge = [sc.standLarge || fitPackSprite(sc.grandstandLarge, 300, 150)];
+    }
   }
-  // Crowd strip → prefer over procedural character stamps at landmarks
-  if (characters && (sc.crowdSm || sc.crowdMd || sc.crowdLg || sc.crowd)) {
-    const variants = [];
-    if (sc.crowdSm) variants.push(sc.crowdSm);
-    if (sc.crowdMd) variants.push(sc.crowdMd);
-    if (sc.crowdLg) variants.push(sc.crowdLg);
-    if (sc.crowd && !variants.length) variants.push(fitPackSprite(sc.crowd, 96, 44));
-    if (variants.length) {
+  // Crowd: dense pack (v2.3) for landmark masses; thin strip only as filler
+  if (characters) {
+    const dense = [];
+    if (sc.crowdDenseLg) dense.push(sc.crowdDenseLg);
+    if (sc.crowdDenseMd) dense.push(sc.crowdDenseMd);
+    if (sc.crowdDenseSm) dense.push(sc.crowdDenseSm);
+    if (sc.crowdDense && !dense.length) dense.push(fitPackSprite(sc.crowdDense, 160, 72));
+    const thin = [];
+    if (sc.crowdSm) thin.push(sc.crowdSm);
+    if (sc.crowdMd) thin.push(sc.crowdMd);
+    if (sc.crowdLg) thin.push(sc.crowdLg);
+    if (sc.crowd && !thin.length) thin.push(fitPackSprite(sc.crowd, 96, 44));
+    if (dense.length || thin.length) {
       characters.length = 0;
-      for (const v of variants) characters.push(v);
+      // Mark dense canvases so placement can prefer them at S/F + apexes
+      for (const v of dense) {
+        try { v.__radCrowd = 'dense'; } catch (_) {}
+        characters.push(v);
+      }
+      for (const v of thin) {
+        try { v.__radCrowd = 'thin'; } catch (_) {}
+        characters.push(v);
+      }
+      buildings._crowdDense = dense;
+      buildings._crowdThin = thin.length ? thin : dense;
     }
   }
   // Props sheet → cones/barrels at pits/start; tyrewall for apex stacks
@@ -733,6 +755,15 @@ function fitPackSprite(source, maxW, maxH) {
   ctx.clearRect(0, 0, dw, dh);
   ctx.drawImage(source, 0, 0, dw, dh);
   return canvas;
+}
+
+
+function pickCrowd(sprites, rnd, preferDense) {
+  const dense = sprites.buildings && sprites.buildings._crowdDense;
+  const thin = sprites.buildings && sprites.buildings._crowdThin;
+  if (preferDense && dense && dense.length) return pick(dense, rnd);
+  if (thin && thin.length) return pick(thin, rnd);
+  return pick(sprites.characters, rnd);
 }
 
 function pick(arr, rnd) {
@@ -790,6 +821,9 @@ export function buildTrackScenery(track) {
   const mid = [];
   const near = [];
   const edges = perimeterNormals(track.outer);
+  // When pack art is ready, cut remaining procedural neon-framed kinds so they don't dominate
+  const packReady = !!(getAssetPack() && getAssetPack().ready);
+  const proceduralCut = packReady; // shop / chimney / water still procedural
 
   const start = track.spawns && track.spawns[0];
   const startX = start ? start.x : track.width * 0.5;
@@ -843,7 +877,14 @@ export function buildTrackScenery(track) {
       if (boost < 0.35 && rnd() > 0.7) continue;
       const roll = rnd();
       let img, scale;
-      if (roll < 0.28) { img = pick(sprites.buildings.tower, rnd); scale = 0.85 + rnd() * 0.45; }
+      if (proceduralCut) {
+        // Prefer pack tower/warehouse/billboard; rare chimney/water
+        if (roll < 0.38) { img = pick(sprites.buildings.tower, rnd); scale = 0.85 + rnd() * 0.45; }
+        else if (roll < 0.72) { img = pick(sprites.buildings.warehouse, rnd); scale = 0.9 + rnd() * 0.35; }
+        else if (roll < 0.82) { img = pick(sprites.buildings.billboard, rnd); scale = 0.7 + rnd() * 0.3; }
+        else if (roll < 0.91) { img = pick(sprites.buildings.chimney, rnd); scale = 0.8 + rnd() * 0.4; }
+        else { img = pick(sprites.buildings.water, rnd); scale = 0.75 + rnd() * 0.35; }
+      } else if (roll < 0.28) { img = pick(sprites.buildings.tower, rnd); scale = 0.85 + rnd() * 0.45; }
       else if (roll < 0.55) { img = pick(sprites.buildings.warehouse, rnd); scale = 0.9 + rnd() * 0.35; }
       else if (roll < 0.7) { img = pick(sprites.buildings.chimney, rnd); scale = 0.8 + rnd() * 0.4; }
       else if (roll < 0.85) { img = pick(sprites.buildings.water, rnd); scale = 0.75 + rnd() * 0.35; }
@@ -878,6 +919,24 @@ export function buildTrackScenery(track) {
       } else if (boost > 0.5 && nearest && nearest.kind === 'pit' && roll < 0.45) {
         img = pick(sprites.buildings.warehouse, rnd);
         scale = 0.85 + rnd() * 0.3;
+      } else if (proceduralCut) {
+        // Pack-ready: shops/chimneys rare; favour warehouse/billboard/tower
+        if (roll < 0.08) {
+          img = pick(sprites.buildings.shop, rnd);
+          scale = 0.85 + rnd() * 0.3;
+        } else if (roll < 0.42) {
+          img = pick(sprites.buildings.warehouse, rnd);
+          scale = 0.7 + rnd() * 0.3;
+        } else if (roll < 0.62) {
+          img = pick(sprites.buildings.billboard, rnd);
+          scale = 0.65 + rnd() * 0.25;
+        } else if (roll < 0.88) {
+          img = pick(sprites.buildings.tower, rnd);
+          scale = 0.55 + rnd() * 0.25;
+        } else {
+          img = pick(sprites.buildings.chimney, rnd);
+          scale = 0.6 + rnd() * 0.25;
+        }
       } else if (roll < 0.3) {
         img = pick(sprites.buildings.shop, rnd);
         scale = 0.85 + rnd() * 0.3;
@@ -915,10 +974,11 @@ export function buildTrackScenery(track) {
       if (boost < 0.1 && rnd() > 0.4) continue;
       const crowdBias = 0.18 + boost * 0.55;
       if (rnd() < crowdBias) {
+        const preferDense = boost > 0.35;
         const n = 2 + (rnd() * (boost > 0.4 ? 5 : 3)) | 0;
         for (let k = 0; k < n; k++) {
-          const img = pick(sprites.characters, rnd);
-          const scale = 0.85 + rnd() * 0.35;
+          const img = pickCrowd(sprites, rnd, preferDense);
+          const scale = preferDense ? (0.95 + rnd() * 0.35) : (0.85 + rnd() * 0.35);
           addItem(near, img,
             x + (rnd() - 0.5) * 22,
             y + (rnd() - 0.5) * 10,
@@ -951,49 +1011,102 @@ export function buildTrackScenery(track) {
     const tx = -ny, ty = nx;
 
     if (isStart && !placedStartBlock) {
-      // Single large mass opposite the grid (outward from center)
-      const x = lm.x + nx * 125;
-      const y = lm.y + ny * 125;
-      // Prefer placing the block even if pad is tight — try softer pad
-      if ((tryPlace(track, x, y, 36) || tryPlace(track, x, y, 20)) && !pointInPoly(x, y, track.outer)) {
-        const img = pick(sprites.buildings.standBlock, rnd);
-        addItem(mid, img, x, y, 1.65, 'mid', y + 90);
-        placedStartBlock = true;
-        for (let k = 0; k < 14; k++) {
-          const cimg = pick(sprites.characters, rnd);
-          addItem(near, cimg,
-            x + (rnd() - 0.5) * 100,
-            y + 28 + rnd() * 24,
-            0.95 + rnd() * 0.3, 'near', 'crowd');
+      // S/F grandstand: outer margin near start is razor-thin on Neon Loop,
+      // so prefer INFIELD (inside inner poly) facing the grid, then outer fallback.
+      const imgLarge = (sprites.buildings.standLarge && sprites.buildings.standLarge.length)
+        ? pick(sprites.buildings.standLarge, rnd)
+        : pick(sprites.buildings.standBlock, rnd);
+      const trySpots = [];
+      // Infield (toward center) — classic spectator mass inside the loop
+      for (const dist of [200, 180, 220, 160, 240, 140]) {
+        trySpots.push({ x: lm.x - nx * dist, y: lm.y - ny * dist, pad: 12 });
+      }
+      // Outer runoff (tiny band just outside outer poly)
+      for (const dist of [230, 235, 225, 240, 220, 245]) {
+        trySpots.push({ x: lm.x + nx * dist, y: lm.y + ny * dist, pad: 6 });
+      }
+      // Lateral outside near S/F
+      for (const side of [-1, 1]) {
+        for (const dist of [40, 70]) {
+          trySpots.push({
+            x: lm.x + nx * dist + tx * side * 150,
+            y: lm.y + ny * dist + ty * side * 150,
+            pad: 10
+          });
         }
       }
-      // flanking smaller stands
+      for (const spot of trySpots) {
+        const { x, y, pad } = spot;
+        if (x < -70 || y < -70 || x > track.width + 70 || y > track.height + 70) continue;
+        // Accept infield (inside inner) OR outside outer; never on asphalt
+        const inInner = pointInPoly(x, y, track.inner);
+        const inOuter = pointInPoly(x, y, track.outer);
+        if (isOnAsphalt(track, x, y)) continue;
+        if (!inInner && inOuter) continue; // still in some non-asphalt outer pocket — skip
+        if (!inInner && !inOuter && !tryPlace(track, x, y, pad)) continue;
+        addItem(mid, imgLarge, x, y, 1.9, 'mid', y + 110);
+        placedStartBlock = true;
+        for (let k = 0; k < 8; k++) {
+          const cimg = pickCrowd(sprites, rnd, true);
+          addItem(near, cimg,
+            x + (rnd() - 0.5) * 120,
+            y + (inInner ? -20 : 28) + rnd() * 24,
+            1.1 + rnd() * 0.35, 'near', 'crowd');
+        }
+        break;
+      }
+      // flanking smaller stands (outer or infield)
       for (const side of [-1, 1]) {
-        const fx = lm.x + nx * 95 + tx * side * 130;
-        const fy = lm.y + ny * 95 + ty * side * 130;
-        if (!tryPlace(track, fx, fy, 28)) continue;
-        if (pointInPoly(fx, fy, track.outer)) continue;
-        addItem(mid, pick(sprites.buildings.stand, rnd), fx, fy, 1.05, 'mid');
+        for (const dist of [90, 70, 110]) {
+          const fx = lm.x + nx * 30 + tx * side * dist;
+          const fy = lm.y + ny * 30 + ty * side * dist;
+          const fx2 = lm.x - nx * 170 + tx * side * (dist * 0.6);
+          const fy2 = lm.y - ny * 170 + ty * side * (dist * 0.6);
+          let placedF = false;
+          for (const [fxs, fys] of [[fx, fy], [fx2, fy2]]) {
+            if (isOnAsphalt(track, fxs, fys)) continue;
+            const okInner = pointInPoly(fxs, fys, track.inner);
+            const okOuter = !pointInPoly(fxs, fys, track.outer) && tryPlace(track, fxs, fys, 12);
+            if (!okInner && !okOuter) continue;
+            addItem(mid, pick(sprites.buildings.stand, rnd), fxs, fys, 1.05, 'mid');
+            for (let k = 0; k < 3; k++) {
+              addItem(near, pickCrowd(sprites, rnd, true),
+                fxs + (rnd() - 0.5) * 60, fys + 16 + rnd() * 18,
+                1.0 + rnd() * 0.3, 'near', 'crowd');
+            }
+            placedF = true;
+            break;
+          }
+          if (placedF) break;
+        }
       }
       continue;
     }
 
+    // Major apexes / pits: prefer large block when available, else standard stand
+    const isMajor = lm.kind === 'pit' || lm.kind === 'corner';
     const count = lm.kind === 'pit' ? 2 : 1;
     for (let i = 0; i < count; i++) {
       const lat = (i - (count - 1) * 0.5) * 55;
-      const out = 80;
+      const out = isMajor ? 95 : 80;
       const x = lm.x + nx * out + tx * lat;
       const y = lm.y + ny * out + ty * lat;
-      if (!tryPlace(track, x, y, 28)) continue;
       if (pointInPoly(x, y, track.outer)) continue;
-      const img = pick(sprites.buildings.stand, rnd);
-      addItem(mid, img, x, y, 1.0 + rnd() * 0.15, 'mid');
-      for (let k = 0; k < 5; k++) {
-        const cimg = pick(sprites.characters, rnd);
+      if (!tryPlace(track, x, y, 18) && isOnAsphalt(track, x, y)) continue;
+      let img;
+      if (isMajor && sprites.buildings.standBlock && sprites.buildings.standBlock.length && rnd() < 0.65) {
+        img = pick(sprites.buildings.standBlock, rnd);
+        addItem(mid, img, x, y, 1.25 + rnd() * 0.2, 'mid');
+      } else {
+        img = pick(sprites.buildings.stand, rnd);
+        addItem(mid, img, x, y, 1.0 + rnd() * 0.15, 'mid');
+      }
+      for (let k = 0; k < (isMajor ? 5 : 3); k++) {
+        const cimg = pickCrowd(sprites, rnd, true);
         addItem(near, cimg,
           x + (rnd() - 0.5) * 70,
           y + 18 + rnd() * 20,
-          0.9 + rnd() * 0.3, 'near', 'crowd');
+          1.0 + rnd() * 0.3, 'near', 'crowd');
       }
     }
   }
@@ -1008,12 +1121,12 @@ export function buildTrackScenery(track) {
         const y = startY + ly * side * (85 + i * 55) - Math.sin(ang) * (15 + i * 25);
         if (!tryPlace(track, x, y, 24)) continue;
         if (pointInPoly(x, y, track.outer)) continue;
-        for (let k = 0; k < 6; k++) {
-          const cimg = pick(sprites.characters, rnd);
+        for (let k = 0; k < 4; k++) {
+          const cimg = pickCrowd(sprites, rnd, true);
           addItem(near, cimg,
-            x + (rnd() - 0.5) * 50,
+            x + (rnd() - 0.5) * 55,
             y + 12 + rnd() * 16,
-            0.95 + rnd() * 0.25, 'near', 'crowd');
+            1.05 + rnd() * 0.3, 'near', 'crowd');
         }
         if (rnd() > 0.4) {
           addItem(near, pick(sprites.props.lamp, rnd), x + side * 20, y - 10, 1, 'near');

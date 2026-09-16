@@ -83,11 +83,11 @@ await waitPack(page);
 // Neon Loop grid — pack v2
 await startTrack(page, 0);
 await sleep(1100);
-await shot(page, '16-polish-grid');
+await shot(page, '18-no-outlines-grid');
 
 // Mid-race (multiple AI colours on grid)
 await sleep(5200);
-await shot(page, '17-polish-race');
+await shot(page, '19-no-outlines-race');
 
 const info = await page.evaluate(async () => {
   const m = await import('/js/assetPack.js');
@@ -115,7 +115,12 @@ const info = await page.evaluate(async () => {
       billboard: !!(p.scenery.billboard && p.scenery.billboard.width),
       palmSm: p.scenery.palmSm ? [p.scenery.palmSm.width, p.scenery.palmSm.height] : null,
       billboardSm: p.scenery.billboardSm ? [p.scenery.billboardSm.width, p.scenery.billboardSm.height] : null,
-      towerSm: p.scenery.towerSm ? [p.scenery.towerSm.width, p.scenery.towerSm.height] : null
+      towerSm: p.scenery.towerSm ? [p.scenery.towerSm.width, p.scenery.towerSm.height] : null,
+      crowdDense: !!(p.scenery.crowdDense && p.scenery.crowdDense.width),
+      crowdDenseMd: p.scenery.crowdDenseMd ? [p.scenery.crowdDenseMd.width, p.scenery.crowdDenseMd.height] : null,
+      grandstandLarge: !!(p.scenery.grandstandLarge && p.scenery.grandstandLarge.width),
+      standLarge: p.scenery.standLarge ? [p.scenery.standLarge.width, p.scenery.standLarge.height] : null,
+      standBlock: p.scenery.standBlock ? [p.scenery.standBlock.width, p.scenery.standBlock.height] : null
     } : null,
     skyline: !!(p && p.skyline),
     asphalt: !!(p && p.asphalt),

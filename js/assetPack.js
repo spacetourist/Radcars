@@ -203,6 +203,85 @@ function erodeFringe1px(ctx, w, h) {
 }
 
 /**
+ * Strip high-saturation neon edge frames left on pack stamps after crop.
+ * Clears neon on (1) canvas AABB border and (2) alpha-silhouette fringe —
+ * magenta/cyan plates often follow the sprite outline, not just the crop box.
+ */
+/**
+ * Strip high-saturation neon edge frames left on pack stamps after crop.
+ * Clears neon on (1) canvas AABB border and (2) alpha-silhouette fringe —
+ * magenta/cyan plates often follow the sprite outline, not just the crop box.
+ */
+function isHighSatNeon(r, g, b) {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  if (max < 120) return false;
+  const sat = max - min;
+  if (sat < 55) return false;
+  // cyan / aqua
+  if (g > 130 && b > 130 && r < Math.min(g, b) * 0.6) return true;
+  // yellow
+  if (r > 150 && g > 140 && b < 100) return true;
+  // lime / chartreuse
+  if (g > 150 && r < g * 0.8 && b < g * 0.6) return true;
+  // magenta / hot pink / fuchsia silhouette strokes
+  if (r > 130 && b > 80 && g < Math.min(r, b) * 0.75) return true;
+  // pink (high R, mid B, low G)
+  if (r > 170 && g < 140 && b > 60 && b < r * 0.95) return true;
+  return false;
+}
+
+function alphaAt(d, w, h, x, y) {
+  if (x < 0 || y < 0 || x >= w || y >= h) return 0;
+  return d[(y * w + x) * 4 + 3];
+}
+
+export function stripNeonEdgeFrames(canvas, borderPx = 3, reBbox = true) {
+  if (!canvas || !canvas.width || !canvas.height) return canvas;
+  let cur = canvas;
+  const bp = Math.max(1, borderPx | 0);
+
+  // Two passes: silhouette neon often sits 1px inside after the first clear+bbox
+  for (let pass = 0; pass < 2; pass++) {
+    const w = cur.width | 0;
+    const h = cur.height | 0;
+    const ctx = cur.getContext('2d', { willReadFrequently: true });
+    const id = ctx.getImageData(0, 0, w, h);
+    const d = id.data;
+    const clearIdx = [];
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        if (d[i + 3] < 8) continue;
+        if (!isHighSatNeon(d[i], d[i + 1], d[i + 2])) continue;
+
+        const onCanvasEdge = x < bp || y < bp || x >= w - bp || y >= h - bp;
+        let nearEmpty = onCanvasEdge;
+        if (!nearEmpty) {
+          outer:
+          for (let dy = -bp; dy <= bp; dy++) {
+            for (let dx = -bp; dx <= bp; dx++) {
+              if (dx === 0 && dy === 0) continue;
+              if (Math.abs(dx) + Math.abs(dy) > bp + 1) continue; // diamond-ish
+              if (alphaAt(d, w, h, x + dx, y + dy) < 12) {
+                nearEmpty = true;
+                break outer;
+              }
+            }
+          }
+        }
+        if (nearEmpty) clearIdx.push(i + 3);
+      }
+    }
+    if (!clearIdx.length) break;
+    for (const ai of clearIdx) d[ai] = 0;
+    ctx.putImageData(id, 0, 0);
+    if (reBbox) cur = bboxCrop(cur, 1);
+  }
+  return cur;
+}
+
+/**
  * Chroma-key keyRgb → alpha with tolerant threshold + soft edge, then bbox crop.
  * opts.keyRgb: {r,g,b} — default magenta; use green for magenta-car fallback.
  * opts.skipMagentaFringe: when keying green, don't also run magenta-fringe heuristics.
@@ -314,27 +393,33 @@ export function processPackSprite(source, opts = {}) {
   const id = ctx.getImageData(0, 0, w, h);
   const baked = hasMeaningfulAlpha(id.data, w, h);
 
+  let out;
   if (baked) {
     if (opts.softFringe !== false) {
       softFringeCleanup(ctx, w, h);
       erodeFringe1px(ctx, w, h);
     }
-    return bboxCrop(canvas, opts.pad != null ? opts.pad : 1);
+    out = bboxCrop(canvas, opts.pad != null ? opts.pad : 1);
+  } else {
+    const keyHex = opts.keyColor || '#FF00FF';
+    const keyRgb = parseHexColor(keyHex);
+    out = chromaKeyAndCrop(source, {
+      hard: opts.hard,
+      soft: opts.soft,
+      pad: opts.pad,
+      keyRgb,
+      skipMagentaFringe: opts.skipMagentaFringe || (keyRgb.g > 200 && keyRgb.r < 40)
+    });
   }
-
-  const keyHex = opts.keyColor || '#FF00FF';
-  const keyRgb = parseHexColor(keyHex);
-  return chromaKeyAndCrop(source, {
-    hard: opts.hard,
-    soft: opts.soft,
-    pad: opts.pad,
-    keyRgb,
-    skipMagentaFringe: opts.skipMagentaFringe || (keyRgb.g > 200 && keyRgb.r < 40)
-  });
+  // Neon plate strip is opt-in — scenery stamps enable it; cars keep edge paint
+  if (opts.stripNeonEdge) {
+    out = stripNeonEdgeFrames(out, opts.neonEdgePx != null ? opts.neonEdgePx : 3, true);
+  }
+  return out;
 }
 
 /** Scale source into a new canvas fitting inside maxW×maxH (contain). */
-export function fitCanvas(source, maxW, maxH) {
+export function fitCanvas(source, maxW, maxH, opts = {}) {
   const sw = source.width || 1;
   const sh = source.height || 1;
   const s = Math.min(maxW / sw, maxH / sh);
@@ -343,7 +428,15 @@ export function fitCanvas(source, maxW, maxH) {
   const { canvas, ctx } = makeCanvas(dw, dh);
   ctx.clearRect(0, 0, dw, dh);
   ctx.drawImage(source, 0, 0, dw, dh);
+  if (opts.stripNeonEdge) {
+    return stripNeonEdgeFrames(canvas, opts.neonEdgePx != null ? opts.neonEdgePx : 3, true);
+  }
   return canvas;
+}
+
+/** Fit scenery stamp and strip any neon edge plate that survives scale. */
+function fitScenery(source, maxW, maxH) {
+  return fitCanvas(source, maxW, maxH, { stripNeonEdge: true });
 }
 
 /** Resolve pack car key for a colour / player flag. */
@@ -420,7 +513,9 @@ export function loadAssetPack() {
           'scenery/scenery-tyrewall.png',
           'scenery/scenery-props.png',
           'scenery/scenery-palms.png',
-          'scenery/scenery-billboard.png'
+          'scenery/scenery-billboard.png',
+          'scenery/scenery-crowd-dense.png',
+          'scenery/scenery-grandstand-large.png'
         ];
     const bgRel = (manifest && manifest.bg && manifest.bg[0]) || 'bg/bg-neon-skyline.png';
     const asphaltRel = (manifest && manifest.textures && manifest.textures[0]) || 'tex-asphalt.png';
@@ -465,7 +560,7 @@ export function loadAssetPack() {
     // Scenery kinds from manifest list
     const sceneryResults = await Promise.all(sceneryList.map(async (rel) => {
       const key = keyFromRel(rel);
-      const canvas = await tryProcessed(rel, { keyColor: chromaDefault });
+      const canvas = await tryProcessed(rel, { keyColor: chromaDefault, stripNeonEdge: true, neonEdgePx: 3 });
       return [key, canvas];
     }));
     for (const [key, canvas] of sceneryResults) {
@@ -481,54 +576,72 @@ export function loadAssetPack() {
 
     const warehouse = pack.scenery.warehouse;
     const grandstand = pack.scenery.grandstand;
+    const grandstandLarge = pack.scenery['grandstand-large'] || pack.scenery.grandstandLarge;
     const tower = pack.scenery.tower;
     const crowd = pack.scenery.crowd;
+    const crowdDense = pack.scenery['crowd-dense'] || pack.scenery.crowdDense;
     const tyrewall = pack.scenery.tyrewall;
     const props = pack.scenery.props;
     const palms = pack.scenery.palms;
     const billboard = pack.scenery.billboard;
 
     if (warehouse) {
-      pack.scenery.warehouseSm = fitCanvas(warehouse, 96, 110);
-      pack.scenery.warehouseMd = fitCanvas(warehouse, 120, 90);
+      pack.scenery.warehouseSm = fitScenery(warehouse, 96, 110);
+      pack.scenery.warehouseMd = fitScenery(warehouse, 120, 90);
     }
-    if (grandstand) {
-      pack.scenery.stand = fitCanvas(grandstand, 160, 80);
-      pack.scenery.standBlock = fitCanvas(grandstand, 240, 120);
+    if (grandstand || grandstandLarge) {
+      // v2.3: prefer large grandstand for block mass; keep standard for flanking stands
+      const standSrc = grandstand || grandstandLarge;
+      const blockSrc = grandstandLarge || grandstand;
+      pack.scenery.stand = fitScenery(standSrc, 160, 80);
+      pack.scenery.standBlock = fitScenery(blockSrc, 280, 140);
+      if (grandstandLarge) {
+        pack.scenery.standLarge = fitScenery(grandstandLarge, 300, 150);
+        pack.scenery.grandstandLarge = grandstandLarge;
+      }
     }
     if (tower) {
       // Pack tower art is often landscape after bbox; allow wider fits so mid/far reads
-      pack.scenery.towerSm = fitCanvas(tower, 100, 120);
-      pack.scenery.towerMd = fitCanvas(tower, 130, 150);
+      pack.scenery.towerSm = fitScenery(tower, 100, 120);
+      pack.scenery.towerMd = fitScenery(tower, 130, 150);
     }
-    if (crowd) {
-      pack.scenery.crowdSm = fitCanvas(crowd, 72, 36);
-      pack.scenery.crowdMd = fitCanvas(crowd, 110, 48);
-      pack.scenery.crowdLg = fitCanvas(crowd, 160, 64);
+    if (crowd || crowdDense) {
+      // Thin strip = filler; dense = S/F + major apex masses
+      if (crowd) {
+        pack.scenery.crowdSm = fitScenery(crowd, 72, 36);
+        pack.scenery.crowdMd = fitScenery(crowd, 110, 48);
+        pack.scenery.crowdLg = fitScenery(crowd, 160, 64);
+      }
+      if (crowdDense) {
+        pack.scenery.crowdDense = crowdDense;
+        pack.scenery.crowdDenseSm = fitScenery(crowdDense, 100, 48);
+        pack.scenery.crowdDenseMd = fitScenery(crowdDense, 160, 72);
+        pack.scenery.crowdDenseLg = fitScenery(crowdDense, 220, 96);
+      }
     }
     if (tyrewall) {
-      pack.scenery.tyrewallSm = fitCanvas(tyrewall, 56, 36);
-      pack.scenery.tyrewallMd = fitCanvas(tyrewall, 80, 48);
+      pack.scenery.tyrewallSm = fitScenery(tyrewall, 56, 36);
+      pack.scenery.tyrewallMd = fitScenery(tyrewall, 80, 48);
     }
     if (props) {
-      pack.scenery.propsSm = fitCanvas(props, 40, 36);
-      pack.scenery.propsMd = fitCanvas(props, 56, 48);
+      pack.scenery.propsSm = fitScenery(props, 40, 36);
+      pack.scenery.propsMd = fitScenery(props, 56, 48);
       // Also expose as cone/barrel stand-ins for placement code
-      pack.scenery.propCone = fitCanvas(props, 28, 32);
-      pack.scenery.propBarrel = fitCanvas(props, 32, 36);
+      pack.scenery.propCone = fitScenery(props, 28, 32);
+      pack.scenery.propBarrel = fitScenery(props, 32, 36);
     }
     if (palms) {
       // Tall fits — pack sheet is often a palm cluster; contain keeps aspect
-      pack.scenery.palmSm = fitCanvas(palms, 40, 72);
-      pack.scenery.palmMd = fitCanvas(palms, 56, 96);
+      pack.scenery.palmSm = fitScenery(palms, 40, 72);
+      pack.scenery.palmMd = fitScenery(palms, 56, 96);
     }
     if (billboard) {
-      pack.scenery.billboardSm = fitCanvas(billboard, 96, 72);
-      pack.scenery.billboardMd = fitCanvas(billboard, 128, 96);
+      pack.scenery.billboardSm = fitScenery(billboard, 96, 72);
+      pack.scenery.billboardMd = fitScenery(billboard, 128, 96);
     }
 
     const anyCar = Object.values(pack.cars).some(Boolean);
-    const anyScenery = !!(warehouse || grandstand || tower || crowd || tyrewall || props || palms || billboard);
+    const anyScenery = !!(warehouse || grandstand || grandstandLarge || tower || crowd || crowdDense || tyrewall || props || palms || billboard);
     pack.ready = !!(anyCar || anyScenery || skyline);
     _pack = pack;
     try {
@@ -544,8 +657,10 @@ export function loadAssetPack() {
           scenery: {
             warehouse: !!warehouse,
             grandstand: !!grandstand,
+            grandstandLarge: !!grandstandLarge,
             tower: !!tower,
             crowd: !!crowd,
+            crowdDense: !!crowdDense,
             tyrewall: !!tyrewall,
             props: !!props,
             palms: !!palms,

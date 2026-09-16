@@ -1,7 +1,7 @@
 {
-  "pack": "realistic-v2.2",
+  "pack": "realistic-v2.3",
   "chromaDefault": "#FF00FF",
-  "notes": "Cars/scenery may already have baked RGBA alpha from chromakey. Magenta car used green screen (#00FF00) before bake. Prefer alpha if present; else chroma. Map hex colours to files. v2.1 adds crowd, tyrewall, props with baked RGBA.",
+  "notes": "v2.3: denser crowd + large grandstand for S/F masses; prefer over thin crowd strips at mid zoom.",
   "carsByColor": {
     "#00e8ff": "cars/car-cyan.png",
     "#ff2b6a": "cars/car-pink.png",
@@ -20,7 +20,9 @@
     "scenery/scenery-tyrewall.png",
     "scenery/scenery-props.png",
     "scenery/scenery-palms.png",
-    "scenery/scenery-billboard.png"
+    "scenery/scenery-billboard.png",
+    "scenery/scenery-crowd-dense.png",
+    "scenery/scenery-grandstand-large.png"
   ],
   "bg": [
     "bg/bg-neon-skyline.png"
