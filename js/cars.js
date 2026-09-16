@@ -20,7 +20,7 @@ export function createCar(opts) {
     angle: opts.angle ?? 0,
     vx: 0,
     vy: 0,
-    radius: 14,
+    radius: 16,
     hp: opts.hp ?? 10000,
     maxHp: opts.maxHp ?? 10000,
     engine: opts.engine ?? 0,

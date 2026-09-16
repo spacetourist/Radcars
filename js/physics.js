@@ -74,59 +74,108 @@ export function stepCar(car, input, dt, track, others) {
     car.vy *= top / sp2;
   }
 
-  // Integrate
-  car.x += car.vx * POS_SCALE * dt;
-  car.y += car.vy * POS_SCALE * dt;
-
-  // Wall collisions
-  resolveWalls(car, track);
+  // Integrate in substeps so high speed cannot tunnel through thin walls
+  // (max move ~speed*POS_SCALE*dt can exceed 2*radius in one frame).
+  const moveBudget = Math.hypot(car.vx, car.vy) * POS_SCALE * dt;
+  const steps = Math.max(1, Math.min(12, Math.ceil(moveBudget / Math.max(4, car.radius * 0.45))));
+  const sdt = dt / steps;
+  for (let s = 0; s < steps; s++) {
+    car.x += car.vx * POS_SCALE * sdt;
+    car.y += car.vy * POS_SCALE * sdt;
+    resolveWalls(car, track);
+  }
 
   // Car-car
   if (others) resolveCars(car, others);
 
-  // Off-track soft push (safety)
-  if (!isOnTrack(track, car.x, car.y)) {
-    // find nearest line point and pull
-    let best = null, bestD = Infinity;
-    for (const p of track.line) {
-      const d = dist(car.x, car.y, p.x, p.y);
-      if (d < bestD) { bestD = d; best = p; }
-    }
-    if (best) {
-      const dx = best.x - car.x, dy = best.y - car.y;
-      const len = Math.hypot(dx, dy) || 1;
-      car.x += (dx / len) * 2;
-      car.y += (dy / len) * 2;
-      car.vx *= 0.85;
-      car.vy *= 0.85;
-      applyDamage(car, 4 * (dt / 16), 'off');
-    }
-  }
+  // Containment: if still off asphalt, pull back onto the racing ribbon
+  recoverOntoTrack(car, track, dt);
 }
 
 function resolveWalls(car, track) {
   if (!car._walls) car._walls = trackWallSegments(track);
   const walls = car._walls;
-  const r = car.radius;
-  for (const w of walls) {
-    const c = closestPointOnSeg(car.x, car.y, w.ax, w.ay, w.bx, w.by);
-    const dx = car.x - c.x, dy = car.y - c.y;
-    const d = Math.hypot(dx, dy);
-    if (d < r && d > 1e-6) {
-      const nx = dx / d, ny = dy / d;
-      const pen = r - d;
-      car.x += nx * pen;
-      car.y += ny * pen;
-      const vn = car.vx * nx + car.vy * ny;
-      if (vn < 0) {
-        car.vx -= (1 + WALL_BOUNCE) * vn * nx;
-        car.vy -= (1 + WALL_BOUNCE) * vn * ny;
-        const impact = Math.abs(vn);
-        applyDamage(car, impact * 28 * (1 - car.armour * 0.08), 'wall');
-        car._wallHit = impact;
+  // Slightly fat radius so visual chassis doesn't clip the painted barrier
+  const r = car.radius * 1.15;
+  // Multiple passes: after a corner push another wall may still penetrate
+  for (let pass = 0; pass < 3; pass++) {
+    let hit = false;
+    for (const w of walls) {
+      const c = closestPointOnSeg(car.x, car.y, w.ax, w.ay, w.bx, w.by);
+      let dx = car.x - c.x, dy = car.y - c.y;
+      let d = Math.hypot(dx, dy);
+      if (d < 1e-6) {
+        // Sitting on the segment — push along segment normal toward track
+        const sx = w.bx - w.ax, sy = w.by - w.ay;
+        const sl = Math.hypot(sx, sy) || 1;
+        dx = -sy / sl;
+        dy = sx / sl;
+        // Flip if this normal points off-track
+        if (!isOnTrack(track, c.x + dx * 4, c.y + dy * 4)) {
+          dx = -dx;
+          dy = -dy;
+        }
+        d = 1e-6;
+      }
+      if (d < r) {
+        hit = true;
+        let nx = dx / d, ny = dy / d;
+        // Prefer the direction that lands on asphalt
+        if (!isOnTrack(track, car.x + nx * 2, car.y + ny * 2) &&
+            isOnTrack(track, car.x - nx * 2, car.y - ny * 2)) {
+          nx = -nx;
+          ny = -ny;
+        }
+        const pen = r - d;
+        car.x += nx * pen;
+        car.y += ny * pen;
+        const vn = car.vx * nx + car.vy * ny;
+        if (vn < 0) {
+          car.vx -= (1 + WALL_BOUNCE) * vn * nx;
+          car.vy -= (1 + WALL_BOUNCE) * vn * ny;
+          if (pass === 0) {
+            const impact = Math.abs(vn);
+            applyDamage(car, impact * 28 * (1 - car.armour * 0.08), 'wall');
+            car._wallHit = impact;
+          }
+        }
       }
     }
+    if (!hit) break;
   }
+}
+
+/** Pull car back onto asphalt if walls were tunneled or corners trapped it. */
+function recoverOntoTrack(car, track, dt) {
+  if (isOnTrack(track, car.x, car.y)) return;
+
+  let best = null, bestD = Infinity;
+  for (const p of track.line) {
+    const d = dist(car.x, car.y, p.x, p.y);
+    if (d < bestD) { bestD = d; best = p; }
+  }
+  if (!best) return;
+
+  for (let i = 0; i < 10 && !isOnTrack(track, car.x, car.y); i++) {
+    const dx = best.x - car.x, dy = best.y - car.y;
+    const len = Math.hypot(dx, dy) || 1;
+    car.x += (dx / len) * 6;
+    car.y += (dy / len) * 6;
+    resolveWalls(car, track);
+  }
+
+  // Kill velocity away from the ribbon so we don't immediately re-exit
+  const dx = best.x - car.x, dy = best.y - car.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const nx = dx / len, ny = dy / len;
+  const vn = car.vx * nx + car.vy * ny;
+  if (vn < 0) {
+    car.vx -= vn * nx;
+    car.vy -= vn * ny;
+  }
+  car.vx *= 0.7;
+  car.vy *= 0.7;
+  applyDamage(car, 6 * (dt / 16), 'off');
 }
 
 function resolveCars(car, others) {
