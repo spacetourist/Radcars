@@ -95,35 +95,40 @@ function perimeterNormals(poly) {
 
 function themeFor(track) {
   // Scenery accents are warm sodium (amber/orange) — never track-wall cyan grids (v19)
+  // Track wall colour is a *sparse* identity tip only (lime / pink / yellow).
   const sodiumA = '#ff9a3c';
   const sodiumB = '#ffb84a';
   const sodiumC = '#ffd080';
   const id = track.id || '';
+  const wall = track.wall || '';
   if (id === 'gridlock') {
     return {
       skyTop: '#070a12', skyMid: '#0c1424', skyBot: '#141a22',
       ground: '#121410', groundHi: '#1c1c16',
-      neonA: sodiumA, neonB: sodiumB, neonC: '#ffe600',
+      neonA: sodiumA, neonB: sodiumB, neonC: wall || '#b8ff00', // lime tip sparse
       brick: '#2a3038', brickHi: '#3a4250', metal: '#1a1e26',
-      window: '#1a2838', glowWin: sodiumB
+      window: '#1a2838', glowWin: sodiumB,
+      identity: wall || '#b8ff00'
     };
   }
   if (id === 'razor_hairpin') {
     return {
-      skyTop: '#0e0816', skyMid: '#1a0e22', skyBot: '#1e1420',
-      ground: '#141210', groundHi: '#1e1a16',
-      neonA: sodiumA, neonB: '#ff8a50', neonC: sodiumC,
+      skyTop: '#0a0610', skyMid: '#140c1a', skyBot: '#1a1018', // darker night-club canyon
+      ground: '#100e12', groundHi: '#1a1618',
+      neonA: sodiumA, neonB: '#ff8a50', neonC: wall || '#ff2bd6', // pink tip sparse
       brick: '#2c2030', brickHi: '#3c3040', metal: '#1c1420',
-      window: '#281828', glowWin: sodiumB
+      window: '#201018', glowWin: sodiumB,
+      identity: wall || '#ff2bd6'
     };
   }
   if (id === 'cargo_dock') {
     return {
       skyTop: '#08140c', skyMid: '#0e1a14', skyBot: '#142018',
       ground: '#101410', groundHi: '#1a1e16',
-      neonA: '#ff8a00', neonB: sodiumB, neonC: sodiumC,
+      neonA: '#ff8a00', neonB: sodiumB, neonC: wall || '#ffe600', // yellow sodium tip
       brick: '#243028', brickHi: '#344038', metal: '#141c16',
-      window: '#182820', glowWin: '#ff8a00'
+      window: '#182820', glowWin: '#ff8a00',
+      identity: wall || '#ffe600'
     };
   }
   return {
@@ -131,7 +136,8 @@ function themeFor(track) {
     ground: '#161410', groundHi: '#242018',
     neonA: sodiumA, neonB: sodiumB, neonC: sodiumC,
     brick: '#262c36', brickHi: '#363c48', metal: '#1a1e28',
-    window: '#1a2434', glowWin: '#ffb060'
+    window: '#1a2434', glowWin: '#ffb060',
+    identity: wall || '#ff2bd6'
   };
 }
 
@@ -841,10 +847,110 @@ function varyScale(rnd, lo, hi) {
 }
 
 /**
+ * Shared Neon Loop density rules (frozen v23 / rolled v24) + per-track stamp mix.
+ * Lighting / bead cadence / caps are shared; stamp bias + identity colour are per-track.
+ */
+export const SCENERY_DENSITY = {
+  // Both-sides beads (world units along densified perimeter)
+  beadOut: 480,
+  beadIn: 560,
+  towerCap: 5,
+  billboardCap: 5,
+  // Infield yard props (scaled later by profile)
+  infieldYardBase: 22
+};
+
+/**
+ * @param {object} track
+ * @returns {{
+ *   id: string,
+ *   beadOut: number, beadIn: number,
+ *   towerCap: number, billboardCap: number,
+ *   infieldYardN: number,
+ *   palmChance: number,
+ *   warehouseScale: [number, number],
+ *   standBias: number,       // 0..1 extra stand preference (mid / pinch)
+ *   warehouseBias: number,   // 0..1 extra warehouse preference
+ *   billboardBias: number,   // 0..1 extra billboard preference
+ *   pinchStandExtra: number, // extra stand stacks at kink/chicane (razor)
+ *   label: string
+ * }}
+ */
+export function getSceneryDensityProfile(track) {
+  const id = (track && track.id) || 'neon_loop';
+  const base = {
+    id,
+    beadOut: SCENERY_DENSITY.beadOut,
+    beadIn: SCENERY_DENSITY.beadIn,
+    towerCap: SCENERY_DENSITY.towerCap,
+    billboardCap: SCENERY_DENSITY.billboardCap,
+    infieldYardN: SCENERY_DENSITY.infieldYardBase,
+    palmChance: 0.12,
+    warehouseScale: [0.8, 1.35],
+    standBias: 0.35,
+    warehouseBias: 0.55,
+    billboardBias: 0.12,
+    pinchStandExtra: 0,
+    label: 'reference'
+  };
+  if (id === 'gridlock') {
+    // Urban street: tighter warehouses, more warm billboards, lime tip via wall
+    return {
+      ...base,
+      billboardCap: 9,          // modest raise vs Neon Loop
+      billboardBias: 0.28,
+      warehouseScale: [0.72, 1.12], // tighter city blocks
+      warehouseBias: 0.5,
+      standBias: 0.32,
+      infieldYardN: 18,
+      palmChance: 0.08,
+      label: 'urban_street'
+    };
+  }
+  if (id === 'razor_hairpin') {
+    // Night club / canyon: denser stands at pinch, darker infield, fewer palms
+    return {
+      ...base,
+      standBias: 0.55,
+      warehouseBias: 0.4,
+      billboardBias: 0.1,
+      pinchStandExtra: 3,
+      infieldYardN: 14,
+      palmChance: 0.04,
+      warehouseScale: [0.78, 1.25],
+      label: 'night_canyon'
+    };
+  }
+  if (id === 'cargo_dock') {
+    // Industrial quay: crane/warehouse language, fewer grandstands
+    return {
+      ...base,
+      warehouseBias: 0.78,
+      standBias: 0.18,
+      billboardBias: 0.1,
+      warehouseScale: [0.85, 1.45],
+      infieldYardN: 20,
+      palmChance: 0.05,
+      label: 'industrial_quay'
+    };
+  }
+  // neon_loop reference
+  return {
+    ...base,
+    infieldYardN: 28,
+    palmChance: 0.12,
+    standBias: 0.4,
+    warehouseBias: 0.55,
+    label: 'neon_loop_ref'
+  };
+}
+
+/**
  * Build layered scenery placements for a track (cached by caller).
  */
 export function buildTrackScenery(track) {
   const theme = themeFor(track);
+  const profile = getSceneryDensityProfile(track);
   const sprites = createScenerySprites(theme);
   const rnd = mulberry32(hashStr(track.id || 'track') ^ 0x5c3e17);
   const far = [];
@@ -870,12 +976,12 @@ export function buildTrackScenery(track) {
   const stepFar = 84 * ss;
   const stepMid = 62 * ss;
   const stepNear = 48 * ss; // was 40 — fewer palms/props on long tracks
-  // Neon Loop density (frozen reference v23):
-  //   outfield ~480wu beads → warehouse / standLarge (richer, still gapped)
-  //   infield  ~560wu beads → warehouseSm / stand only (lighter; gaps required — never continuous wall)
-  //   keep race-zoom ground plate + stamp caps + long geometry + wall physics
-  const BEAD_SPACING = 480;
-  const BEAD_SPACING_IN = 560;
+  // Shared density (Neon Loop frozen v23 → all tracks v24):
+  //   outfield beadOut wu → warehouse / standLarge (richer, still gapped)
+  //   infield  beadIn  wu → warehouseSm / stand only (lighter; gaps required)
+  // Per-track: stamp mix / caps / palm chance via profile (not mood clone)
+  const BEAD_SPACING = profile.beadOut;
+  const BEAD_SPACING_IN = profile.beadIn;
 
   // Mid-straight landmark beads — arc-length along densified perimeter (edges are short)
   const beadAnchors = [];
@@ -981,9 +1087,9 @@ export function buildTrackScenery(track) {
 
   // Stamp variety tracker — break necklace of identical warehouse/tower/palm/billboard
   const stampLog = [];
-  // Hard caps (v19 realistic polish) — horizon carries distance; no cyan tower clusters
-  const TOWER_CAP = 5;
-  const BILLBOARD_CAP = 5;
+  // Hard caps (v19) — profile may raise billboards (Gridlock); towers stay sparse
+  const TOWER_CAP = profile.towerCap;
+  const BILLBOARD_CAP = profile.billboardCap;
   let towerCount = 0;
   let billboardCount = 0;
   const hasStandBlock = !!(sprites.buildings.standBlock && sprites.buildings.standBlock.length);
@@ -1035,12 +1141,21 @@ export function buildTrackScenery(track) {
       if (boost < 0.28 && rnd() > 0.7) continue;
       const roll = rnd();
       let img, scale, kind = 'other';
-      // Prefer warehouse; sparse chimney/water; tower/billboard rare + capped
-      if (roll < 0.55) { img = pick(sprites.buildings.warehouse, rnd); scale = varyScale(rnd, 0.8, 1.35); kind = 'warehouse'; }
-      else if (roll < 0.68) { img = pick(sprites.buildings.chimney, rnd); scale = varyScale(rnd, 0.75, 1.3); }
-      else if (roll < 0.78) { img = pick(sprites.buildings.water, rnd); scale = varyScale(rnd, 0.7, 1.25); }
-      else if (roll < 0.88) { img = pick(sprites.buildings.tower, rnd); scale = varyScale(rnd, 0.7, 1.2); kind = 'tower'; }
-      else { img = pick(sprites.buildings.billboard, rnd); scale = varyScale(rnd, 0.7, 1.15); kind = 'billboard'; }
+      const [wLo, wHi] = profile.warehouseScale;
+      const bbGate = 1 - profile.billboardBias; // lower → more billboards
+      // Prefer warehouse (+ profile bias); tower/billboard rare + capped
+      if (roll < 0.42 + profile.warehouseBias * 0.25) {
+        img = pick(sprites.buildings.warehouse, rnd); scale = varyScale(rnd, wLo, wHi); kind = 'warehouse';
+      } else if (roll < 0.62) {
+        img = pick(sprites.buildings.chimney, rnd); scale = varyScale(rnd, 0.75, 1.3);
+      } else if (roll < 0.72) {
+        img = pick(sprites.buildings.water, rnd); scale = varyScale(rnd, 0.7, 1.25);
+      } else if (roll < bbGate || profile.billboardBias >= 0.22) {
+        // Gridlock: save billboard cap for trackside mid pass
+        img = pick(sprites.buildings.tower, rnd); scale = varyScale(rnd, 0.7, 1.2); kind = 'tower';
+      } else {
+        img = pick(sprites.buildings.billboard, rnd); scale = varyScale(rnd, 0.7, 1.15); kind = 'billboard';
+      }
       if (!img) continue;
       const sc = Math.min(1.4, scale * (1 + boost * 0.12));
       tryAddStamp(far, img, x, y, sc, 'far', y + (img.height * sc) * 0.5, kind);
@@ -1068,8 +1183,8 @@ export function buildTrackScenery(track) {
       const nearStart = dStart < 280 || (nearest && (nearest.kind === 'start' || nearest.id === 'start_finish'));
       const roll = rnd();
       let img, scale, kind = 'other';
-      if (nearStart && roll < 0.45) {
-        // Prefer architectural standLarge / standBlock silhouette over thin stands
+      if (nearStart && roll < (0.2 + profile.standBias * 0.7)) {
+        // Prefer architectural standLarge / standBlock — Cargo (low standBias) skips more often
         if (hasStandLarge && rnd() < 0.55) {
           img = pick(sprites.buildings.standLarge, rnd);
           scale = varyScale(rnd, 0.85, 1.15);
@@ -1111,28 +1226,75 @@ export function buildTrackScenery(track) {
       } else if (roll < 0.06) {
         img = pick(sprites.buildings.shop, rnd);
         scale = varyScale(rnd, 0.75, 1.2);
-      } else if (roll < 0.58) {
-        img = pick(sprites.buildings.warehouse, rnd);
-        scale = varyScale(rnd, 0.75, 1.35);
-        kind = 'warehouse';
-      } else if (roll < 0.74 && hasStandBlock) {
-        img = pick(sprites.buildings.standBlock, rnd);
-        scale = varyScale(rnd, 0.8, 1.15);
-        kind = 'stand';
-      } else if (roll < 0.82) {
-        img = pick(sprites.buildings.billboard, rnd);
-        scale = varyScale(rnd, 0.7, 1.15);
-        kind = 'billboard';
-      } else if (roll < 0.92) {
-        img = pick(sprites.buildings.tower, rnd);
-        scale = varyScale(rnd, 0.7, 1.2);
-        kind = 'tower';
       } else {
-        img = pick(sprites.buildings.chimney, rnd);
-        scale = varyScale(rnd, 0.7, 1.25);
+        // Profile stamp mix — warehouse / stand / billboard bias (shared density, different identity)
+        const [wLo, wHi] = profile.warehouseScale;
+        const r2 = rnd();
+        const whCut = profile.warehouseBias;
+        const standCut = whCut + profile.standBias * 0.55;
+        const bbCut = standCut + profile.billboardBias;
+        if (r2 < whCut) {
+          img = pick(sprites.buildings.warehouse, rnd);
+          scale = varyScale(rnd, wLo, wHi);
+          kind = 'warehouse';
+        } else if (r2 < standCut && (hasStandBlock || hasStandLarge)) {
+          if (hasStandLarge && rnd() < profile.standBias) {
+            img = pick(sprites.buildings.standLarge, rnd);
+            scale = varyScale(rnd, 0.75, 1.12);
+          } else if (hasStandBlock) {
+            img = pick(sprites.buildings.standBlock, rnd);
+            scale = varyScale(rnd, 0.8, 1.15);
+          } else {
+            img = pick(sprites.buildings.stand, rnd);
+            scale = varyScale(rnd, 0.85, 1.2);
+          }
+          kind = 'stand';
+        } else if (r2 < bbCut && profile.billboardBias < 0.22) {
+          img = pick(sprites.buildings.billboard, rnd);
+          scale = varyScale(rnd, 0.7, 1.15);
+          kind = 'billboard';
+        } else if (rnd() < 0.45) {
+          img = pick(sprites.buildings.tower, rnd);
+          scale = varyScale(rnd, 0.7, 1.2);
+          kind = 'tower';
+        } else {
+          img = pick(sprites.buildings.chimney, rnd);
+          scale = varyScale(rnd, 0.7, 1.25);
+        }
       }
       if (!img) continue;
       tryAddStamp(mid, img, x, y, scale, 'mid', y + img.height * scale * 0.45, kind);
+    }
+  }
+
+  // Gridlock urban: warm billboards along outer arc (densified edges are short — use arc length)
+  if (profile.billboardBias >= 0.22) {
+    let acc = 0;
+    const spacing = 420;
+    let nextAt = spacing * 0.35;
+    for (const e of edges) {
+      const end = acc + e.len;
+      while (nextAt <= end + 1e-6) {
+        const t = e.len > 0 ? (nextAt - acc) / e.len : 0.5;
+        const bx = e.ax + (e.bx - e.ax) * t;
+        const by = e.ay + (e.by - e.ay) * t;
+        let placed = false;
+        for (const dist of [55, 72, 40, 90]) {
+          const x = bx + e.nx * dist + (rnd() - 0.5) * 10;
+          const y = by + e.ny * dist + (rnd() - 0.5) * 10;
+          if (pointInPoly(x, y, track.outer)) continue;
+          if (!tryPlace(track, x, y, 16)) continue;
+          const img = pick(sprites.buildings.billboard, rnd);
+          if (!img) break;
+          if (tryAddStamp(mid, img, x, y, varyScale(rnd, 0.9, 1.25), 'mid',
+            y + img.height * 0.45, 'billboard')) {
+            placed = true;
+            break;
+          }
+        }
+        nextAt += spacing;
+      }
+      acc = end;
     }
   }
 
@@ -1172,18 +1334,28 @@ export function buildTrackScenery(track) {
           scale = varyScale(rnd, 0.78, 1.12);
           kind = 'warehouse';
         }
-      } else if (roll < 0.38 && hasStandLarge) {
-        img = pick(sprites.buildings.standLarge, rnd);
-        scale = varyScale(rnd, 0.72, 1.08);
-        kind = 'stand';
-      } else if (roll < 0.58 && hasStandBlock) {
-        img = pick(sprites.buildings.standBlock, rnd);
-        scale = varyScale(rnd, 0.85, 1.18);
-        kind = 'stand';
       } else {
-        img = pick(sprites.buildings.warehouse, rnd);
-        scale = varyScale(rnd, 0.9, 1.4);
-        kind = 'warehouse';
+        // Outfield bead: richer warehouse/standLarge; profile shifts stand vs warehouse
+        const [wLo, wHi] = profile.warehouseScale;
+        const standRoll = profile.standBias;
+        if (roll < standRoll * 0.9 && hasStandLarge) {
+          img = pick(sprites.buildings.standLarge, rnd);
+          scale = varyScale(rnd, 0.72, 1.08);
+          kind = 'stand';
+        } else if (roll < standRoll * 0.9 + 0.18 && hasStandBlock) {
+          img = pick(sprites.buildings.standBlock, rnd);
+          scale = varyScale(rnd, 0.85, 1.18);
+          kind = 'stand';
+        } else if (roll < 0.12 + profile.billboardBias && profile.billboardBias > 0.2) {
+          // Gridlock: occasional warm billboard on long street beads
+          img = pick(sprites.buildings.billboard, rnd);
+          scale = varyScale(rnd, 0.75, 1.1);
+          kind = 'billboard';
+        } else {
+          img = pick(sprites.buildings.warehouse, rnd);
+          scale = varyScale(rnd, Math.max(wLo, 0.85), Math.min(wHi + 0.1, 1.5));
+          kind = 'warehouse';
+        }
       }
       if (!img) continue;
       // Infield: wider stamp radius so beads stay gapped (not a continuous wall)
@@ -1254,8 +1426,9 @@ export function buildTrackScenery(track) {
       else if (roll < 0.52) { img = pick(sprites.props.cone, rnd); scale = varyScale(rnd, 0.75, 1.3); }
       else if (roll < 0.70) { img = pick(sprites.props.fence, rnd); scale = varyScale(rnd, 0.8, 1.25); }
       else if (roll < 0.78) { img = pick(sprites.props.light, rnd); scale = varyScale(rnd, 0.7, 1.05); }
-      else if (roll < 0.88) { img = pick(sprites.props.lamp, rnd); scale = varyScale(rnd, 0.7, 1.05); }
-      else { img = pick(sprites.props.palm, rnd); scale = varyScale(rnd, 0.7, 1.35); } // fewer palms
+      else if (roll < 0.78 + (1 - profile.palmChance) * 0.14) { img = pick(sprites.props.lamp, rnd); scale = varyScale(rnd, 0.7, 1.05); }
+      else if (rnd() < profile.palmChance * 4) { img = pick(sprites.props.palm, rnd); scale = varyScale(rnd, 0.7, 1.35); }
+      else { img = pick(sprites.props.fence, rnd); scale = varyScale(rnd, 0.8, 1.2); }
       if (!stampOk(stampLog, img, x, y, 70, 1)) continue;
       addItem(near, img, x, y, scale, 'near');
       stampLog.push({ img, x, y });
@@ -1275,11 +1448,16 @@ export function buildTrackScenery(track) {
     const tx = -ny, ty = nx;
 
     if (isStart && !placedStartBlock) {
-      // S/F grandstand: outer margin near start is razor-thin on Neon Loop,
-      // so prefer INFIELD (inside inner poly) facing the grid, then outer fallback.
-      const imgLarge = (sprites.buildings.standLarge && sprites.buildings.standLarge.length)
-        ? pick(sprites.buildings.standLarge, rnd)
-        : pick(sprites.buildings.standBlock, rnd);
+      // S/F mass: Neon Loop / Razor prefer standLarge; Cargo (low standBias) → warehouse quay mass
+      let imgLarge;
+      if (profile.standBias < 0.25) {
+        imgLarge = pick(sprites.buildings.warehouse, rnd)
+          || pick(sprites.buildings.standBlock, rnd);
+      } else {
+        imgLarge = (sprites.buildings.standLarge && sprites.buildings.standLarge.length)
+          ? pick(sprites.buildings.standLarge, rnd)
+          : pick(sprites.buildings.standBlock, rnd);
+      }
       const trySpots = [];
       // Infield (toward center) — classic spectator mass inside the loop
       for (const dist of [200, 180, 220, 160, 240, 140]) {
@@ -1338,12 +1516,17 @@ export function buildTrackScenery(track) {
             const okInner = pointInPoly(fxs, fys, track.inner);
             const okOuter = !pointInPoly(fxs, fys, track.outer) && tryPlace(track, fxs, fys, 12);
             if (!okInner && !okOuter) continue;
-            // Prefer standLarge / standBlock architectural silhouette
-            const flankImg = (hasStandLarge && rnd() < 0.5)
-              ? pick(sprites.buildings.standLarge, rnd)
-              : (hasStandBlock && rnd() < 0.6)
-                ? pick(sprites.buildings.standBlock, rnd)
-                : pick(sprites.buildings.stand, rnd);
+            // Prefer standLarge / standBlock — Cargo quay flanks with warehouses
+            let flankImg;
+            if (profile.standBias < 0.25) {
+              flankImg = pick(sprites.buildings.warehouse, rnd) || pick(sprites.buildings.stand, rnd);
+            } else {
+              flankImg = (hasStandLarge && rnd() < 0.5)
+                ? pick(sprites.buildings.standLarge, rnd)
+                : (hasStandBlock && rnd() < 0.6)
+                  ? pick(sprites.buildings.standBlock, rnd)
+                  : pick(sprites.buildings.stand, rnd);
+            }
             const flankInner = pointInPoly(fxs, fys, track.inner);
             addItem(flankInner ? near : mid, flankImg, fxs, fys, varyScale(rnd, 1.0, 1.25), flankInner ? 'near' : 'mid');
             // No crowd confetti beside standLarge/standBlock — roof+tiers carry read
@@ -1480,10 +1663,49 @@ export function buildTrackScenery(track) {
     }
   }
 
+  // Razor: denser stand architecture at pinch / kink landmarks (night-canyon identity)
+  if (profile.pinchStandExtra > 0) {
+    const pinchLms = landmarks.filter((lm) =>
+      lm.kind === 'kink' || lm.kind === 'chicane' || (lm.id && /waist|pinch|apex/i.test(lm.id)));
+    for (const lm of pinchLms) {
+      const pcx = track.width * 0.5, pcy = track.height * 0.5;
+      const dx = lm.x - pcx, dy = lm.y - pcy;
+      const len = Math.hypot(dx, dy) || 1;
+      const nx = dx / len, ny = dy / len;
+      const tx = -ny, ty = nx;
+      for (let i = 0; i < profile.pinchStandExtra; i++) {
+        const lat = (i - (profile.pinchStandExtra - 1) * 0.5) * 42 + (rnd() - 0.5) * 10;
+        // Prefer outer runoff at pinch; fallback slightly infield
+        const candidates = [
+          { x: lm.x + nx * (70 + rnd() * 30) + tx * lat, y: lm.y + ny * (70 + rnd() * 30) + ty * lat },
+          { x: lm.x - nx * (90 + rnd() * 40) + tx * lat * 0.6, y: lm.y - ny * (90 + rnd() * 40) + ty * lat * 0.6 }
+        ];
+        for (const spot of candidates) {
+          const { x, y } = spot;
+          if (isOnAsphalt(track, x, y)) continue;
+          const inInner = pointInPoly(x, y, track.inner);
+          const inOuter = pointInPoly(x, y, track.outer);
+          if (!inInner && inOuter) continue;
+          if (!inInner && !inOuter && !tryPlace(track, x, y, 14)) continue;
+          let img;
+          if (hasStandLarge && rnd() < 0.55) img = pick(sprites.buildings.standLarge, rnd);
+          else if (hasStandBlock && rnd() < 0.7) img = pick(sprites.buildings.standBlock, rnd);
+          else img = pick(sprites.buildings.stand, rnd);
+          if (!img) continue;
+          if (!stampOk(stampLog, img, x, y, 100, 1)) continue;
+          const layerList = inInner ? near : mid;
+          tryAddStamp(layerList, img, x, y, varyScale(rnd, 0.9, 1.2), inInner ? 'near' : 'mid',
+            y + img.height * 0.45, 'stand');
+          break;
+        }
+      }
+    }
+  }
+
   // Infield yard props (inside inner ring) — low industrial clutter so oval sits in a yard
   {
     const cx = track.width * 0.5, cy = track.height * 0.5;
-    const infieldN = track.id === 'neon_loop' ? 28 : 12;
+    const infieldN = profile.infieldYardN;
     for (let i = 0; i < infieldN; i++) {
       const ang = rnd() * Math.PI * 2;
       const rad = 40 + rnd() * 140;
@@ -1498,12 +1720,14 @@ export function buildTrackScenery(track) {
       if (nearWall) continue;
       const roll = rnd();
       let img, scale;
-      if (roll < 0.28) { img = pick(sprites.props.barrel, rnd); scale = varyScale(rnd, 0.7, 1.2); }
-      else if (roll < 0.5) { img = pick(sprites.props.cone, rnd); scale = varyScale(rnd, 0.7, 1.2); }
-      else if (roll < 0.68) { img = pick(sprites.props.fence, rnd); scale = varyScale(rnd, 0.7, 1.15); }
-      else if (roll < 0.78) { img = pick(sprites.props.lamp, rnd); scale = varyScale(rnd, 0.7, 1.1); }
-      else if (roll < 0.92) { img = pick(sprites.buildings.warehouse, rnd); scale = varyScale(rnd, 0.7, 1.15); }
-      else { img = pick(sprites.props.light, rnd); scale = varyScale(rnd, 0.7, 1.1); }
+      const [wLo, wHi] = profile.warehouseScale;
+      if (roll < 0.22) { img = pick(sprites.props.barrel, rnd); scale = varyScale(rnd, 0.7, 1.2); }
+      else if (roll < 0.4) { img = pick(sprites.props.cone, rnd); scale = varyScale(rnd, 0.7, 1.2); }
+      else if (roll < 0.55) { img = pick(sprites.props.fence, rnd); scale = varyScale(rnd, 0.7, 1.15); }
+      else if (roll < 0.64) { img = pick(sprites.props.lamp, rnd); scale = varyScale(rnd, 0.7, 1.1); }
+      else if (roll < 0.64 + profile.warehouseBias * 0.4) {
+        img = pick(sprites.buildings.warehouse, rnd); scale = varyScale(rnd, wLo * 0.9, wHi * 0.95);
+      } else { img = pick(sprites.props.light, rnd); scale = varyScale(rnd, 0.7, 1.1); }
       if (!stampOk(stampLog, img, x, y, 55, 1)) continue;
       addItem(near, img, x, y, scale, 'near');
       stampLog.push({ img, x, y });
@@ -1518,11 +1742,14 @@ export function buildTrackScenery(track) {
     if (pointInPoly(x, y, track.outer)) continue;
     const roll = rnd();
     let img, kind = 'other';
-    if (roll < 0.62) { img = pick(sprites.buildings.warehouse, rnd); kind = 'warehouse'; }
-    else if (roll < 0.78 && hasStandBlock) { img = pick(sprites.buildings.standBlock, rnd); kind = 'stand'; }
-    else if (roll < 0.88) { img = pick(sprites.buildings.chimney, rnd); }
-    else if (roll < 0.94) { img = pick(sprites.buildings.tower, rnd); kind = 'tower'; }
-    else { img = pick(sprites.buildings.billboard, rnd); kind = 'billboard'; }
+    const whCut = 0.45 + profile.warehouseBias * 0.3;
+    const standCut = whCut + profile.standBias * 0.35;
+    const bbCut = standCut + profile.billboardBias;
+    if (roll < whCut) { img = pick(sprites.buildings.warehouse, rnd); kind = 'warehouse'; }
+    else if (roll < standCut && hasStandBlock) { img = pick(sprites.buildings.standBlock, rnd); kind = 'stand'; }
+    else if (roll < bbCut && profile.billboardBias < 0.22) { img = pick(sprites.buildings.billboard, rnd); kind = 'billboard'; }
+    else if (roll < 0.92) { img = pick(sprites.buildings.chimney, rnd); }
+    else { img = pick(sprites.buildings.tower, rnd); kind = 'tower'; }
     if (!img) continue;
     const scale = varyScale(rnd, 0.75, 1.3);
     tryAddStamp(far, img, x, y, scale, 'far', y, kind);
@@ -1539,9 +1766,11 @@ export function buildTrackScenery(track) {
   // Ground plate cached at modest resolution
   const ground = buildGroundPlate(track, theme);
 
+  const stampCounts = { tower: towerCount, billboard: billboardCount, far: far.length, mid: mid.length, near: near.length };
   return {
     trackId: track.id,
     theme,
+    profile,
     sprites,
     far,
     mid,
@@ -1551,7 +1780,9 @@ export function buildTrackScenery(track) {
     startX,
     startY,
     beadAnchors: beadAnchors.slice(),
-    beadSpacing: BEAD_SPACING
+    beadSpacing: BEAD_SPACING,
+    beadSpacingIn: BEAD_SPACING_IN,
+    stampCounts
   };
 }
 

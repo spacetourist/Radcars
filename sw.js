@@ -1,4 +1,4 @@
-const CACHE = 'radcars-v23-bothsides-beads';
+const CACHE = 'radcars-v24-all-tracks-density';
 const ASSETS = [
   './',
   './index.html',
