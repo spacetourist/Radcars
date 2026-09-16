@@ -83,11 +83,11 @@ await waitPack(page);
 // Neon Loop grid — pack v2
 await startTrack(page, 0);
 await sleep(1100);
-await shot(page, '14-pack-v2-grid');
+await shot(page, '16-polish-grid');
 
 // Mid-race (multiple AI colours on grid)
 await sleep(5200);
-await shot(page, '15-pack-v2-race');
+await shot(page, '17-polish-race');
 
 const info = await page.evaluate(async () => {
   const m = await import('/js/assetPack.js');
@@ -111,6 +111,10 @@ const info = await page.evaluate(async () => {
       crowd: !!(p.scenery.crowd && p.scenery.crowd.width),
       tyrewall: !!(p.scenery.tyrewall && p.scenery.tyrewall.width),
       props: !!(p.scenery.props && p.scenery.props.width),
+      palms: !!(p.scenery.palms && p.scenery.palms.width),
+      billboard: !!(p.scenery.billboard && p.scenery.billboard.width),
+      palmSm: p.scenery.palmSm ? [p.scenery.palmSm.width, p.scenery.palmSm.height] : null,
+      billboardSm: p.scenery.billboardSm ? [p.scenery.billboardSm.width, p.scenery.billboardSm.height] : null,
       towerSm: p.scenery.towerSm ? [p.scenery.towerSm.width, p.scenery.towerSm.height] : null
     } : null,
     skyline: !!(p && p.skyline),

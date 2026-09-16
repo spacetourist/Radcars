@@ -607,12 +607,19 @@ export function createScenerySprites(theme) {
   const characters = [];
   const props = { barrel: [], cone: [], light: [], fence: [], palm: [], lamp: [], tyrewall: [] };
 
+  const packEarly = getAssetPack();
+  const packSc = (packEarly && packEarly.ready && packEarly.scenery) ? packEarly.scenery : null;
+  const hasPackPalms = !!(packSc && (packSc.palmSm || packSc.palmMd || packSc.palms || packSc.palm));
+  const hasPackBillboards = !!(packSc && (packSc.billboardSm || packSc.billboardMd || packSc.billboard));
+
   for (let v = 0; v < 6; v++) {
     let c;
     c = makeCanvas(72, 96); paintWarehouse(c.ctx, 72, 96, theme, v); buildings.warehouse.push(c.canvas);
     c = makeCanvas(56, 128); paintTower(c.ctx, 56, 128, theme, v); buildings.tower.push(c.canvas);
     c = makeCanvas(80, 88); paintNeonShop(c.ctx, 80, 88, theme, v); buildings.shop.push(c.canvas);
-    c = makeCanvas(96, 72); paintBillboard(c.ctx, 96, 72, theme, v); buildings.billboard.push(c.canvas);
+    if (!hasPackBillboards) {
+      c = makeCanvas(96, 72); paintBillboard(c.ctx, 96, 72, theme, v); buildings.billboard.push(c.canvas);
+    }
     c = makeCanvas(40, 110); paintChimney(c.ctx, 40, 110, theme, v); buildings.chimney.push(c.canvas);
     c = makeCanvas(64, 100); paintWaterTower(c.ctx, 64, 100, theme); buildings.water.push(c.canvas);
     c = makeCanvas(140, 72); paintGrandstand(c.ctx, 140, 72, theme, v); buildings.stand.push(c.canvas);
@@ -629,17 +636,19 @@ export function createScenerySprites(theme) {
     c = makeCanvas(22, 26); paintCone(c.ctx, 22, 26); props.cone.push(c.canvas);
     c = makeCanvas(36, 56); paintLight(c.ctx, 36, 56, theme, v); props.light.push(c.canvas);
     c = makeCanvas(64, 28); paintFence(c.ctx, 64, 28, theme); props.fence.push(c.canvas);
-    c = makeCanvas(48, 64); paintPalm(c.ctx, 48, 64, theme, v); props.palm.push(c.canvas);
+    if (!hasPackPalms) {
+      c = makeCanvas(48, 64); paintPalm(c.ctx, 48, 64, theme, v); props.palm.push(c.canvas);
+    }
     c = makeCanvas(48, 64); paintStreetlamp(c.ctx, 48, 64, theme, v); props.lamp.push(c.canvas);
   }
 
-  // Prefer realistic pack art for warehouse / tower / grandstand / crowd / props
+  // Prefer realistic pack art for warehouse / tower / grandstand / crowd / props / palms / billboards
   applyPackBuildingArt(buildings, characters, props);
 
   return { buildings, characters, props, theme };
 }
 
-/** Swap warehouse / tower / stand / crowd / props when pack sprites are ready. */
+/** Swap warehouse / tower / stand / crowd / props / palms / billboards when pack sprites are ready. */
 function applyPackBuildingArt(buildings, characters, props) {
   const pack = getAssetPack();
   if (!pack || !pack.ready || !pack.scenery) return;
@@ -693,6 +702,23 @@ function applyPackBuildingArt(buildings, characters, props) {
       if (sc.tyrewall && !variants.length) variants.push(fitPackSprite(sc.tyrewall, 64, 40));
       props.tyrewall = variants.length ? variants : (props.tyrewall || []);
     }
+    // Palms sheet → retire procedural palms when pack art present
+    if (sc.palmSm || sc.palmMd || sc.palms || sc.palm) {
+      const variants = [];
+      if (sc.palmSm) variants.push(sc.palmSm);
+      if (sc.palmMd) variants.push(sc.palmMd);
+      if (sc.palms && variants.length < 2) variants.push(fitPackSprite(sc.palms, 56, 76));
+      if (sc.palm && variants.length < 2) variants.push(fitPackSprite(sc.palm, 56, 76));
+      if (variants.length) props.palm = variants;
+    }
+  }
+  // Billboard sheet → retire procedural neon-frame billboards
+  if (sc.billboardSm || sc.billboardMd || sc.billboard) {
+    const variants = [];
+    if (sc.billboardSm) variants.push(sc.billboardSm);
+    if (sc.billboardMd) variants.push(sc.billboardMd);
+    if (sc.billboard && variants.length < 2) variants.push(fitPackSprite(sc.billboard, 110, 80));
+    if (variants.length) buildings.billboard = variants;
   }
 }
 
@@ -713,16 +739,34 @@ function pick(arr, rnd) {
   return arr[(rnd() * arr.length) | 0];
 }
 
-function addItem(list, img, x, y, scale, layer, sortY) {
+function addItem(list, img, x, y, scale, layer, sortY, kind) {
   if (!img) return;
+  // Shorthand: addItem(..., layer, 'crowd') — string 7th arg is kind, not sortY
+  let sy = sortY;
+  let k = kind || null;
+  if (k == null && typeof sy === 'string' && (sy === 'crowd' || sy === 'prop' || sy === 'building')) {
+    k = sy;
+    sy = y;
+  }
+  // Cap landscape crowd strips so they don't stretch into flat colourful slabs
+  let s = scale;
+  if (k === 'crowd' || (!k && img.width / Math.max(1, img.height) > 2.2 && img.width > 70)) {
+    k = 'crowd';
+    const aspect = img.width / Math.max(1, img.height);
+    if (aspect > 2.2) {
+      const targetH = Math.min(img.height * s, 36);
+      s = targetH / img.height;
+    }
+  }
   list.push({
     img,
     x,
     y,
-    w: img.width * scale,
-    h: img.height * scale,
+    w: img.width * s,
+    h: img.height * s,
     layer,
-    sortY: sortY != null ? sortY : y
+    sortY: sy != null ? sy : y,
+    kind: k
   });
 }
 
@@ -878,7 +922,7 @@ export function buildTrackScenery(track) {
           addItem(near, img,
             x + (rnd() - 0.5) * 22,
             y + (rnd() - 0.5) * 10,
-            scale, 'near');
+            scale, 'near', 'crowd');
         }
       } else {
         const roll = rnd();
@@ -920,7 +964,7 @@ export function buildTrackScenery(track) {
           addItem(near, cimg,
             x + (rnd() - 0.5) * 100,
             y + 28 + rnd() * 24,
-            0.95 + rnd() * 0.3, 'near');
+            0.95 + rnd() * 0.3, 'near', 'crowd');
         }
       }
       // flanking smaller stands
@@ -949,7 +993,7 @@ export function buildTrackScenery(track) {
         addItem(near, cimg,
           x + (rnd() - 0.5) * 70,
           y + 18 + rnd() * 20,
-          0.9 + rnd() * 0.3, 'near');
+          0.9 + rnd() * 0.3, 'near', 'crowd');
       }
     }
   }
@@ -969,7 +1013,7 @@ export function buildTrackScenery(track) {
           addItem(near, cimg,
             x + (rnd() - 0.5) * 50,
             y + 12 + rnd() * 16,
-            0.95 + rnd() * 0.25, 'near');
+            0.95 + rnd() * 0.25, 'near', 'crowd');
         }
         if (rnd() > 0.4) {
           addItem(near, pick(sprites.props.lamp, rnd), x + side * 20, y - 10, 1, 'near');
@@ -1292,12 +1336,24 @@ function drawLayer(ctx, items, cam, W, H, zoom, pad) {
   const hh = (H * 0.5) / zoom + pad + zoomPad;
   const minX = cam.x - hw, maxX = cam.x + hw;
   const minY = cam.y - hh, maxY = cam.y + hh;
+  const farZoom = zoom < 0.75;
   ctx.imageSmoothingEnabled = true;
   for (const it of items) {
+    // Far / overview: drop thin crowd strips (grandstand mass already in mid layer)
+    if (farZoom && it.kind === 'crowd') continue;
     const left = it.x - it.w * 0.5;
     const top = it.y - it.h;
     if (left + it.w < minX || left > maxX || top + it.h < minY || top > maxY) continue;
-    ctx.drawImage(it.img, left, top, it.w, it.h);
+    let dw = it.w, dh = it.h;
+    // Mid zoom: prefer larger crowd stamp at modest scale (avoid flat slabs)
+    if (it.kind === 'crowd' && zoom >= 0.75 && zoom < 1.05) {
+      const aspect = (it.img.width || 1) / Math.max(1, it.img.height || 1);
+      if (aspect > 2.2) {
+        dh = Math.min(dh, 40 / zoom * 0.85);
+        dw = dh * aspect;
+      }
+    }
+    ctx.drawImage(it.img, left + (it.w - dw) * 0.5, top + (it.h - dh), dw, dh);
   }
 }
 

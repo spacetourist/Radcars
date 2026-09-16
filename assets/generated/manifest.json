@@ -1,5 +1,5 @@
 {
-  "pack": "realistic-v2.1",
+  "pack": "realistic-v2.2",
   "chromaDefault": "#FF00FF",
   "notes": "Cars/scenery may already have baked RGBA alpha from chromakey. Magenta car used green screen (#00FF00) before bake. Prefer alpha if present; else chroma. Map hex colours to files. v2.1 adds crowd, tyrewall, props with baked RGBA.",
   "carsByColor": {
@@ -18,7 +18,9 @@
     "scenery/scenery-tower.png",
     "scenery/scenery-crowd.png",
     "scenery/scenery-tyrewall.png",
-    "scenery/scenery-props.png"
+    "scenery/scenery-props.png",
+    "scenery/scenery-palms.png",
+    "scenery/scenery-billboard.png"
   ],
   "bg": [
     "bg/bg-neon-skyline.png"

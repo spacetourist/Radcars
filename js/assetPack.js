@@ -145,20 +145,60 @@ function bboxCrop(canvas, pad = 1) {
   return out;
 }
 
-/** Very soft leftover fringe cleanup — does not hard-key paint colours. */
+/**
+ * Aggressively zero near-magenta (#FF00FF) and near-green (#00FF00) fringe —
+ * including semi-transparent edge rectangles left by bake. Then a soft pass
+ * on remaining partial-alpha magenta spill. Does not hard-key paint neon.
+ */
 function softFringeCleanup(ctx, w, h) {
   const id = ctx.getImageData(0, 0, w, h);
   const d = id.data;
   for (let i = 0; i < d.length; i += 4) {
     const a = d[i + 3];
-    if (a < 8 || a > 230) continue;
+    if (a < 1) continue;
     const r = d[i], g = d[i + 1], b = d[i + 2];
     const rb = Math.min(r, b);
+    const magBalanced = Math.abs(r - b) <= 60;
+    const isMag = magBalanced && rb > 100 && g < rb * 0.55;
+    const isPureMag = magBalanced && rb > 200 && g < 60;
+    const isGrn = g > 140 && r < g * 0.55 && b < g * 0.55 && (g - Math.max(r, b)) > 40;
+    const isPureGrn = g > 200 && r < 50 && b < 50;
+    if (isPureMag || isPureGrn || ((isMag || isGrn) && a < 250)) {
+      d[i + 3] = 0;
+      continue;
+    }
+    if (a < 8 || a > 230) continue;
     if (Math.abs(r - b) <= SOFT_FRINGE_RB && rb > SOFT_FRINGE_MIN_RB && g < rb * SOFT_FRINGE_G_RATIO) {
       const spill = Math.min(1, (rb - g) / 200);
-      d[i + 3] = Math.round(a * (1 - spill * SOFT_FRINGE_STRENGTH));
+      d[i + 3] = Math.round(a * (1 - spill * Math.max(SOFT_FRINGE_STRENGTH, 0.85)));
     }
   }
+  ctx.putImageData(id, 0, 0);
+}
+
+/** 1px inward erode of low-alpha fringe after keying (drops coloured edge rectangles). */
+function erodeFringe1px(ctx, w, h) {
+  const id = ctx.getImageData(0, 0, w, h);
+  const d = id.data;
+  const out = new Uint8ClampedArray(d);
+  const A = 3;
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = (y * w + x) * 4;
+      const a = d[i + A];
+      if (a < 1 || a >= 240) continue;
+      // If any 4-neighbour is empty, clear this fringe pixel
+      if (
+        d[((y - 1) * w + x) * 4 + A] < 8 ||
+        d[((y + 1) * w + x) * 4 + A] < 8 ||
+        d[(y * w + x - 1) * 4 + A] < 8 ||
+        d[(y * w + x + 1) * 4 + A] < 8
+      ) {
+        out[i + A] = 0;
+      }
+    }
+  }
+  id.data.set(out);
   ctx.putImageData(id, 0, 0);
 }
 
@@ -275,7 +315,10 @@ export function processPackSprite(source, opts = {}) {
   const baked = hasMeaningfulAlpha(id.data, w, h);
 
   if (baked) {
-    if (opts.softFringe !== false) softFringeCleanup(ctx, w, h);
+    if (opts.softFringe !== false) {
+      softFringeCleanup(ctx, w, h);
+      erodeFringe1px(ctx, w, h);
+    }
     return bboxCrop(canvas, opts.pad != null ? opts.pad : 1);
   }
 
@@ -375,7 +418,9 @@ export function loadAssetPack() {
           'scenery/scenery-tower.png',
           'scenery/scenery-crowd.png',
           'scenery/scenery-tyrewall.png',
-          'scenery/scenery-props.png'
+          'scenery/scenery-props.png',
+          'scenery/scenery-palms.png',
+          'scenery/scenery-billboard.png'
         ];
     const bgRel = (manifest && manifest.bg && manifest.bg[0]) || 'bg/bg-neon-skyline.png';
     const asphaltRel = (manifest && manifest.textures && manifest.textures[0]) || 'tex-asphalt.png';
@@ -440,6 +485,8 @@ export function loadAssetPack() {
     const crowd = pack.scenery.crowd;
     const tyrewall = pack.scenery.tyrewall;
     const props = pack.scenery.props;
+    const palms = pack.scenery.palms;
+    const billboard = pack.scenery.billboard;
 
     if (warehouse) {
       pack.scenery.warehouseSm = fitCanvas(warehouse, 96, 110);
@@ -470,9 +517,18 @@ export function loadAssetPack() {
       pack.scenery.propCone = fitCanvas(props, 28, 32);
       pack.scenery.propBarrel = fitCanvas(props, 32, 36);
     }
+    if (palms) {
+      // Tall fits — pack sheet is often a palm cluster; contain keeps aspect
+      pack.scenery.palmSm = fitCanvas(palms, 40, 72);
+      pack.scenery.palmMd = fitCanvas(palms, 56, 96);
+    }
+    if (billboard) {
+      pack.scenery.billboardSm = fitCanvas(billboard, 96, 72);
+      pack.scenery.billboardMd = fitCanvas(billboard, 128, 96);
+    }
 
     const anyCar = Object.values(pack.cars).some(Boolean);
-    const anyScenery = !!(warehouse || grandstand || tower || crowd || tyrewall || props);
+    const anyScenery = !!(warehouse || grandstand || tower || crowd || tyrewall || props || palms || billboard);
     pack.ready = !!(anyCar || anyScenery || skyline);
     _pack = pack;
     try {
@@ -491,7 +547,9 @@ export function loadAssetPack() {
             tower: !!tower,
             crowd: !!crowd,
             tyrewall: !!tyrewall,
-            props: !!props
+            props: !!props,
+            palms: !!palms,
+            billboard: !!billboard
           },
           skyline: !!skyline,
           asphalt: !!asphalt

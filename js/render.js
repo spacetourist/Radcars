@@ -207,7 +207,7 @@ export function createRenderer(canvas) {
     }
 
     for (const c of cars) drawCarShadow(ctx, c);
-    for (const c of cars) drawCar(ctx, c, fxTime);
+    for (const c of cars) drawCar(ctx, c, fxTime, zoom);
 
     // Sprite boom sheets
     for (const b of boomAnims) {
@@ -955,7 +955,7 @@ export function createRenderer(canvas) {
     ctx.closePath();
   }
 
-  function drawCar(ctx, c, t) {
+  function drawCar(ctx, c, t, zoom) {
     ctx.save();
     ctx.translate(c.x, c.y);
     if (c.dead) ctx.globalAlpha = 0.4;
@@ -964,7 +964,13 @@ export function createRenderer(canvas) {
     const frames = sprites.getCarFrames(c.color, tier, !!c.isPlayer);
     const fi = sprites.carFrameIndex(c.angle);
     const img = frames[fi];
-    const drawW = 48, drawH = 48;
+    // Far / grid zoom: bump on-screen size so cars aren't tiny dots
+    let drawW = 48, drawH = 48;
+    if (zoom != null && zoom < 0.85) {
+      const bump = Math.min(1.4, 1.25 + (0.85 - zoom) * 0.5);
+      drawW *= bump;
+      drawH *= bump;
+    }
     if (img) {
       // Sprites already include rotation — no ctx.rotate
       ctx.imageSmoothingEnabled = true;
