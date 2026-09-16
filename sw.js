@@ -1,4 +1,4 @@
-const CACHE = 'radcars-v28-identity-hard';
+const CACHE = 'radcars-v29-crane-rekey';
 const ASSETS = [
   './',
   './index.html',

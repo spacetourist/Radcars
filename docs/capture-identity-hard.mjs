@@ -10,9 +10,7 @@ const BASE = 'http://127.0.0.1:4173/index.html?v=' + Date.now();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const TRACKS = [
-  { index: 3, id: 'cargo_dock', race: '45-cargo-crane-v26-race', grid: '45b-cargo-crane-v26-grid' },
-  { index: 1, id: 'gridlock', race: '46-gridlock-bb-race', grid: '46b-gridlock-bb-grid' },
-  { index: 2, id: 'razor_hairpin', race: '47-razor-pinch-race', grid: '47b-razor-pinch-grid' }
+  { index: 3, id: 'cargo_dock', race: '48-cargo-crane-rekey-race', grid: '48b-cargo-crane-rekey-grid' }
 ];
 
 async function disableSW(page) {
@@ -256,8 +254,8 @@ console.log('pack', JSON.stringify(pack));
 const craneDataUrl = await stampAssetCrane(page);
 if (craneDataUrl && craneDataUrl.startsWith('data:image/png;base64,')) {
   const buf = Buffer.from(craneDataUrl.split(',')[1], 'base64');
-  writeFileSync(join(OUT, 'asset-crane-v26.png'), buf);
-  console.log('wrote asset-crane-v26.png', buf.length);
+  writeFileSync(join(OUT, 'asset-crane-v261.png'), buf);
+  console.log('wrote asset-crane-v261.png', buf.length);
 }
 
 const report = [];

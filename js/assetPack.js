@@ -163,9 +163,15 @@ function softFringeCleanup(ctx, w, h) {
     const isPureMag = magBalanced && rb > 200 && g < 60;
     // Rose plate (containers ~195,41,106) — treat as key even when R>>B
     const isRosePlate = r > 150 && g < 95 && b > 50 && r > g * 1.7 && (r - g) > 80;
-    const isGrn = g > 140 && r < g * 0.55 && b < g * 0.55 && (g - Math.max(r, b)) > 40;
-    const isPureGrn = g > 200 && r < 50 && b < 50;
-    if (isPureMag || isPureGrn || isRosePlate || ((isMag || isGrn) && a < 250)) {
+    const maxRB = Math.max(r, b);
+    const isPureGrn = g > 160 && r < 80 && b < 80 && (g - maxRB) > 40;
+    const isGrn = g > 100 && r < g * 0.62 && b < g * 0.62 && (g - maxRB) > 28;
+    // Mid-green lattice / semi-transparent fringe (not yellow sodium)
+    const isMidGrn = a < 250 && g > 55 && g >= r && g >= b && (g - maxRB) > 10
+      && (Math.max(r, g, b) - Math.min(r, g, b)) > 24
+      && r < g * 0.97 && b < g * 0.9
+      && !(r > 145 && g > 125 && b < 115);
+    if (isPureMag || isPureGrn || isRosePlate || isMidGrn || ((isMag || isGrn) && a < 250)) {
       d[i + 3] = 0;
       continue;
     }
@@ -350,11 +356,20 @@ export function chromaKeyAndCrop(source, opts = {}) {
       d[i + 3] = 0;
       continue;
     }
-    // Green-screen plate (#00FF00) — crane v2.6
+    // Green-screen plate (#00FF00) + mid-green lattice spill — crane v2.6.1
     if (opts.alsoKeyGreen || (key.g > 200 && key.r < 80)) {
-      if ((g > 200 && r < 55 && b < 55) || (g > 150 && r < g * 0.55 && b < g * 0.55 && (g - Math.max(r, b)) > 45)) {
-        d[i + 3] = 0;
-        continue;
+      const maxRB = Math.max(r, b);
+      const sat = Math.max(r, g, b) - Math.min(r, g, b);
+      const isYellowNa = r > 145 && g > 125 && b < 115 && (r + g) > b * 3.0 && Math.abs(r - g) < 100;
+      if (!isYellowNa && sat >= 22) {
+        const pureG = g > 160 && r < 80 && b < 80 && (g - maxRB) > 40;
+        const nearG = g > 100 && r < g * 0.62 && b < g * 0.62 && (g - maxRB) > 28;
+        const midG = g > 65 && g >= r && g > b && (g - maxRB) > 14 && sat > 30 && r < 150 && b < 135 && r < g * 0.95;
+        const fringeG = a < 250 && g > 50 && g >= r && g >= b && (g - maxRB) > 10 && sat > 24 && r < g * 0.97 && b < g * 0.9;
+        if (pureG || nearG || midG || fringeG) {
+          d[i + 3] = 0;
+          continue;
+        }
       }
     }
 
@@ -463,7 +478,8 @@ export function keyHotPinkPlate(canvas) {
 }
 
 /**
- * Zero solid green-screen plates (#00FF00 and near-green spill) left on quay art.
+ * Zero solid green-screen plates (#00FF00, near-green, mid-green lattice spill)
+ * left on quay art. Preserves yellow sodium (high R+G, low B) and low-sat steel.
  */
 export function keyGreenPlate(canvas) {
   if (!canvas || !canvas.width) return canvas;
@@ -473,12 +489,31 @@ export function keyGreenPlate(canvas) {
   const id = ctx.getImageData(0, 0, w, h);
   const d = id.data;
   for (let i = 0; i < d.length; i += 4) {
-    if (d[i + 3] < 1) continue;
+    const a = d[i + 3];
+    if (a < 1) continue;
     const r = d[i], g = d[i + 1], b = d[i + 2];
     const maxRB = Math.max(r, b);
-    const pure = g > 200 && r < 55 && b < 55;
-    const near = g > 150 && r < g * 0.55 && b < g * 0.55 && (g - maxRB) > 45;
-    if (pure || near) d[i + 3] = 0;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const sat = max - min;
+    // Yellow sodium lights — never key
+    if (r > 145 && g > 125 && b < 115 && (r + g) > b * 3.0 && Math.abs(r - g) < 100) continue;
+    // Steel / low-sat neutrals
+    if (sat < 22) continue;
+    // Pure / bright green screen
+    const pure = g > 160 && r < 80 && b < 80 && (g - maxRB) > 40;
+    // Near-green spill (lower G threshold than classic #00FF00)
+    const near = g > 100 && r < g * 0.62 && b < g * 0.62 && (g - maxRB) > 28;
+    // Mid-green lattice spill — G dominant, high sat, not yellow
+    const mid = g > 65 && g >= r && g > b && (g - maxRB) > 14 && sat > 30
+      && r < 150 && b < 135 && r < g * 0.95;
+    // Semi-transparent green fringe
+    const fringe = a < 250 && g > 50 && g >= r && g >= b && (g - maxRB) > 10
+      && sat > 24 && r < g * 0.97 && b < g * 0.9;
+    // Opaque high-sat G-dominant (lattice mid-green even when fully opaque)
+    const satDom = sat > 45 && g > 75 && g > r && g > b && (g - maxRB) > 12
+      && r < 160 && b < 140 && !(r > 150 && g > 140 && b < 100);
+    if (pure || near || mid || fringe || satDom) d[i + 3] = 0;
   }
   ctx.putImageData(id, 0, 0);
   return bboxCrop(canvas, 1);
@@ -849,10 +884,11 @@ export function loadAssetPack() {
     const crane = pack.scenery.crane;
     const containers = pack.scenery.containers;
     if (crane) {
-      const c0 = neutralizePinkNeon(keyHotPinkPlate(keyGreenPlate(crane)));
+      // Key green before/after fit+pink neutralize — fit can reintroduce mid-green fringe
+      const c0 = keyGreenPlate(neutralizePinkNeon(keyHotPinkPlate(keyGreenPlate(crane))));
       pack.scenery.crane = c0;
-      pack.scenery.craneSm = neutralizePinkNeon(keyHotPinkPlate(keyGreenPlate(fitSceneryPreserveYellow(c0, 160, 180))));
-      pack.scenery.craneMd = neutralizePinkNeon(keyHotPinkPlate(keyGreenPlate(fitSceneryPreserveYellow(c0, 240, 260))));
+      pack.scenery.craneSm = keyGreenPlate(neutralizePinkNeon(keyHotPinkPlate(keyGreenPlate(fitSceneryPreserveYellow(c0, 160, 180)))));
+      pack.scenery.craneMd = keyGreenPlate(neutralizePinkNeon(keyHotPinkPlate(keyGreenPlate(fitSceneryPreserveYellow(c0, 240, 260)))));
     }
     if (containers) {
       const k0 = neutralizePinkNeon(keyHotPinkPlate(containers));

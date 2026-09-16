@@ -1,7 +1,7 @@
 {
-  "pack": "realistic-v2.6-crane",
+  "pack": "realistic-v2.6.1-crane-rekey",
   "chromaDefault": "#FF00FF",
-  "notes": "v2.4: PURE horizon skyline for pack.skyline backdrop ONLY \u2014 never stamp as building. Old bg-neon-skyline renamed bg-arena-scene-REF-ONLY (contains track; do not use in race). Tower replaced without road/ground plate. v2.5: crane + containers for Cargo quay identity. v2.6: crane rekeyed from green #00FF00, yellow lights only, no rose plate.",
+  "notes": "v2.4: PURE horizon skyline for pack.skyline backdrop ONLY \u2014 never stamp as building. Old bg-neon-skyline renamed bg-arena-scene-REF-ONLY (contains track; do not use in race). Tower replaced without road/ground plate. v2.5: crane + containers for Cargo quay identity. v2.6: crane rekeyed from green #00FF00, yellow lights only, no rose plate. v2.6.1: harder green chromakey on crane \u2014 #00FF00 must never read as visible trim.",
   "carsByColor": {
     "#00e8ff": "cars/car-cyan.png",
     "#ff2b6a": "cars/car-pink.png",
