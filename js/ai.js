@@ -10,9 +10,10 @@ export function stepAI(car, cars, track, weapons, dt, sfx) {
   let wp = car.aiWp % line.length;
   let target = line[wp];
   let d = dist(car.x, car.y, target.x, target.y);
-  // look ahead based on speed
+  // look ahead based on speed (easier tiers look less far ahead)
   const spd = Math.hypot(car.vx, car.vy);
-  const look = 2 + Math.floor(spd * 2.5);
+  const lookMul = car.aiDiff?.lookAheadMul ?? 1;
+  const look = Math.max(1, Math.floor((2 + Math.floor(spd * 2.5)) * lookMul));
   while (d < 40 + look * 8) {
     car.aiWp = (car.aiWp + 1) % line.length;
     wp = car.aiWp;
@@ -53,22 +54,25 @@ export function stepAI(car, cars, track, weapons, dt, sfx) {
 
   // Weapons
   car.fireCooldown = Math.max(0, car.fireCooldown - dt);
-  if (Math.random() < 0.012 * car.aiAggro * (dt / 16)) {
+  const fireMul = car.aiDiff?.fireMul ?? 1;
+  if (Math.random() < 0.012 * car.aiAggro * fireMul * (dt / 16)) {
     chooseWeapon(car, cars);
     const res = tryFire(car, weapons, cars, track);
     if (res && sfx) sfx(res.sfx);
   }
 
   // Nitro when behind or finishing
-  if (car.nitroCharges > 0 && Math.random() < 0.002 * (dt / 16)) {
+  const nitroMul = car.aiDiff?.nitroMul ?? 1;
+  if (car.nitroCharges > 0 && Math.random() < 0.002 * nitroMul * (dt / 16)) {
     const place = estimatePlace(car, cars);
     if (place > 2 || spd < 1.5) {
       if (triggerNitro(car) && sfx) sfx('nitro');
     }
   }
 
-  // skill jitter
-  steer += (Math.random() - 0.5) * (1 - car.aiSkill) * 0.35;
+  // skill jitter (more on easier tiers)
+  const jitterMul = car.aiDiff?.jitterMul ?? 1;
+  steer += (Math.random() - 0.5) * (1 - car.aiSkill) * 0.35 * jitterMul;
 
   return { steer: clamp(steer, -1, 1), accel, brake };
 }

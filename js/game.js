@@ -1,5 +1,6 @@
 import { getTrack, buildStartingGrid } from './tracks.js';
 import { createCar, CAR_COLORS, AI_NAMES, updateCheckpoints, raceProgress, syncCarFromSave } from './cars.js';
+import { getDifficulty, clampDifficultyIndex } from './difficulty.js';
 import { stepCar, triggerNitro } from './physics.js';
 import { createWeaponsState, tryFire, stepWeapons, cycleWeapon } from './weapons.js';
 import { stepAI } from './ai.js';
@@ -78,7 +79,10 @@ export function createGame(canvas, input) {
         y: sp0.y + ((i % 2) ? 28 : -28),
         angle: startHeading
       };
-      const difficulty = track.difficulty;
+      const trackDiff = track.difficulty;
+      const diff = getDifficulty(clampDifficultyIndex(save?.options?.difficulty));
+      const engine = Math.min(4, Math.max(0, Math.floor((trackDiff + Math.random() * 2) * diff.engineMul)));
+      const armour = Math.max(0, Math.floor(Math.random() * trackDiff * diff.armourMul));
       const ai = createCar({
         id: i + 1,
         name: AI_NAMES[i % AI_NAMES.length],
@@ -88,20 +92,21 @@ export function createGame(canvas, input) {
         angle: startHeading,
         hp: 10000,
         maxHp: 10000,
-        engine: Math.min(4, Math.floor(difficulty + Math.random() * 2)),
-        armour: Math.floor(Math.random() * difficulty),
-        ram: Math.floor(Math.random() * 2),
-        nitro: 1 + (Math.random() > 0.5 ? 1 : 0),
+        engine,
+        armour,
+        ram: Math.floor(Math.random() * 2 * diff.aggroMul),
+        nitro: Math.random() < (0.5 * diff.nitroMul) ? 2 : 1,
         nitroMax: 2,
         weapons: {
-          front: 6 + difficulty * 2,
-          rear: 3 + difficulty,
-          homing: 1 + (difficulty > 1 ? 1 : 0),
-          mine: 2,
-          super: difficulty > 2 ? 1 : 0
+          front: Math.max(2, Math.round((6 + trackDiff * 2) * diff.weaponMul)),
+          rear: Math.max(1, Math.round((3 + trackDiff) * diff.weaponMul)),
+          homing: Math.max(0, Math.round((trackDiff > 1 ? 2 : 1) * diff.weaponMul)),
+          mine: Math.max(0, Math.round(2 * diff.weaponMul)),
+          super: (trackDiff > 2 && diff.weaponMul > 0.85) ? 1 : 0
         },
-        aiAggro: 0.4 + Math.random() * 0.5,
-        aiSkill: 0.45 + Math.random() * 0.4 + difficulty * 0.05
+        aiAggro: (0.4 + Math.random() * 0.5) * diff.aggroMul,
+        aiSkill: Math.min(0.98, (0.45 + Math.random() * 0.4 + trackDiff * 0.05) * diff.skillMul),
+        aiDiff: diff
       });
       ai.angle = startHeading;
       ai.nitroCharges = ai.nitroCharges ?? ai.nitro ?? 1;

@@ -25,7 +25,9 @@ export const DEFAULT_SAVE = {
   },
   options: {
     aiCount: 5,
-    laps: 3
+    laps: 3,
+    /** 0 Rookie … 3 Hard (classic / current AI) */
+    difficulty: 1
   }
 };
 

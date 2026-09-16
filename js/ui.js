@@ -5,6 +5,7 @@ import { sfx, setMuted, isMuted } from './audio.js';
 import { persistSave, resetSave } from './career.js';
 import { hpColor } from './util.js';
 import { installMenuBackdrop, hideMenuBackdrop } from './scenery.js';
+import { DIFFICULTY_LEVELS, clampDifficultyIndex, getDifficulty } from './difficulty.js';
 
 export function createUI(root, api) {
   const hud = document.createElement('div');
@@ -61,7 +62,7 @@ export function createUI(root, api) {
     const unlocked = mode === 'career' ? Math.min(save.unlockedTracks, TRACKS.length) : TRACKS.length;
     el.innerHTML = `
       <h1>${mode === 'career' ? 'Career' : 'Single Race'}</h1>
-      <p class="tagline">Pick your arena · ${save.options.laps} laps · ${save.options.aiCount} rivals</p>
+      <p class="tagline">Pick your arena · ${getDifficulty(save).label} · ${save.options.laps} laps · ${save.options.aiCount} rivals</p>
       <div class="grid2" id="tracks"></div>
       <div class="row" style="margin-top:14px">
         <button class="btn" data-act="back">Back</button>
@@ -168,6 +169,14 @@ export function createUI(root, api) {
           <button class="btn" id="mute">${save.mute ? 'Unmute' : 'Mute'}</button>
         </div>
         <div class="shop-item">
+          <div class="info"><strong>Difficulty</strong><br/><span class="muted" id="diff-blurb">${getDifficulty(save).blurb}</span></div>
+          <div class="row">
+            <button class="btn" id="diff-dec">−</button>
+            <span class="stat" id="diff-v">${getDifficulty(save).label}</span>
+            <button class="btn" id="diff-inc">+</button>
+          </div>
+        </div>
+        <div class="shop-item">
           <div class="info"><strong>AI rivals</strong><br/><span class="muted">3–7</span></div>
           <div class="row">
             <button class="btn" id="ai-dec">−</button>
@@ -200,6 +209,16 @@ export function createUI(root, api) {
       setMuted(save.mute);
       persistSave(save);
       sfx('click');
+      showOptions(save);
+    };
+    el.querySelector('#diff-dec').onclick = () => {
+      save.options.difficulty = clampDifficultyIndex((save.options.difficulty ?? 1) - 1);
+      persistSave(save);
+      showOptions(save);
+    };
+    el.querySelector('#diff-inc').onclick = () => {
+      save.options.difficulty = clampDifficultyIndex((save.options.difficulty ?? 1) + 1);
+      persistSave(save);
       showOptions(save);
     };
     el.querySelector('#ai-dec').onclick = () => { save.options.aiCount = Math.max(3, save.options.aiCount - 1); persistSave(save); showOptions(save); };

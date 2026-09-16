@@ -1,4 +1,4 @@
-const CACHE = 'radcars-v24-all-tracks-density';
+const CACHE = 'radcars-v25-difficulty';
 const ASSETS = [
   './',
   './index.html',
@@ -17,6 +17,7 @@ const ASSETS = [
   './js/input.js',
   './js/shop.js',
   './js/career.js',
+  './js/difficulty.js',
   './js/audio.js',
   './js/render.js',
   './js/ui.js',
