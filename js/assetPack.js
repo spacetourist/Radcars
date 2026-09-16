@@ -282,6 +282,42 @@ export function stripNeonEdgeFrames(canvas, borderPx = 3, reBbox = true) {
 }
 
 /**
+ * Recolor cyan/aqua neon accents on pack stamps to warm sodium (amber/orange)
+ * without waiting on new PNGs — sparse warm glow, not cyan grids.
+ */
+export function warmCyanToSodium(canvas) {
+  if (!canvas || !canvas.width || !canvas.height) return canvas;
+  const w = canvas.width | 0;
+  const h = canvas.height | 0;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  const id = ctx.getImageData(0, 0, w, h);
+  const d = id.data;
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] < 10) continue;
+    const r = d[i], g = d[i + 1], b = d[i + 2];
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    if (max < 55) continue;
+    const sat = max - min;
+    // Broad cyan/aqua/teal/cool-blue neon (including mid-sat window grids)
+    const isCyan = b > 70 && g > 60 && b + g > r * 1.55 && sat > 28 && r < 170;
+    const isCoolBlue = b > 90 && b > r * 1.15 && b >= g * 0.95 && sat > 25 && max > 80;
+    const isTealEdge = g > 100 && b > 90 && r < 120 && sat > 35;
+    if (!isCyan && !isCoolBlue && !isTealEdge) continue;
+    const lum = (r * 0.2 + g * 0.45 + b * 0.35) / 255;
+    // Strong remap toward warm sodium — leave only sparse amber accents
+    const t = Math.min(1, 0.55 + sat / 200);
+    const nr = 200 + lum * 55;
+    const ng = 110 + lum * 75;
+    const nb = 28 + lum * 36;
+    d[i] = Math.min(255, Math.round(r * (1 - t) + nr * t));
+    d[i + 1] = Math.min(255, Math.round(g * (1 - t) + ng * t));
+    d[i + 2] = Math.min(255, Math.round(b * (1 - t) + nb * t));
+  }
+  ctx.putImageData(id, 0, 0);
+  return canvas;
+}
+
+/**
  * Chroma-key keyRgb → alpha with tolerant threshold + soft edge, then bbox crop.
  * opts.keyRgb: {r,g,b} — default magenta; use green for magenta-car fallback.
  * opts.skipMagentaFringe: when keying green, don't also run magenta-fringe heuristics.
@@ -619,24 +655,27 @@ export function loadAssetPack() {
     const billboard = pack.scenery.billboard;
 
     if (warehouse) {
-      pack.scenery.warehouseSm = fitScenery(warehouse, 96, 110);
-      pack.scenery.warehouseMd = fitScenery(warehouse, 120, 90);
+      pack.scenery.warehouseSm = warmCyanToSodium(fitScenery(warehouse, 96, 110));
+      pack.scenery.warehouseMd = warmCyanToSodium(fitScenery(warehouse, 120, 90));
+      pack.scenery.warehouse = warmCyanToSodium(warehouse);
     }
     if (grandstand || grandstandLarge) {
       // v2.3: prefer large grandstand for block mass; keep standard for flanking stands
       const standSrc = grandstand || grandstandLarge;
       const blockSrc = grandstandLarge || grandstand;
-      pack.scenery.stand = fitScenery(standSrc, 160, 80);
-      pack.scenery.standBlock = fitScenery(blockSrc, 280, 140);
+      pack.scenery.stand = warmCyanToSodium(fitScenery(standSrc, 160, 80));
+      pack.scenery.standBlock = warmCyanToSodium(fitScenery(blockSrc, 280, 140));
       if (grandstandLarge) {
-        pack.scenery.standLarge = fitScenery(grandstandLarge, 300, 150);
-        pack.scenery.grandstandLarge = grandstandLarge;
+        pack.scenery.standLarge = warmCyanToSodium(fitScenery(grandstandLarge, 300, 150));
+        pack.scenery.grandstandLarge = warmCyanToSodium(grandstandLarge);
       }
     }
     if (tower) {
       // Pack tower art is often landscape after bbox; allow wider fits so mid/far reads
-      pack.scenery.towerSm = fitScenery(tower, 100, 120);
-      pack.scenery.towerMd = fitScenery(tower, 130, 150);
+      // Warm cyan window/neon grids → sodium (v19) without new PNGs
+      pack.scenery.towerSm = warmCyanToSodium(warmCyanToSodium(fitScenery(tower, 100, 120)));
+      pack.scenery.towerMd = warmCyanToSodium(warmCyanToSodium(fitScenery(tower, 130, 150)));
+      pack.scenery.tower = warmCyanToSodium(warmCyanToSodium(tower));
     }
     if (crowd || crowdDense) {
       // Thin strip = filler; dense = S/F + major apex masses
@@ -669,8 +708,10 @@ export function loadAssetPack() {
       pack.scenery.palmMd = fitScenery(palms, 56, 96);
     }
     if (billboard) {
-      pack.scenery.billboardSm = fitScenery(billboard, 96, 72);
-      pack.scenery.billboardMd = fitScenery(billboard, 128, 96);
+      // Soften cyan neon frames → warm sodium accents (v19)
+      pack.scenery.billboardSm = warmCyanToSodium(warmCyanToSodium(fitScenery(billboard, 96, 72)));
+      pack.scenery.billboardMd = warmCyanToSodium(warmCyanToSodium(fitScenery(billboard, 128, 96)));
+      pack.scenery.billboard = warmCyanToSodium(warmCyanToSodium(billboard));
     }
 
     const anyCar = Object.values(pack.cars).some(Boolean);

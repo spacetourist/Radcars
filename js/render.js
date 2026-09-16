@@ -182,7 +182,7 @@ export function createRenderer(canvas) {
 
     // Ground fill + far/mid scenery behind asphalt
     if (scenery) {
-      drawGroundPlate(ctx, scenery, track);
+      drawGroundPlate(ctx, scenery, track, zoom);
       drawSceneryFar(ctx, scenery, cam, W, H, zoom);
       drawSceneryMid(ctx, scenery, cam, W, H, zoom);
     }
@@ -342,45 +342,53 @@ export function createRenderer(canvas) {
       }
     }
 
-    // Worn racing groove — stronger rubber band (v18 composition)
+    // Racing groove — darker rubber band + lighter worn lane (v19 race-zoom readable)
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
-    ctx.strokeStyle = 'rgba(255,255,255,0.16)';
-    ctx.lineWidth = 46;
+    // Dark rubber groove (outer)
+    ctx.strokeStyle = 'rgba(4, 3, 2, 0.58)';
+    ctx.lineWidth = 52;
     ctx.beginPath();
     pathPoly(ctx, track.line);
     ctx.closePath();
     ctx.stroke();
-    ctx.strokeStyle = 'rgba(235, 220, 185, 0.28)';
-    ctx.lineWidth = 28;
+    ctx.strokeStyle = 'rgba(8, 6, 4, 0.42)';
+    ctx.lineWidth = 38;
     ctx.beginPath();
     pathPoly(ctx, track.line);
     ctx.closePath();
     ctx.stroke();
-    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
-    ctx.lineWidth = 13;
+    // Lighter worn / polished lane on top
+    ctx.strokeStyle = 'rgba(250, 235, 200, 0.42)';
+    ctx.lineWidth = 22;
     ctx.beginPath();
     pathPoly(ctx, track.line);
     ctx.closePath();
     ctx.stroke();
-    // worn core
-    ctx.strokeStyle = 'rgba(250, 238, 210, 0.16)';
-    ctx.lineWidth = 7;
+    ctx.strokeStyle = 'rgba(255, 248, 228, 0.28)';
+    ctx.lineWidth = 11;
+    ctx.beginPath();
+    pathPoly(ctx, track.line);
+    ctx.closePath();
+    ctx.stroke();
+    // bright core highlight
+    ctx.strokeStyle = 'rgba(255, 250, 235, 0.14)';
+    ctx.lineWidth = 5;
     ctx.beginPath();
     pathPoly(ctx, track.line);
     ctx.closePath();
     ctx.stroke();
 
     // Skid marks — dark rubber streaks offset from racing line
-    ctx.strokeStyle = 'rgba(8, 8, 10, 0.22)';
-    ctx.lineWidth = 3.2;
+    ctx.strokeStyle = 'rgba(4, 3, 2, 0.36)';
+    ctx.lineWidth = 3.6;
     ctx.setLineDash([28, 42, 14, 55]);
     ctx.beginPath();
     pathPoly(ctx, track.line);
     ctx.closePath();
     ctx.stroke();
-    ctx.strokeStyle = 'rgba(12, 10, 8, 0.16)';
-    ctx.lineWidth = 2.4;
+    ctx.strokeStyle = 'rgba(8, 6, 4, 0.22)';
+    ctx.lineWidth = 2.6;
     ctx.setLineDash([18, 60, 10, 48]);
     ctx.beginPath();
     pathPoly(ctx, track.line);

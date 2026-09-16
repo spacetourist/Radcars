@@ -83,11 +83,11 @@ await waitPack(page);
 // Neon Loop grid — pack v2
 await startTrack(page, 0);
 await sleep(1100);
-await shot(page, '20-composition-grid');
+await shot(page, '22-realistic-polish-grid');
 
 // Mid-race (multiple AI colours on grid)
 await sleep(5800);
-await shot(page, '21-composition-race');
+await shot(page, '23-realistic-polish-race');
 
 const info = await page.evaluate(async () => {
   const m = await import('/js/assetPack.js');
