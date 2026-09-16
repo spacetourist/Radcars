@@ -32,7 +32,8 @@ export function stepCar(car, input, dt, track, others) {
   // Turn rate falls with speed ≈ *(4-speed)
   const turnFactor = Math.max(0.35, 4 - Math.min(speed, 3.5));
   // Slightly softer than raw twitchy 1.0, firm enough to make corners at speed
-  const turnRate = 0.0028 * 0.95 * turnFactor * (0.7 + Math.min(1, speed / 1.1));
+  // Cap yaw hard — full steer must stay controllable at speed
+  const turnRate = 0.0017 * turnFactor * (0.65 + Math.min(1, speed / 1.35));
   car.angle = normalizeAngle(car.angle + steer * turnRate * dt);
 
   // Accel along facing

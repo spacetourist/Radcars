@@ -110,14 +110,14 @@ export function createInput() {
 
     /** Map raw slider [-1,1] → gameplay steer with deadzone + ease-in.
      *  Thumb follows finger (raw); only the value sent to physics is shaped.
-     *  Mild deadzone, quadratic ease-in, max ~0.78 — corners work without twitch. */
+     *  Smaller max + cubic ease-in so full throw cannot spin the car out. */
     function curveSteer(raw) {
-      const DZ = 0.1;
-      const MAX = 0.78;
+      const DZ = 0.12;
+      const MAX = 0.52;
       const a = Math.abs(raw);
       if (a < DZ) return 0;
       const t = (a - DZ) / (1 - DZ); // 0..1 past deadzone
-      const shaped = t * t;            // quadratic: calm centre, usable mid-throw
+      const shaped = t * t * t;        // cubic: calm centre, capped throw
       return Math.sign(raw) * shaped * MAX;
     }
 
@@ -134,7 +134,7 @@ export function createInput() {
 
     function normFromClientX(clientX) {
       const rect = root.getBoundingClientRect();
-      const pad = 32; // thumb radius-ish (matches wider thumb)
+      const pad = 24; // thumb radius-ish (matches smaller thumb)
       const x = clientX - rect.left;
       const t = (x - pad) / Math.max(1, rect.width - pad * 2);
       return Math.max(-1, Math.min(1, t * 2 - 1));

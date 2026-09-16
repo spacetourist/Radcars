@@ -453,16 +453,16 @@ html, body {
   color: #fff;
   box-shadow: 0 0 16px rgba(0, 232, 255, 0.4);
 }
-/* Horizontal thumb steering — wide travel, left thumb only */
+/* Horizontal thumb steering — compact travel, left thumb only */
 .tc-steer-wrap {
   pointer-events: auto;
   position: absolute;
   left: max(10px, env(safe-area-inset-left, 0px));
   bottom: max(18px, env(safe-area-inset-bottom, 0px));
-  /* Wider physical travel for same -1..1 range → easier fine control */
-  width: min(380px, 56vw);
-  height: 78px;
-  border-radius: 39px;
+  /* Smaller slider + lower physics max = calmer full deflection */
+  width: min(240px, 42vw);
+  height: 58px;
+  border-radius: 29px;
   border: 2px solid rgba(0, 232, 255, 0.55);
   background: linear-gradient(180deg, rgba(40,44,56,0.78), rgba(10,12,18,0.85));
   box-shadow: 0 4px 18px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1);
@@ -480,8 +480,8 @@ html, body {
 }
 .tc-steer-track {
   position: absolute;
-  inset: 12px 22px;
-  border-radius: 22px;
+  inset: 10px 16px;
+  border-radius: 16px;
   background: rgba(0,0,0,0.35);
   box-shadow: inset 0 2px 6px rgba(0,0,0,0.45);
 }
@@ -500,10 +500,10 @@ html, body {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 60px;
-  height: 60px;
-  margin-left: -30px;
-  margin-top: -30px;
+  width: 46px;
+  height: 46px;
+  margin-left: -23px;
+  margin-top: -23px;
   border-radius: 50%;
   background:
     radial-gradient(circle at 35% 30%, rgba(255,255,255,0.35), transparent 50%),
@@ -606,16 +606,16 @@ html, body {
 /* Phone portrait / narrow: keep wide slider + compact right cluster */
 @media (max-width: 560px) {
   .tc-steer-wrap {
-    width: min(300px, 62vw);
-    height: 70px;
+    width: min(210px, 48vw);
+    height: 52px;
     bottom: max(14px, env(safe-area-inset-bottom, 0px));
     left: max(8px, env(safe-area-inset-left, 0px));
   }
   .tc-steer-thumb {
-    width: 52px;
-    height: 52px;
-    margin-left: -26px;
-    margin-top: -26px;
+    width: 40px;
+    height: 40px;
+    margin-left: -20px;
+    margin-top: -20px;
   }
   .tc-accel {
     width: 96px; height: 96px;
@@ -638,8 +638,8 @@ html, body {
 /* Short landscape: pull cluster in so it stays in thumb zone, clear of HUD */
 @media (max-height: 420px) and (orientation: landscape) {
   .tc-steer-wrap {
-    width: min(340px, 48vw);
-    height: 64px;
+    width: min(220px, 38vw);
+    height: 50px;
     bottom: 10px;
   }
   .tc-accel {
