@@ -853,9 +853,9 @@ export function buildTrackScenery(track) {
   const startX = start ? start.x : track.width * 0.5;
   const startY = start ? start.y : track.height * 0.2;
 
-  // Landmark anchors (from track) drive clustering; thin mid-straights
+  // Landmark anchors (from track) + mid-straight beads so long circuits aren't empty corridors
   const landmarks = (track.landmarks && track.landmarks.length)
-    ? track.landmarks
+    ? track.landmarks.slice()
     : [{ id: 'start_finish', x: startX, y: startY, kind: 'start' }];
 
   // Scale spacing / landmark radii with perimeter so long circuits don't explode stamp count
@@ -864,6 +864,75 @@ export function buildTrackScenery(track) {
   const stepFar = 84 * ss;
   const stepMid = 62 * ss;
   const stepNear = 48 * ss; // was 40 — fewer palms/props on long tracks
+  // Bead spacing ~400–600 wu along straights (fixed world units, not scaled up with ss)
+  const BEAD_SPACING = 480;
+
+  // Mid-straight landmark beads — arc-length along densified perimeter (edges are short)
+  const beadAnchors = [];
+  function pushBead(x, y, side) {
+    for (const lm of landmarks) {
+      if (lm.kind === 'bead') continue;
+      if (Math.hypot(x - lm.x, y - lm.y) < 200) return;
+    }
+    // Spacing only vs same-side beads — outer/inner pairs sit across the lane
+    for (const b of beadAnchors) {
+      if (b.side !== side) continue;
+      if (Math.hypot(x - b.x, y - b.y) < BEAD_SPACING * 0.7) return;
+    }
+    beadAnchors.push({ id: `bead_${side}_${beadAnchors.length}`, x, y, kind: 'bead', side });
+  }
+  function collectArcBeads(polyEdges, inward, side, spacing) {
+    let acc = 0;
+    let nextAt = spacing * 0.5;
+    for (const e of polyEdges) {
+      const end = acc + e.len;
+      while (nextAt <= end + 1e-6) {
+        const t = e.len > 0 ? (nextAt - acc) / e.len : 0.5;
+        const bx = e.ax + (e.bx - e.ax) * t;
+        const by = e.ay + (e.by - e.ay) * t;
+        let nearCorner = false;
+        for (const lm of landmarks) {
+          if (lm.kind === 'corner' || lm.kind === 'chicane' || lm.kind === 'kink' || lm.kind === 'start') {
+            if (Math.hypot(bx - lm.x, by - lm.y) < 110) { nearCorner = true; break; }
+          }
+        }
+        if (!nearCorner) {
+          const nx = inward ? -e.nx : e.nx;
+          const ny = inward ? -e.ny : e.ny;
+          const dist = inward ? (18 + rnd() * 22) : (36 + rnd() * 36);
+          pushBead(bx + nx * dist, by + ny * dist, side);
+        }
+        nextAt += spacing;
+      }
+      acc = end;
+    }
+  }
+  collectArcBeads(edges, false, 'out', BEAD_SPACING);
+  const innerEdges = perimeterNormals(track.inner);
+  collectArcBeads(innerEdges, true, 'in', 420); // denser infield beads for race-zoom both-sides
+  // Mirror outer beads into infield so race zoom always has a partner across the lane
+  const cx = track.width * 0.5, cy = track.height * 0.5;
+  const outBeads = beadAnchors.filter((b) => b.side === 'out').slice();
+  for (const ob of outBeads) {
+    const dx = cx - ob.x, dy = cy - ob.y;
+    const len = Math.hypot(dx, dy) || 1;
+    for (const step of [380, 420, 460, 340, 500, 300, 540]) {
+      const x = ob.x + (dx / len) * step;
+      const y = ob.y + (dy / len) * step;
+      if (!pointInPoly(x, y, track.inner)) continue;
+      if (isOnAsphalt(track, x, y)) continue;
+      // Force-ish: only block if almost overlapping an existing in bead
+      let clash = false;
+      for (const b of beadAnchors) {
+        if (b.side !== 'in') continue;
+        if (Math.hypot(x - b.x, y - b.y) < 140) { clash = true; break; }
+      }
+      if (clash) continue;
+      beadAnchors.push({ id: `bead_in_m_${beadAnchors.length}`, x, y, kind: 'bead', side: 'in' });
+      break;
+    }
+  }
+  for (const b of beadAnchors) landmarks.push(b);
 
   function landmarkBoost(x, y) {
     let best = 0;
@@ -876,6 +945,7 @@ export function buildTrackScenery(track) {
       else if (lm.kind === 'pit') { radius = 240 * ss; weight = 0.9; }
       else if (lm.kind === 'chicane' || lm.kind === 'kink') { radius = 200 * ss; weight = 0.75; }
       else if (lm.kind === 'corner') { radius = 220 * ss; weight = 0.8; }
+      else if (lm.kind === 'bead') { radius = 210; weight = 0.72; } // fixed — fill mid-straights
       if (d < radius) {
         const b = weight * (1 - d / radius);
         if (b > best) { best = b; nearest = lm; }
@@ -940,8 +1010,8 @@ export function buildTrackScenery(track) {
       if (!tryPlace(track, x, y, 40)) continue;
       if (pointInPoly(x, y, track.inner)) continue;
       const { boost } = landmarkBoost(x, y);
-      if (boost < 0.15 && rnd() > 0.35) continue;
-      if (boost < 0.35 && rnd() > 0.55) continue;
+      if (boost < 0.1 && rnd() > 0.5) continue;
+      if (boost < 0.28 && rnd() > 0.7) continue;
       const roll = rnd();
       let img, scale, kind = 'other';
       // Prefer warehouse; sparse chimney/water; tower/billboard rare + capped
@@ -970,8 +1040,9 @@ export function buildTrackScenery(track) {
       if (!tryPlace(track, x, y, 28)) continue;
       if (pointInPoly(x, y, track.outer)) continue;
       const { boost, nearest } = landmarkBoost(x, y);
-      if (boost < 0.12 && rnd() > 0.32) continue;
-      if (boost < 0.3 && rnd() > 0.5) continue;
+      // Keep mid-straight beads; only cull far from any anchor (v22)
+      if (boost < 0.08 && rnd() > 0.55) continue;
+      if (boost < 0.22 && rnd() > 0.72) continue;
       const dStart = Math.hypot(x - startX, y - startY);
       const nearStart = dStart < 280 || (nearest && (nearest.kind === 'start' || nearest.id === 'start_finish'));
       const roll = rnd();
@@ -1001,22 +1072,37 @@ export function buildTrackScenery(track) {
           scale = varyScale(rnd, 0.8, 1.3);
           kind = 'warehouse';
         }
+      } else if (nearest && nearest.kind === 'bead' && roll < 0.88) {
+        // Mid-straight beads: warehouse + standLarge only (caps stay via tryAddStamp)
+        if (hasStandLarge && rnd() < 0.4) {
+          img = pick(sprites.buildings.standLarge, rnd);
+          scale = varyScale(rnd, 0.75, 1.08);
+          kind = 'stand';
+        } else if (hasStandBlock && rnd() < 0.35) {
+          img = pick(sprites.buildings.standBlock, rnd);
+          scale = varyScale(rnd, 0.8, 1.12);
+          kind = 'stand';
+        } else {
+          img = pick(sprites.buildings.warehouse, rnd);
+          scale = varyScale(rnd, 0.8, 1.35);
+          kind = 'warehouse';
+        }
       } else if (roll < 0.06) {
         img = pick(sprites.buildings.shop, rnd);
         scale = varyScale(rnd, 0.75, 1.2);
-      } else if (roll < 0.52) {
+      } else if (roll < 0.58) {
         img = pick(sprites.buildings.warehouse, rnd);
         scale = varyScale(rnd, 0.75, 1.35);
         kind = 'warehouse';
-      } else if (roll < 0.68 && hasStandBlock) {
+      } else if (roll < 0.74 && hasStandBlock) {
         img = pick(sprites.buildings.standBlock, rnd);
         scale = varyScale(rnd, 0.8, 1.15);
         kind = 'stand';
-      } else if (roll < 0.78) {
+      } else if (roll < 0.82) {
         img = pick(sprites.buildings.billboard, rnd);
         scale = varyScale(rnd, 0.7, 1.15);
         kind = 'billboard';
-      } else if (roll < 0.90) {
+      } else if (roll < 0.92) {
         img = pick(sprites.buildings.tower, rnd);
         scale = varyScale(rnd, 0.7, 1.2);
         kind = 'tower';
@@ -1025,6 +1111,44 @@ export function buildTrackScenery(track) {
         scale = varyScale(rnd, 0.7, 1.25);
       }
       if (!img) continue;
+      tryAddStamp(mid, img, x, y, scale, 'mid', y + img.height * scale * 0.45, kind);
+    }
+  }
+
+  // Explicit mid-straight bead clusters — warehouse + standLarge, stampOk capped (v22)
+  for (const bead of beadAnchors) {
+    const cluster = 2 + (rnd() < 0.45 ? 1 : 0);
+    for (let k = 0; k < cluster; k++) {
+      const ang = rnd() * Math.PI * 2;
+      const rad = (k === 0 ? 0 : 10 + rnd() * 28);
+      const x = bead.x + Math.cos(ang) * rad;
+      const y = bead.y + Math.sin(ang) * rad;
+      if (x < -70 || y < -70 || x > track.width + 70 || y > track.height + 70) continue;
+      if (isOnAsphalt(track, x, y)) continue;
+      const inInner = pointInPoly(x, y, track.inner);
+      const inOuter = pointInPoly(x, y, track.outer);
+      if (!inInner && inOuter) continue; // asphalt ring pocket
+      if (!inInner && !inOuter && !tryPlace(track, x, y, 14)) continue;
+      const roll = rnd();
+      let img, scale, kind = 'warehouse';
+      // Inner beads bias standLarge so race zoom reads mass on both sides
+      const preferStand = bead.side === 'in' ? 0.55 : 0.38;
+      if (roll < preferStand && hasStandLarge) {
+        img = pick(sprites.buildings.standLarge, rnd);
+        scale = varyScale(rnd, bead.side === 'in' ? 0.85 : 0.72, 1.08);
+        kind = 'stand';
+      } else if (roll < preferStand + 0.2 && hasStandBlock) {
+        img = pick(sprites.buildings.standBlock, rnd);
+        scale = varyScale(rnd, 0.85, 1.18);
+        kind = 'stand';
+      } else {
+        img = pick(sprites.buildings.warehouse, rnd);
+        scale = varyScale(rnd, 0.9, 1.4);
+        kind = 'warehouse';
+      }
+      if (!img) continue;
+      // Slightly looser stampOk for bead clusters
+      if (!stampOk(stampLog, img, x, y, 90, 1)) continue;
       tryAddStamp(mid, img, x, y, scale, 'mid', y + img.height * scale * 0.45, kind);
     }
   }
@@ -1343,7 +1467,9 @@ export function buildTrackScenery(track) {
     skyline,
     ground,
     startX,
-    startY
+    startY,
+    beadAnchors: beadAnchors.slice(),
+    beadSpacing: BEAD_SPACING
   };
 }
 
@@ -1414,18 +1540,19 @@ function buildGroundPlate(track, theme) {
   const sw = Math.ceil((track.width + margin * 2) / 2);
   const sh = Math.ceil((track.height + margin * 2) / 2);
   const { canvas, ctx } = makeCanvas(sw, sh);
+  // Slightly lifted plate so race zoom isn't void-black (v22)
   const g = ctx.createRadialGradient(sw * 0.5, sh * 0.45, 30, sw * 0.5, sh * 0.5, Math.max(sw, sh) * 0.72);
-  g.addColorStop(0, theme.groundHi || '#242018');
-  g.addColorStop(0.4, theme.ground || '#161410');
-  g.addColorStop(0.75, shade(theme.ground || '#161410', -8));
-  g.addColorStop(1, shade(theme.ground || '#161410', -18));
+  g.addColorStop(0, theme.groundHi || '#2e2a22');
+  g.addColorStop(0.35, '#221e18');
+  g.addColorStop(0.7, theme.ground || '#1a1712');
+  g.addColorStop(1, shade(theme.ground || '#161410', -6));
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, sw, sh);
 
   const rnd = mulberry32(hashStr((track.id || '') + '-gnd'));
 
   // Industrial plate panels across whole world (under + around track)
-  ctx.strokeStyle = 'rgba(255,255,255,0.045)';
+  ctx.strokeStyle = 'rgba(255,255,255,0.07)';
   ctx.lineWidth = 1;
   const panel = 28;
   for (let x = 0; x < sw; x += panel) {
@@ -1467,11 +1594,11 @@ function buildGroundPlate(track, theme) {
   } catch (_) {}
 
   // Warm sodium pools + grit so plate isn't flat black
-  for (let i = 0; i < 18; i++) {
+  for (let i = 0; i < 28; i++) {
     const cx = rnd() * sw, cy = rnd() * sh;
-    const r = 40 + rnd() * 90;
+    const r = 50 + rnd() * 110;
     const rg = ctx.createRadialGradient(cx, cy, 4, cx, cy, r);
-    rg.addColorStop(0, 'rgba(255, 170, 80, 0.05)');
+    rg.addColorStop(0, 'rgba(255, 170, 80, 0.08)');
     rg.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = rg;
     ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
@@ -1486,18 +1613,18 @@ function buildGroundPlate(track, theme) {
     ctx.fillRect(rnd() * sw, rnd() * sh, bw, bh);
   }
 
-  // Soft outer fade — let screen-space horizon read at grid zoom (v19)
+  // Soft outer fade — solid over track ring; gentle edge for horizon peek at grid (v22)
   ctx.save();
   ctx.globalCompositeOperation = 'destination-in';
   const edge = ctx.createRadialGradient(
-    sw * 0.5, sh * 0.5, Math.min(sw, sh) * 0.22,
-    sw * 0.5, sh * 0.5, Math.max(sw, sh) * 0.52
+    sw * 0.5, sh * 0.5, Math.min(sw, sh) * 0.42,
+    sw * 0.5, sh * 0.5, Math.max(sw, sh) * 0.78
   );
   edge.addColorStop(0, 'rgba(0,0,0,1)');
-  edge.addColorStop(0.45, 'rgba(0,0,0,0.92)');
-  edge.addColorStop(0.72, 'rgba(0,0,0,0.45)');
-  edge.addColorStop(0.9, 'rgba(0,0,0,0.12)');
-  edge.addColorStop(1, 'rgba(0,0,0,0)');
+  edge.addColorStop(0.58, 'rgba(0,0,0,1)');
+  edge.addColorStop(0.78, 'rgba(0,0,0,0.9)');
+  edge.addColorStop(0.92, 'rgba(0,0,0,0.62)');
+  edge.addColorStop(1, 'rgba(0,0,0,0.28)');
   ctx.fillStyle = edge;
   ctx.fillRect(0, 0, sw, sh);
   ctx.restore();
@@ -1514,13 +1641,15 @@ export function drawArenaBackground(ctx, scenery, cam, W, H) {
   const packSky = (pack && pack.ready && pack.skyline) ? pack.skyline : null;
 
   if (packSky) {
-    // Full-bleed horizon ONLY (v2.4) — parallax visible behind ground fade (v19)
+    // Full-bleed horizon ONLY (v2.4) — raise city read at race zoom (v22)
     const parallax = 0.14;
+    const z = (cam && cam.zoom) || 1;
+    const raceZoom = z >= 1.15;
     // Base fill: deep night sky (never leave raw canvas black)
     const sky = ctx.createLinearGradient(0, 0, 0, H);
-    sky.addColorStop(0, theme.skyTop || '#040810');
-    sky.addColorStop(0.45, theme.skyMid || '#0a1424');
-    sky.addColorStop(1, theme.ground || '#161410');
+    sky.addColorStop(0, theme.skyTop || '#060c18');
+    sky.addColorStop(0.4, theme.skyMid || '#101c30');
+    sky.addColorStop(1, raceZoom ? '#1c1814' : (theme.ground || '#161410'));
     ctx.fillStyle = sky;
     ctx.fillRect(0, 0, W, H);
 
@@ -1529,28 +1658,34 @@ export function drawArenaBackground(ctx, scenery, cam, W, H) {
     const dw = packSky.width * scale;
     const dh = packSky.height * scale;
     const ox = (W - dw) * 0.5 - ((cam.x * parallax) % Math.max(1, dw * 0.12));
-    const horizonY = H * 0.42;
+    const horizonY = H * (raceZoom ? 0.40 : 0.42);
     // Asset: sky upper ~65%, city ~20%, black foot ~15% — base ≈ 0.80 of image
-    const buildingBase = 0.78;
+    const buildingBase = raceZoom ? 0.76 : 0.78;
     const oy = horizonY - dh * buildingBase - (cam.y * parallax * 0.035);
     ctx.imageSmoothingEnabled = true;
     ctx.globalAlpha = 1;
     ctx.drawImage(packSky, ox, oy, dw, dh);
+    if (raceZoom) {
+      // Second soft pass lifts city silhouette at tight zoom
+      ctx.globalAlpha = 0.55;
+      ctx.drawImage(packSky, ox, oy + H * 0.008, dw, dh);
+      ctx.globalAlpha = 1;
+    }
 
-    // Warm underlay starts BELOW city band — do not crush skyline to black
-    const gnd = ctx.createLinearGradient(0, horizonY + H * 0.06, 0, H);
+    // Warm underlay — ease crush at race zoom so city band stays visible
+    const gnd = ctx.createLinearGradient(0, horizonY + H * (raceZoom ? 0.08 : 0.06), 0, H);
     gnd.addColorStop(0, 'rgba(22, 20, 16, 0)');
-    gnd.addColorStop(0.22, 'rgba(36, 32, 24, 0.35)');
+    gnd.addColorStop(0.22, raceZoom ? 'rgba(36, 32, 24, 0.16)' : 'rgba(36, 32, 24, 0.35)');
     gnd.addColorStop(0.55, theme.groundHi || '#242018');
     gnd.addColorStop(1, theme.ground || '#161410');
     ctx.fillStyle = gnd;
-    ctx.fillRect(0, horizonY + H * 0.06, W, H - horizonY);
+    ctx.fillRect(0, horizonY + H * (raceZoom ? 0.08 : 0.06), W, H - horizonY);
 
-    // Soft sodium wash — city stays readable
+    // Soft sodium wash — stronger at race zoom so horizon reads
     ctx.globalCompositeOperation = 'screen';
-    ctx.globalAlpha = 0.16;
+    ctx.globalAlpha = raceZoom ? 0.38 : 0.22;
     ctx.fillStyle = '#ffc070';
-    ctx.fillRect(0, horizonY - H * 0.06, W, H * 0.1);
+    ctx.fillRect(0, horizonY - H * 0.08, W, H * 0.12);
     ctx.globalCompositeOperation = 'source-over';
     ctx.globalAlpha = 1;
   } else {
@@ -1592,11 +1727,14 @@ export function drawGroundPlate(ctx, scenery, track, zoom = 1) {
   const margin = g._margin || 200;
   const scale = g._scale || 2;
   ctx.imageSmoothingEnabled = true;
-  // At grid/overview zoom, pull plate alpha so screen-space horizon stays readable (v19)
+  // Overview: plate still reads (long circuit); race: skyline peek through plate (v22)
   const z = zoom || 1;
-  const fade = z < 0.7 ? (0.42 + z * 0.55) : 1; // pull plate more so horizon reads
+  let fade = 0.7;
+  if (z < 0.7) fade = 0.55 + z * 0.4;
+  else if (z < 1.05) fade = 0.72 + (z - 0.7) * 0.2; // grid ~0.88 → ~0.76
+  else if (z < 1.35) fade = 0.74;
   ctx.save();
-  ctx.globalAlpha = Math.max(0.5, Math.min(1, fade));
+  ctx.globalAlpha = Math.max(0.55, Math.min(0.88, fade));
   ctx.drawImage(g, -margin, -margin, g.width * scale, g.height * scale);
   ctx.restore();
 }

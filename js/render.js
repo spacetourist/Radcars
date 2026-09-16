@@ -471,8 +471,8 @@ export function createRenderer(canvas) {
 
   /** Industrial infield: parking plate, seams, low yard marks — loop sits in a yard. */
   function drawInfieldYard(ctx, track) {
-    const plate = '#2c3440';
-    const plateHi = '#3a4452';
+    const plate = '#3e4856';
+    const plateHi = '#505a6a';
     ctx.beginPath();
     pathPoly(ctx, track.inner);
     const g = ctx.createRadialGradient(
@@ -481,7 +481,7 @@ export function createRenderer(canvas) {
     );
     g.addColorStop(0, plateHi);
     g.addColorStop(0.55, plate);
-    g.addColorStop(1, '#242a34');
+    g.addColorStop(1, '#323844');
     ctx.fillStyle = g;
     ctx.fill();
 
