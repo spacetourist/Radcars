@@ -782,9 +782,10 @@ function applyPackBuildingArt(buildings, characters, props) {
   // v2.5/v27 Cargo quay — Md preferred; never outside cargo_dock (profile.quayAssets)
   if (sc.crane || sc.craneMd || sc.craneSm) {
     const variants = [];
+    // v28: prefer Md only for race-readable quay landmarks (skip Sm)
     if (sc.craneMd) variants.push(sc.craneMd);
-    if (sc.craneSm) variants.push(sc.craneSm);
-    if (sc.crane) variants.push(sc.crane);
+    else if (sc.crane) variants.push(sc.crane);
+    else if (sc.craneSm) variants.push(sc.craneSm);
     buildings.crane = variants;
   }
   if (sc.containers || sc.containersMd || sc.containersSm) {
@@ -930,6 +931,7 @@ export function getSceneryDensityProfile(track) {
     pinchStandExtra: 0,
     urbanSkyline: false,     // Gridlock: warehouseSm + billboardMd + towerSm beads
     pinchStandsOnly: false,  // Razor: stands only at narrow pinch
+    pinchRadius: 240,        // Razor: expanded stands-only zone around waists
     standsOnlyAtSF: false,   // Cargo: grandstands only at S/F
     quayAssets: false,       // Cargo: crane + containers
     craneCount: 0,
@@ -939,38 +941,39 @@ export function getSceneryDensityProfile(track) {
     label: 'reference'
   };
   if (id === 'gridlock') {
-    // Urban street: billboards lean into cap 9; skyline beads = whSm/bbMd/towerSm; denser lamps
+    // Urban street (v28): billboardMd + streetlight beads dominate race frame; warehouses rare
     return {
       ...base,
-      billboardCap: 9,
-      billboardBias: 0.42,
+      billboardCap: 12,
+      billboardBias: 0.72,
       warehouseScale: [0.68, 1.05],
-      warehouseBias: 0.48,
-      standBias: 0.06,
-      infieldYardN: 16,
+      warehouseBias: 0.14,
+      standBias: 0.05,
+      infieldYardN: 14,
       palmChance: 0.02,
-      lampChance: 0.48,
+      lampChance: 0.62,
       urbanSkyline: true,
-      standsOnlyAtSF: true, // cut standLarge off S/F (v27)
-      infieldGapMul: 1.35,
+      standsOnlyAtSF: true, // standLarge only at S/F
+      infieldGapMul: 1.4,
       label: 'urban_street'
     };
   }
   if (id === 'razor_hairpin') {
-    // Night canyon: stands-only at pinch; warehouses on wide lobes; darker infield
+    // Night canyon (v28): stands-only pinch; warehouseBias ~0; darker infield
     return {
       ...base,
-      standBias: 0.82,
-      warehouseBias: 0.22,
-      billboardBias: 0.08,
-      pinchStandExtra: 6,
+      standBias: 0.9,
+      warehouseBias: 0.06,
+      billboardBias: 0.06,
+      pinchStandExtra: 8,
       pinchStandsOnly: true,
-      infieldYardN: 8,
-      palmChance: 0.02,
-      lampChance: 0.14,
-      warehouseScale: [0.75, 1.15],
+      pinchRadius: 360,
+      infieldYardN: 6,
+      palmChance: 0.015,
+      lampChance: 0.12,
+      warehouseScale: [0.72, 1.1],
       infieldDark: true,
-      infieldGapMul: 1.2,
+      infieldGapMul: 1.25,
       label: 'night_canyon'
     };
   }
@@ -1147,7 +1150,8 @@ export function buildTrackScenery(track) {
   const pinchLmsCore = landmarks.filter((lm) =>
     lm.kind === 'kink' || lm.kind === 'chicane' ||
     (lm.id && /waist|pinch|apex|hairpin/i.test(lm.id)));
-  function nearPinch(x, y, r = 220) {
+  const pinchR = (profile.pinchRadius != null ? profile.pinchRadius : 240);
+  function nearPinch(x, y, r = pinchR) {
     for (const lm of pinchLmsCore) {
       if (Math.hypot(x - lm.x, y - lm.y) < r) return true;
     }
@@ -1229,15 +1233,27 @@ export function buildTrackScenery(track) {
       let img, scale, kind = 'other';
       const [wLo, wHi] = profile.warehouseScale;
       const bbGate = 1 - profile.billboardBias; // lower → more billboards
-      // Prefer warehouse (+ profile bias); tower/billboard rare + capped
-      if (roll < 0.42 + profile.warehouseBias * 0.25) {
+      const atPinchFar = profile.pinchStandsOnly && nearPinch(x, y);
+      if (atPinchFar) {
+        img = pick(sprites.buildings.stand, rnd); scale = varyScale(rnd, 0.85, 1.2); kind = 'stand';
+      } else if (profile.urbanSkyline) {
+        // Gridlock far: light warehouseSm / towerSm — save billboard cap for mid race beads
+        if (roll < 0.22 + profile.warehouseBias * 0.5) {
+          img = pick(whSmListEarly, rnd); scale = varyScale(rnd, wLo, wHi); kind = 'warehouse';
+        } else if (roll < 0.55) {
+          img = pick(towerSmList, rnd); scale = varyScale(rnd, 0.7, 1.15); kind = 'tower';
+        } else if (roll < 0.72) {
+          img = pick(sprites.buildings.chimney, rnd); scale = varyScale(rnd, 0.75, 1.25);
+        } else {
+          img = pick(towerSmList, rnd); scale = varyScale(rnd, 0.65, 1.1); kind = 'tower';
+        }
+      } else if (roll < 0.42 + profile.warehouseBias * 0.25) {
         img = pick(sprites.buildings.warehouse, rnd); scale = varyScale(rnd, wLo, wHi); kind = 'warehouse';
       } else if (roll < 0.62) {
         img = pick(sprites.buildings.chimney, rnd); scale = varyScale(rnd, 0.75, 1.3);
       } else if (roll < 0.72) {
         img = pick(sprites.buildings.water, rnd); scale = varyScale(rnd, 0.7, 1.25);
       } else if (roll < bbGate || profile.billboardBias >= 0.22) {
-        // Gridlock: save billboard cap for trackside mid pass
         img = pick(sprites.buildings.tower, rnd); scale = varyScale(rnd, 0.7, 1.2); kind = 'tower';
       } else {
         img = pick(sprites.buildings.billboard, rnd); scale = varyScale(rnd, 0.7, 1.15); kind = 'billboard';
@@ -1267,7 +1283,7 @@ export function buildTrackScenery(track) {
       if (boost < 0.22 && rnd() > 0.72) continue;
       const dStart = Math.hypot(x - startX, y - startY);
       const nearStart = dStart < 280 || (nearest && (nearest.kind === 'start' || nearest.id === 'start_finish'));
-      const atPinch = profile.pinchStandsOnly && nearPinch(x, y, 240);
+      const atPinch = profile.pinchStandsOnly && nearPinch(x, y);
       const allowStand = !profile.standsOnlyAtSF || nearStart;
       const roll = rnd();
       let img, scale, kind = 'other';
@@ -1308,6 +1324,10 @@ export function buildTrackScenery(track) {
           img = pick(sprites.buildings.containers, rnd);
           scale = varyScale(rnd, 1.1, 1.45);
           kind = 'containers';
+        } else if (profile.urbanSkyline) {
+          img = pick(bbMdList, rnd);
+          scale = varyScale(rnd, 0.85, 1.22);
+          kind = 'billboard';
         } else {
           img = pick(sprites.buildings.warehouse, rnd);
           scale = varyScale(rnd, 0.8, 1.3);
@@ -1317,18 +1337,19 @@ export function buildTrackScenery(track) {
         // Mid-straight beads — identity mix (v25)
         const [wLo, wHi] = profile.warehouseScale;
         if (profile.urbanSkyline) {
-          // Gridlock: warehouseSm + billboardMd + towerSm (few standLarge)
+          // Gridlock v28: billboardMd dominant; warehouseSm rare; towerSm accents
           const u = rnd();
-          if (u < 0.38) {
+          const whGate = Math.min(0.2, 0.05 + profile.warehouseBias * 0.4);
+          if (u < whGate) {
             img = pick(whSmListEarly, rnd); scale = varyScale(rnd, wLo, wHi); kind = 'warehouse';
-          } else if (u < 0.38 + profile.billboardBias) {
-            img = pick(bbMdList, rnd); scale = varyScale(rnd, 0.85, 1.2); kind = 'billboard';
-          } else if (u < 0.82) {
+          } else if (u < whGate + Math.max(0.45, profile.billboardBias)) {
+            img = pick(bbMdList, rnd); scale = varyScale(rnd, 0.9, 1.28); kind = 'billboard';
+          } else if (u < 0.9) {
             img = pick(towerSmList, rnd); scale = varyScale(rnd, 0.7, 1.15); kind = 'tower';
           } else if (allowStand && hasStandLarge && rnd() < profile.standBias) {
             img = pick(sprites.buildings.standLarge, rnd); scale = varyScale(rnd, 0.72, 1.0); kind = 'stand';
           } else {
-            img = pick(whSmListEarly, rnd); scale = varyScale(rnd, wLo, wHi); kind = 'warehouse';
+            img = pick(bbMdList, rnd); scale = varyScale(rnd, 0.9, 1.22); kind = 'billboard';
           }
         } else if (profile.quayAssets) {
           // Cargo long straight: warehouse + containers; never stands
@@ -1361,9 +1382,12 @@ export function buildTrackScenery(track) {
         // Profile stamp mix — warehouse / stand / billboard bias (shared density, different identity)
         const [wLo, wHi] = profile.warehouseScale;
         const r2 = rnd();
-        const whCut = profile.warehouseBias;
+        // Gridlock: invert mix — billboards first, warehouses scarce
+        const whCut = profile.urbanSkyline
+          ? Math.min(0.16, profile.warehouseBias * 0.7)
+          : profile.warehouseBias;
         const standCut = allowStand ? (whCut + profile.standBias * 0.55) : whCut;
-        const bbCut = standCut + profile.billboardBias;
+        const bbCut = standCut + (profile.urbanSkyline ? Math.max(0.5, profile.billboardBias) : profile.billboardBias);
         if (hasContainers && profile.quayAssets && r2 < profile.containerBias * 0.35) {
           img = pick(sprites.buildings.containers, rnd);
           scale = varyScale(rnd, 1.1, 1.45);
@@ -1386,15 +1410,16 @@ export function buildTrackScenery(track) {
           kind = 'stand';
         } else if (r2 < bbCut || profile.billboardBias >= 0.22) {
           img = pick(profile.urbanSkyline ? bbMdList : sprites.buildings.billboard, rnd);
-          scale = varyScale(rnd, 0.7, 1.15);
+          scale = varyScale(rnd, profile.urbanSkyline ? 0.85 : 0.7, profile.urbanSkyline ? 1.25 : 1.15);
           kind = 'billboard';
         } else if (rnd() < 0.45) {
           img = pick(profile.urbanSkyline ? towerSmList : sprites.buildings.tower, rnd);
           scale = varyScale(rnd, 0.7, 1.2);
           kind = 'tower';
         } else {
-          img = pick(sprites.buildings.chimney, rnd);
+          img = pick(profile.urbanSkyline ? bbMdList : sprites.buildings.chimney, rnd);
           scale = varyScale(rnd, 0.7, 1.25);
+          kind = profile.urbanSkyline ? 'billboard' : 'other';
         }
       }
       if (!img) continue;
@@ -1405,7 +1430,7 @@ export function buildTrackScenery(track) {
   // Gridlock urban: warm billboards along outer arc — denser to use billboardCap 9 (v25)
   if (profile.billboardBias >= 0.22) {
     let acc = 0;
-    const spacing = profile.billboardBias >= 0.35 ? 280 : 420;
+    const spacing = profile.billboardBias >= 0.55 ? 200 : (profile.billboardBias >= 0.35 ? 280 : 420);
     let nextAt = spacing * 0.28;
     for (const e of edges) {
       const end = acc + e.len;
@@ -1417,11 +1442,13 @@ export function buildTrackScenery(track) {
         for (const dist of [55, 72, 40, 90]) {
           const x = bx + e.nx * dist + (rnd() - 0.5) * 10;
           const y = by + e.ny * dist + (rnd() - 0.5) * 10;
+          if (y < 50 || y > track.height - 50) continue; // keep in race-readable band
+          if (nearStartFinish(x, y, 360)) continue; // race beads, not S/F wall
           if (pointInPoly(x, y, track.outer)) continue;
           if (!tryPlace(track, x, y, 16)) continue;
           const img = pick(bbMdList.length ? bbMdList : sprites.buildings.billboard, rnd);
           if (!img) break;
-          if (tryAddStamp(mid, img, x, y, varyScale(rnd, 0.9, 1.25), 'mid',
+          if (tryAddStamp(mid, img, x, y, varyScale(rnd, 0.95, 1.3), 'mid',
             y + img.height * 0.45, 'billboard')) {
             placed = true;
             break;
@@ -1438,7 +1465,7 @@ export function buildTrackScenery(track) {
   const whSmList = whSmListEarly;
   for (const bead of beadAnchors) {
     const isIn = bead.side === 'in';
-    const atPinch = profile.pinchStandsOnly && nearPinch(bead.x, bead.y, 240);
+    const atPinch = profile.pinchStandsOnly && nearPinch(bead.x, bead.y);
     const atSF = nearStartFinish(bead.x, bead.y, 300);
     const allowStand = !profile.standsOnlyAtSF || atSF;
     // Infield: 1–2 lighter stamps with gaps; outfield: richer 2–3
@@ -1460,12 +1487,13 @@ export function buildTrackScenery(track) {
       const roll = rnd();
       let img, scale, kind = 'warehouse';
       if (isIn) {
-        // Lighter infield — Razor pinch: stands only; never standLarge walls
-        if (atPinch || (roll < (profile.pinchStandsOnly ? 0.55 : 0.4) && allowStand)) {
+        // Lighter infield — Razor pinch: stands only; cut warehouses on narrow canyon
+        if (atPinch || (profile.pinchStandsOnly && profile.warehouseBias < 0.12) ||
+            (roll < (profile.pinchStandsOnly ? 0.7 : 0.4) && allowStand)) {
           img = pick(sprites.buildings.stand, rnd);
           scale = varyScale(rnd, 0.82, 1.08);
           kind = 'stand';
-        } else if (!atPinch) {
+        } else if (!atPinch && profile.warehouseBias >= 0.12) {
           img = pick(whSmList, rnd);
           scale = varyScale(rnd, 0.78, 1.12);
           kind = 'warehouse';
@@ -1491,16 +1519,17 @@ export function buildTrackScenery(track) {
         // Outfield bead identity mix (v25)
         const [wLo, wHi] = profile.warehouseScale;
         if (profile.urbanSkyline) {
-          // Gridlock skyline beads: warehouseSm + billboardMd + towerSm
+          // Gridlock v28 race beads: billboardMd first, then towerSm; warehouses scarce
           const u = rnd();
-          if (u < 0.36) {
-            img = pick(whSmList, rnd); scale = varyScale(rnd, wLo, Math.min(wHi, 1.15)); kind = 'warehouse';
-          } else if (u < 0.36 + profile.billboardBias) {
-            img = pick(bbMdList, rnd); scale = varyScale(rnd, 0.8, 1.15); kind = 'billboard';
-          } else if (u < 0.88) {
+          const whGate = Math.min(0.18, 0.04 + profile.warehouseBias * 0.35);
+          if (u < whGate) {
+            img = pick(whSmList, rnd); scale = varyScale(rnd, wLo, Math.min(wHi, 1.1)); kind = 'warehouse';
+          } else if (u < whGate + Math.max(0.5, profile.billboardBias)) {
+            img = pick(bbMdList, rnd); scale = varyScale(rnd, 0.88, 1.25); kind = 'billboard';
+          } else if (u < 0.92) {
             img = pick(towerSmList, rnd); scale = varyScale(rnd, 0.7, 1.12); kind = 'tower';
           } else {
-            img = pick(whSmList, rnd); scale = varyScale(rnd, wLo, wHi); kind = 'warehouse';
+            img = pick(bbMdList, rnd); scale = varyScale(rnd, 0.85, 1.18); kind = 'billboard';
           }
         } else if (profile.quayAssets) {
           // Cargo long straight: warehouse + containers; stands only at S/F
@@ -1564,14 +1593,19 @@ export function buildTrackScenery(track) {
         const y = by - e.ny * dist + (rnd() - 0.5) * 12;
         if (!pointInPoly(x, y, track.inner)) continue;
         if (isOnAsphalt(track, x, y)) continue;
-        const atPinch = profile.pinchStandsOnly && nearPinch(x, y, 220);
+        const atPinch = profile.pinchStandsOnly && nearPinch(x, y);
         const roll = rnd();
         let img, scale, kind;
-        if (atPinch || (roll < 0.38 && !profile.standsOnlyAtSF)) {
+        // Razor: stands-only at pinch; cut warehouses from narrow geometry entirely
+        if (atPinch || (profile.pinchStandsOnly && profile.warehouseBias < 0.12 && roll < 0.72)) {
           img = pick(sprites.buildings.stand, rnd);
           scale = varyScale(rnd, 0.8, 1.05);
           kind = 'stand';
-        } else if (!atPinch) {
+        } else if (roll < 0.38 && !profile.standsOnlyAtSF) {
+          img = pick(sprites.buildings.stand, rnd);
+          scale = varyScale(rnd, 0.8, 1.05);
+          kind = 'stand';
+        } else if (!atPinch && profile.warehouseBias >= 0.12) {
           img = pick(whSm, rnd);
           scale = varyScale(rnd, 0.75, 1.08);
           kind = 'warehouse';
@@ -1927,25 +1961,51 @@ export function buildTrackScenery(track) {
       const nx = dx / len, ny = dy / len;
       const tx = -ny, ty = nx;
       let placed = false;
-      for (const dist of [120, 150, 95, 180, 70, 210]) {
-        for (const side of [1, -1, 0.5, -0.5]) {
-          const x = lm.x + nx * dist + tx * side * 55;
-          const y = lm.y + ny * dist + ty * side * 55;
+      // Prefer near-trackside in-bounds so race zoom reads the crane (v28)
+      const margin = 40;
+      for (const dist of [85, 105, 70, 130, 155, 190, 60]) {
+        for (const side of [1, -1, 0.35, -0.35, 0.7, -0.7, 0]) {
+          const x = lm.x + nx * dist + tx * side * 48;
+          const y = lm.y + ny * dist + ty * side * 48;
+          // Keep crane fully in race-readable bounds (avoid y<0 horizon clip)
+          if (x < margin || y < margin || x > track.width - margin || y > track.height - margin) continue;
           if (isOnAsphalt(track, x, y)) continue;
           const inInner = pointInPoly(x, y, track.inner);
           const inOuter = pointInPoly(x, y, track.outer);
           if (!inInner && inOuter) continue;
           if (!inInner && !inOuter && !tryPlace(track, x, y, 12)) continue;
+          // Prefer craneMd (first in variants list)
           const img = pick(sprites.buildings.crane, rnd);
           if (!img) continue;
           if (!stampOk(stampLog, img, x, y, 160, 1)) continue;
           const layerList = inInner ? near : mid;
           // Bypass tower/billboard caps — crane is its own kind
-          addItem(layerList, img, x, y, varyScale(rnd, 1.35, 1.75), inInner ? 'near' : 'mid',
-            y + img.height * 0.55, 'crane');
+          const sca = varyScale(rnd, 1.65, 2.05);
+          // Prefer near layer so crane draws after mid warehouses
+          const craneLayerList = near;
+          const craneLayerName = 'near';
+          // High sortY so lattice boom paints above warehouse stacks (v28)
+          addItem(craneLayerList, img, x, y, sca, craneLayerName,
+            y + img.height * sca * 0.95 + 80, 'crane');
           stampLog.push({ img, x, y, kind: 'crane' });
           craneCount++;
           used.push({ x: lm.x, y: lm.y });
+          // Cull overlapping warehouses so crane silhouette reads
+          for (let i = mid.length - 1; i >= 0; i--) {
+            const o = mid[i];
+            if (!o || o.kind !== 'warehouse') continue;
+            if (Math.hypot(o.x - x, o.y - y) < 140) mid.splice(i, 1);
+          }
+          for (let i = near.length - 1; i >= 0; i--) {
+            const o = near[i];
+            if (!o || o.kind !== 'warehouse') continue;
+            if (Math.hypot(o.x - x, o.y - y) < 140) near.splice(i, 1);
+          }
+          for (let i = stampLog.length - 1; i >= 0; i--) {
+            const o = stampLog[i];
+            if (!o || o.kind !== 'warehouse') continue;
+            if (Math.hypot(o.x - x, o.y - y) < 140) stampLog.splice(i, 1);
+          }
           placed = true;
           break;
         }
@@ -1989,24 +2049,30 @@ export function buildTrackScenery(track) {
     }
   }
 
-  // Sparse corner/off-track fill — warehouse-dominated; NO cyan tower clusters (v19)
+  // Sparse corner/off-track fill — profile-biased; NO cyan tower clusters (v19/v28)
   for (let i = 0; i < 22; i++) {
     const x = rnd() * (track.width + 160) - 80;
     const y = rnd() * (track.height + 160) - 80;
     if (!tryPlace(track, x, y, 50)) continue;
     if (pointInPoly(x, y, track.outer)) continue;
+    const atPinch = profile.pinchStandsOnly && nearPinch(x, y);
     const roll = rnd();
     let img, kind = 'other';
-    const whCut = 0.45 + profile.warehouseBias * 0.3;
-    const standCut = profile.standsOnlyAtSF ? whCut : (whCut + profile.standBias * 0.35);
-    const bbCut = standCut + profile.billboardBias;
-    if (hasContainers && profile.quayAssets && roll < profile.containerBias * 0.4) {
-      img = pick(sprites.buildings.containers, rnd); kind = 'containers';
-    } else if (roll < whCut) { img = pick(sprites.buildings.warehouse, rnd); kind = 'warehouse'; }
-    else if (roll < standCut && hasStandBlock) { img = pick(sprites.buildings.standBlock, rnd); kind = 'stand'; }
-    else if (roll < bbCut || profile.billboardBias >= 0.22) { img = pick(sprites.buildings.billboard, rnd); kind = 'billboard'; }
-    else if (roll < 0.92) { img = pick(sprites.buildings.chimney, rnd); }
-    else { img = pick(sprites.buildings.tower, rnd); kind = 'tower'; }
+    if (atPinch) {
+      img = pick(hasStandBlock ? sprites.buildings.standBlock : sprites.buildings.stand, rnd);
+      kind = 'stand';
+    } else {
+      const whCut = profile.warehouseBias < 0.15 ? profile.warehouseBias * 0.5 : (0.45 + profile.warehouseBias * 0.3);
+      const standCut = profile.standsOnlyAtSF ? whCut : (whCut + profile.standBias * 0.35);
+      const bbCut = standCut + profile.billboardBias;
+      if (hasContainers && profile.quayAssets && roll < profile.containerBias * 0.4) {
+        img = pick(sprites.buildings.containers, rnd); kind = 'containers';
+      } else if (roll < whCut) { img = pick(sprites.buildings.warehouse, rnd); kind = 'warehouse'; }
+      else if (roll < standCut && hasStandBlock) { img = pick(sprites.buildings.standBlock, rnd); kind = 'stand'; }
+      else if (roll < bbCut || profile.billboardBias >= 0.22) { img = pick(sprites.buildings.billboard, rnd); kind = 'billboard'; }
+      else if (roll < 0.92) { img = pick(sprites.buildings.chimney, rnd); }
+      else { img = pick(sprites.buildings.tower, rnd); kind = 'tower'; }
+    }
     if (!img) continue;
     const scale = varyScale(rnd, 0.75, 1.3);
     tryAddStamp(far, img, x, y, scale, 'far', y, kind);
@@ -2192,7 +2258,7 @@ function buildGroundPlate(track, theme) {
 
   // Razor night-canyon: crush infield plate brightness (fewer lit windows feel)
   if (theme.infieldDark) {
-    ctx.fillStyle = 'rgba(4, 2, 8, 0.38)';
+    ctx.fillStyle = 'rgba(3, 1, 6, 0.52)';
     ctx.fillRect(0, 0, sw, sh);
   }
 
@@ -2517,6 +2583,7 @@ export function createSceneryCache() {
       if (cached && cached.trackId === track.id && cached._packGen === packGen) return cached;
       cached = buildTrackScenery(track);
       cached._packGen = packGen;
+      try { if (typeof window !== 'undefined') window.__RAD_SCENERY__ = cached; } catch (_) {}
       return cached;
     },
     clear() { cached = null; }

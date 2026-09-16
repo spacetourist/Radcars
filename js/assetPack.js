@@ -214,7 +214,7 @@ function erodeFringe1px(ctx, w, h) {
  * Clears neon on (1) canvas AABB border and (2) alpha-silhouette fringe —
  * magenta/cyan plates often follow the sprite outline, not just the crop box.
  */
-function isHighSatNeon(r, g, b) {
+function isHighSatNeon(r, g, b, opts = {}) {
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
   if (max < 120) return false;
@@ -222,10 +222,10 @@ function isHighSatNeon(r, g, b) {
   if (sat < 55) return false;
   // cyan / aqua
   if (g > 130 && b > 130 && r < Math.min(g, b) * 0.6) return true;
-  // yellow
-  if (r > 150 && g > 140 && b < 100) return true;
-  // lime / chartreuse
-  if (g > 150 && r < g * 0.8 && b < g * 0.6) return true;
+  // yellow — preserve on crane (v2.6 yellow sodium lights)
+  if (!opts.preserveYellow && r > 150 && g > 140 && b < 100) return true;
+  // lime / chartreuse (skip when preserving yellow — avoid eating warm sodium)
+  if (!opts.preserveYellow && g > 150 && r < g * 0.8 && b < g * 0.6) return true;
   // magenta / hot pink / fuchsia silhouette strokes
   if (r > 130 && b > 80 && g < Math.min(r, b) * 0.75) return true;
   // pink (high R, mid B, low G)
@@ -238,7 +238,7 @@ function alphaAt(d, w, h, x, y) {
   return d[(y * w + x) * 4 + 3];
 }
 
-export function stripNeonEdgeFrames(canvas, borderPx = 3, reBbox = true) {
+export function stripNeonEdgeFrames(canvas, borderPx = 3, reBbox = true, stripOpts = {}) {
   if (!canvas || !canvas.width || !canvas.height) return canvas;
   let cur = canvas;
   const bp = Math.max(1, borderPx | 0);
@@ -255,7 +255,7 @@ export function stripNeonEdgeFrames(canvas, borderPx = 3, reBbox = true) {
       for (let x = 0; x < w; x++) {
         const i = (y * w + x) * 4;
         if (d[i + 3] < 8) continue;
-        if (!isHighSatNeon(d[i], d[i + 1], d[i + 2])) continue;
+        if (!isHighSatNeon(d[i], d[i + 1], d[i + 2], stripOpts)) continue;
 
         const onCanvasEdge = x < bp || y < bp || x >= w - bp || y >= h - bp;
         let nearEmpty = onCanvasEdge;
@@ -350,6 +350,13 @@ export function chromaKeyAndCrop(source, opts = {}) {
       d[i + 3] = 0;
       continue;
     }
+    // Green-screen plate (#00FF00) — crane v2.6
+    if (opts.alsoKeyGreen || (key.g > 200 && key.r < 80)) {
+      if ((g > 200 && r < 55 && b < 55) || (g > 150 && r < g * 0.55 && b < g * 0.55 && (g - Math.max(r, b)) > 45)) {
+        d[i + 3] = 0;
+        continue;
+      }
+    }
 
     const dist = Math.abs(r - key.r) + Math.abs(g - key.g) + Math.abs(b - key.b);
     const rb = Math.min(r, b);
@@ -443,8 +450,8 @@ export function keyHotPinkPlate(canvas) {
     const sat = max - min;
     // Classic magenta key
     const classic = Math.abs(r - b) <= 55 && r > 160 && g < 90;
-    // Rose / hot-pink plate (containers/crane bg ~195,41,106)
-    const rose = r > 140 && g < 95 && b > 55 && r > g * 1.7 && sat > 70 && (r + b) > g * 3.2;
+    // Rose / hot-pink plate (containers/crane bg ~195,41,106) — slightly broader for v2.6 leftovers
+    const rose = r > 125 && g < 110 && b > 40 && r > g * 1.45 && sat > 55 && (r + b) > g * 2.6;
     // Deep fuchsia plate
     const fuchsia = r > 120 && b > 90 && g < 70 && r > 100 && sat > 80;
     if (classic || rose || fuchsia) {
@@ -453,6 +460,33 @@ export function keyHotPinkPlate(canvas) {
   }
   ctx.putImageData(id, 0, 0);
   return bboxCrop(canvas, 1);
+}
+
+/**
+ * Zero solid green-screen plates (#00FF00 and near-green spill) left on quay art.
+ */
+export function keyGreenPlate(canvas) {
+  if (!canvas || !canvas.width) return canvas;
+  const w = canvas.width | 0;
+  const h = canvas.height | 0;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  const id = ctx.getImageData(0, 0, w, h);
+  const d = id.data;
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] < 1) continue;
+    const r = d[i], g = d[i + 1], b = d[i + 2];
+    const maxRB = Math.max(r, b);
+    const pure = g > 200 && r < 55 && b < 55;
+    const near = g > 150 && r < g * 0.55 && b < g * 0.55 && (g - maxRB) > 45;
+    if (pure || near) d[i + 3] = 0;
+  }
+  ctx.putImageData(id, 0, 0);
+  return bboxCrop(canvas, 1);
+}
+
+/** Fit scenery but keep yellow sodium lights (crane v2.6). */
+function fitSceneryPreserveYellow(source, maxW, maxH) {
+  return fitCanvas(source, maxW, maxH, { stripNeonEdge: true, preserveYellow: true });
 }
 
 /**
@@ -472,10 +506,11 @@ export function neutralizePinkNeon(canvas) {
     const max = Math.max(r, g, b), min = Math.min(r, g, b);
     const sat = max - min;
     if (sat < 45 || max < 90) continue;
-    // Magenta / fuchsia / hot-pink neon (including unbalanced rose)
+    // Magenta / fuchsia / hot-pink neon (including unbalanced rose / lattice spill)
     const isPink =
-      (r > 120 && b > 80 && g < Math.min(r, b) * 0.85 && r + b > g * 2.2) ||
-      (Math.abs(r - b) <= 50 && r > 140 && g < 100);
+      (r > 110 && b > 70 && g < Math.min(r, b) * 0.9 && r + b > g * 2.0) ||
+      (Math.abs(r - b) <= 55 && r > 130 && g < 110) ||
+      (r > 100 && b > 60 && g < 90 && r > g * 1.35 && b > g * 0.9 && sat > 40);
     if (!isPink) continue;
     const lum = (r * 0.3 + g * 0.4 + b * 0.3) / 255;
     // Yellow sodium
@@ -514,12 +549,15 @@ export function processPackSprite(source, opts = {}) {
       soft: opts.soft,
       pad: opts.pad,
       keyRgb,
-      skipMagentaFringe: opts.skipMagentaFringe || (keyRgb.g > 200 && keyRgb.r < 40)
+      skipMagentaFringe: opts.skipMagentaFringe || (keyRgb.g > 200 && keyRgb.r < 40),
+      alsoKeyGreen: keyRgb.g > 200 && keyRgb.r < 80
     });
   }
   // Neon plate strip is opt-in — scenery stamps enable it; cars keep edge paint
   if (opts.stripNeonEdge) {
-    out = stripNeonEdgeFrames(out, opts.neonEdgePx != null ? opts.neonEdgePx : 3, true);
+    out = stripNeonEdgeFrames(out, opts.neonEdgePx != null ? opts.neonEdgePx : 3, true, {
+      preserveYellow: !!opts.preserveYellow
+    });
   }
   // Quay sprites: force hot-pink plate key even when baked alpha fooled the loader
   if (opts.forcePlateKey) {
@@ -539,7 +577,9 @@ export function fitCanvas(source, maxW, maxH, opts = {}) {
   ctx.clearRect(0, 0, dw, dh);
   ctx.drawImage(source, 0, 0, dw, dh);
   if (opts.stripNeonEdge) {
-    return stripNeonEdgeFrames(canvas, opts.neonEdgePx != null ? opts.neonEdgePx : 3, true);
+    return stripNeonEdgeFrames(canvas, opts.neonEdgePx != null ? opts.neonEdgePx : 3, true, {
+      preserveYellow: !!opts.preserveYellow
+    });
   }
   return canvas;
 }
@@ -697,13 +737,18 @@ export function loadAssetPack() {
     // Scenery kinds from manifest list
     const sceneryResults = await Promise.all(sceneryList.map(async (rel) => {
       const key = keyFromRel(rel);
-      const quay = /crane|containers/i.test(key) || /crane|containers/i.test(rel);
+      const isCrane = /crane/i.test(key) || /crane/i.test(rel);
+      const isContainers = /containers/i.test(key) || /containers/i.test(rel);
+      const quay = isCrane || isContainers;
+      // v2.6 crane: green #00FF00 screen + residual rose; keep yellow sodium lights
       const canvas = await tryProcessed(rel, {
-        keyColor: chromaDefault,
+        keyColor: isCrane ? '#00FF00' : chromaDefault,
+        skipMagentaFringe: isCrane,
         stripNeonEdge: true,
         neonEdgePx: quay ? 5 : 3,
+        preserveYellow: isCrane,
         forcePlateKey: quay,
-        // Quay PNGs may have partial alpha fringe but solid rose plate — don't trust baked-only
+        // Quay PNGs may have partial alpha fringe but solid rose/green plate — don't trust baked-only
         softFringe: true,
         forceChroma: quay
       });
@@ -800,14 +845,14 @@ export function loadAssetPack() {
       pack.scenery.billboard = warmCyanToSodium(billboard);
     }
 
-    // v2.5/v27 Cargo quay — baked alpha + bbox; larger Md for race zoom; no warmCyan flatten
+    // v2.6 Cargo quay — green-keyed crane; larger Md; neutralize residual rose → yellow sodium
     const crane = pack.scenery.crane;
     const containers = pack.scenery.containers;
     if (crane) {
-      const c0 = neutralizePinkNeon(keyHotPinkPlate(crane));
+      const c0 = neutralizePinkNeon(keyHotPinkPlate(keyGreenPlate(crane)));
       pack.scenery.crane = c0;
-      pack.scenery.craneSm = neutralizePinkNeon(keyHotPinkPlate(fitScenery(c0, 160, 180)));
-      pack.scenery.craneMd = neutralizePinkNeon(keyHotPinkPlate(fitScenery(c0, 240, 260)));
+      pack.scenery.craneSm = neutralizePinkNeon(keyHotPinkPlate(keyGreenPlate(fitSceneryPreserveYellow(c0, 160, 180))));
+      pack.scenery.craneMd = neutralizePinkNeon(keyHotPinkPlate(keyGreenPlate(fitSceneryPreserveYellow(c0, 240, 260))));
     }
     if (containers) {
       const k0 = neutralizePinkNeon(keyHotPinkPlate(containers));

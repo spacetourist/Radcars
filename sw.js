@@ -1,4 +1,4 @@
-const CACHE = 'radcars-v27-pack-fidelity';
+const CACHE = 'radcars-v28-identity-hard';
 const ASSETS = [
   './',
   './index.html',

@@ -239,6 +239,8 @@ export function createGame(canvas, input) {
   function updateCamera(dt) {
     const p = world.player;
     const race = world.race;
+    // Capture / review freeze — keep cam where identity shot placed it
+    if (world.__shotFreeze) return;
     // Fixed wider grid view during 3-2-1; after GO hand off to player + speed zoom
     if (race.countdown > 0) {
       const g = world.gridCam;
