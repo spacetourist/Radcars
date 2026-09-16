@@ -176,7 +176,7 @@ export function createUI(root, api) {
           </div>
         </div>
         <div class="shop-item">
-          <div class="info"><strong>Laps</strong></div>
+          <div class="info"><strong>Laps</strong><br/><span class="muted">2–8</span></div>
           <div class="row">
             <button class="btn" id="lap-dec">−</button>
             <span class="stat" id="lap-v">${save.options.laps}</span>
@@ -205,7 +205,7 @@ export function createUI(root, api) {
     el.querySelector('#ai-dec').onclick = () => { save.options.aiCount = Math.max(3, save.options.aiCount - 1); persistSave(save); showOptions(save); };
     el.querySelector('#ai-inc').onclick = () => { save.options.aiCount = Math.min(7, save.options.aiCount + 1); persistSave(save); showOptions(save); };
     el.querySelector('#lap-dec').onclick = () => { save.options.laps = Math.max(2, save.options.laps - 1); persistSave(save); showOptions(save); };
-    el.querySelector('#lap-inc').onclick = () => { save.options.laps = Math.min(5, save.options.laps + 1); persistSave(save); showOptions(save); };
+    el.querySelector('#lap-inc').onclick = () => { save.options.laps = Math.min(8, save.options.laps + 1); persistSave(save); showOptions(save); };
     el.querySelector('#reset').onclick = () => {
       if (confirm('Reset all career progress?')) {
         const s = resetSave();
@@ -226,9 +226,10 @@ export function createUI(root, api) {
     if (hudBuilt) return;
     hud.innerHTML = `
       <div class="hud-left">
-        <span class="pill">Lap <strong data-h="lap">1/3</strong></span>
-        <span class="pill">Pos <strong data-h="pos">1/6</strong></span>
+        <span class="pill pill-lap">LAP <strong data-h="lap">1/3</strong></span>
+        <span class="pill">POS <strong data-h="pos">1/6</strong></span>
         <span class="pill">HP <strong data-h="hp">10000</strong></span>
+        <span class="pill pill-laptime hidden" data-h="lapflash">LAST — · BEST —</span>
       </div>
       <div class="hud-right">
         <span class="pill"><strong data-h="wep">ROCKET</strong></span>
@@ -239,20 +240,34 @@ export function createUI(root, api) {
     hudBuilt = true;
   }
 
+  function fmtLap(ms) {
+    if (!ms || ms <= 0) return '—';
+    const t = ms / 1000;
+    const mm = Math.floor(t / 60);
+    const ss = Math.floor(t % 60).toString().padStart(2, '0');
+    const cs = Math.floor((t % 1) * 100).toString().padStart(2, '0');
+    return mm > 0 ? `${mm}:${ss}.${cs}` : `${ss}.${cs}`;
+  }
+
   function updateHud(info) {
     hideMenuBackdrop();
     showHud();
     ensureHudDom();
     const w = info.weapon;
     const ammo = info.ammo;
-    const lap = `${Math.min(info.lap + 1, info.totalLaps)}/${info.totalLaps}`;
+    // info.lap is already 1-based display lap from game.getHudInfo
+    const lap = `${info.lap}/${info.totalLaps}`;
     const pos = `${info.place}/${info.total}`;
     const hp = String(Math.round(info.hp));
     const wep = `${WEAPON_LABELS[w] || w} ×${ammo}`;
     const n2o = String(info.nitro);
     const time = info.time;
+    const flash = info.lapFlashMs > 0;
+    const flashTxt = flash
+      ? `LAST ${fmtLap(info.lapFlashLast)} · BEST ${fmtLap(info.lapFlashBest)}`
+      : '';
     // Avoid rewriting innerHTML every RAF — that caused HUD flicker
-    const key = [lap, pos, hp, wep, n2o, time].join('|');
+    const key = [lap, pos, hp, wep, n2o, time, flashTxt].join('|');
     if (key === lastHudKey) return;
     lastHudKey = key;
     const set = (k, v) => {
@@ -267,6 +282,17 @@ export function createUI(root, api) {
     set('wep', wep);
     set('n2o', n2o);
     set('time', time);
+    const flashEl = hud.querySelector('[data-h="lapflash"]');
+    if (flashEl) {
+      if (flash) {
+        flashEl.textContent = flashTxt;
+        flashEl.classList.remove('hidden');
+        flashEl.classList.add('lap-flash');
+      } else {
+        flashEl.classList.add('hidden');
+        flashEl.classList.remove('lap-flash');
+      }
+    }
   }
 
   function showPause(onResume, onQuit) {
@@ -298,9 +324,12 @@ export function createUI(root, api) {
       `<div class="shop-item"><div class="info">${s.place}. ${s.name}${s.isPlayer ? ' (You)' : ''}${s.dead ? ' 💀' : ''}</div>
        <div>${s.isPlayer ? '<span class="cash">+' + formatMoney(s.prize) + '</span>' : ''}</div></div>`
     ).join('');
+    const tot = result.totalTime != null ? fmtLap(result.totalTime) : '';
+    const best = result.bestLapMs ? fmtLap(result.bestLapMs) : '';
+    const timing = [tot && `Total ${tot}`, best && `Best lap ${best}`].filter(Boolean).join(' · ');
     el.innerHTML = `
       <h1>Race Over</h1>
-      <p class="tagline">${result.trackName} · You finished P${result.playerPlace}</p>
+      <p class="tagline">${result.trackName} · You finished P${result.playerPlace}${timing ? ' · ' + timing : ''}</p>
       <div class="card">${rows}</div>
       <div class="cash-chrome" style="margin-top:12px">
         <span>Cash <span class="cash">${formatMoney(save.cash)}</span></span>

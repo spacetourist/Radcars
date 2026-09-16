@@ -422,6 +422,27 @@ html, body {
 }
 .hud-left, .hud-right { display: flex; flex-wrap: wrap; gap: 2px; align-items: center; }
 .hud-right { justify-content: flex-end; }
+.hud .pill-lap {
+  background: linear-gradient(180deg, #3a3428, #1a1610);
+  border-color: #e8d8b0;
+  font-size: 1.08em;
+  padding: 7px 14px;
+  letter-spacing: 0.1em;
+}
+.hud .pill-lap strong {
+  color: #ffe9a8;
+  font-size: 1.15em;
+}
+.hud .pill-laptime {
+  border-color: #b8ff00;
+  color: #d8ff90;
+  animation: lapFlashPulse 0.55s ease-in-out 2;
+}
+.hud .pill-laptime.hidden { display: none; }
+@keyframes lapFlashPulse {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.35); }
+}
 
 /* Touch controls */
 #touch-controls {

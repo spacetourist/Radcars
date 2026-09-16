@@ -38,6 +38,9 @@ export function createCar(opts) {
     finished: false,
     finishPlace: 0,
     finishTime: 0,
+    lastLapMs: 0,
+    bestLapMs: 0,
+    _lapStartMs: 0,
     // AI
     aiWp: 0,
     aiAggro: opts.aiAggro ?? 0.5,
@@ -66,16 +69,23 @@ function localCpFrac(car, track) {
   return Math.max(0, Math.min(0.999, t));
 }
 
+export function checkpointHitRadius(track) {
+  if (track && track.cpHitRadius) return track.cpHitRadius;
+  const w = (track && track.width) || 1600;
+  const h = (track && track.height) || 1000;
+  // Scale with world size so denser long circuits stay reliable
+  return Math.max(90, Math.min(200, Math.min(w, h) * 0.055));
+}
+
 export function updateCheckpoints(car, track) {
   if (car.finished || car.dead) return;
   const cps = track.checkpoints;
   const next = car.checkpoint % cps.length;
   const cp = cps[next];
   const dx = car.x - cp.x, dy = car.y - cp.y;
-  // crossed when near and mostly along forward
-  if (dx * dx + dy * dy < 90 * 90) {
-    const along = dx * cp.nx + dy * cp.ny;
-    // accept proximity
+  const hitR = checkpointHitRadius(track);
+  // crossed when near gate
+  if (dx * dx + dy * dy < hitR * hitR) {
     car.checkpoint++;
     if (car.checkpoint >= cps.length) {
       car.checkpoint = 0;

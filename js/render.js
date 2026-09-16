@@ -1,4 +1,4 @@
-import { hpColor } from './util.js';
+import { hpColor, closestPointOnSeg } from './util.js';
 import { createSpriteBank } from './sprites.js';
 import { CAR_COLORS } from './cars.js';
 import {
@@ -831,7 +831,29 @@ export function createRenderer(canvas) {
     const heading = Math.atan2(p1.y - p.y, p1.x - p.x);
     const s = track.spawns && track.spawns[0];
     const ang = (s && s.angle != null) ? s.angle : heading;
-    drawGantry(ctx, track, p, ang);
+    const laneW = laneWidthAt(track, p);
+    drawGantry(ctx, track, p, ang, laneW * 0.5);
+  }
+
+  function distToPolyEdge(px, py, poly) {
+    let best = Infinity;
+    if (!poly || !poly.length) return best;
+    for (let i = 0; i < poly.length; i++) {
+      const a = poly[i], b = poly[(i + 1) % poly.length];
+      const c = closestPointOnSeg(px, py, a.x, a.y, b.x, b.y);
+      const d = Math.hypot(c.x - px, c.y - py);
+      if (d < best) best = d;
+    }
+    return best;
+  }
+
+  /** Full lane width at racing-line point (outer + inner wall distances). */
+  function laneWidthAt(track, p) {
+    const dOut = distToPolyEdge(p.x, p.y, track.outer);
+    const dIn = distToPolyEdge(p.x, p.y, track.inner);
+    const w = dOut + dIn;
+    if (!Number.isFinite(w) || w < 40) return 180;
+    return Math.min(420, Math.max(120, w * 0.96));
   }
 
   function drawStartLine(ctx, track) {
@@ -845,75 +867,105 @@ export function createRenderer(canvas) {
     const heading = Math.atan2(p1.y - p.y, p1.x - p.x);
     const s = track.spawns && track.spawns[0] ? track.spawns[0] : p;
     const ang = (s.angle != null) ? s.angle : heading;
+    const laneW = laneWidthAt(track, p);
+    const half = laneW * 0.5;
+    const cell = Math.max(7, Math.min(12, laneW / 22));
+    const rows = 3;
+    const bandH = cell * rows;
+    const cols = Math.max(8, Math.ceil(laneW / cell));
 
-    // Chequer band across track at start/finish
+    // Chequer band spanning full lane width (warm white / black — no magenta gate)
     ctx.save();
     ctx.translate(p.x, p.y);
     ctx.rotate(ang + Math.PI / 2);
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.fillRect(-56, -16, 112, 32);
-    for (let i = -7; i < 8; i++) {
-      for (let j = 0; j < 3; j++) {
-        ctx.fillStyle = ((i + j) & 1) ? 'rgba(245,245,245,0.92)' : 'rgba(12,12,14,0.9)';
-        ctx.fillRect(i * 8, j * 8 - 12, 8, 8);
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillRect(-half - 2, -bandH * 0.5 - 2, laneW + 4, bandH + 4);
+    for (let i = 0; i < cols; i++) {
+      for (let j = 0; j < rows; j++) {
+        const x = -half + i * cell;
+        const y = -bandH * 0.5 + j * cell;
+        ctx.fillStyle = ((i + j) & 1) ? 'rgba(248,246,240,0.95)' : 'rgba(14,14,16,0.92)';
+        ctx.fillRect(x, y, cell + 0.4, cell + 0.4);
       }
     }
-    ctx.fillStyle = hexAlpha(track.accent || '#ff2bd6', 0.7);
-    ctx.fillRect(-56, -17, 112, 2);
-    ctx.fillRect(-56, 12, 112, 2);
+    // Warm white edge rails (not neon magenta)
+    ctx.fillStyle = 'rgba(255, 236, 210, 0.85)';
+    ctx.fillRect(-half, -bandH * 0.5 - 2.5, laneW, 2.5);
+    ctx.fillRect(-half, bandH * 0.5, laneW, 2.5);
     ctx.restore();
 
-    // Simple gantry: 2 posts + crossbar spanning near startIndex
-    drawGantry(ctx, track, p, ang);
+    drawGantry(ctx, track, p, ang, half);
   }
 
-  function drawGantry(ctx, track, p, ang) {
+  function drawGantry(ctx, track, p, ang, laneHalf) {
     const lx = -Math.sin(ang), ly = Math.cos(ang);
-    const half = 92;
-    const postH = 68;
+    const half = (laneHalf != null ? laneHalf : 92) + 18;
+    const postH = Math.max(72, Math.min(110, half * 0.55));
     const ax = p.x + lx * half;
     const ay = p.y + ly * half;
     const bx = p.x - lx * half;
     const by = p.y - ly * half;
-    // Slight foreshortening so posts read in top-down
-    const topA = { x: ax - lx * 4, y: ay - postH };
-    const topB = { x: bx + lx * 4, y: by - postH };
+    const topA = { x: ax - lx * 5, y: ay - postH };
+    const topB = { x: bx + lx * 5, y: by - postH };
+    // Warm white / chequer posts — no magenta neon gate language
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    ctx.beginPath(); ctx.ellipse(ax, ay + 2, 8, 4, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(bx, by + 2, 8, 4, 0, 0, Math.PI * 2); ctx.fill();
-    // Posts as thick uprights
-    ctx.strokeStyle = '#9aa3b0';
-    ctx.lineWidth = 7;
+    ctx.beginPath(); ctx.ellipse(ax, ay + 2, 9, 4.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(bx, by + 2, 9, 4.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#c8c2b4';
+    ctx.lineWidth = 8;
     ctx.lineCap = 'square';
     ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(topA.x, topA.y); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(topB.x, topB.y); ctx.stroke();
-    ctx.strokeStyle = '#dce2ec';
-    ctx.lineWidth = 3;
+    ctx.strokeStyle = '#f2eee4';
+    ctx.lineWidth = 3.5;
     ctx.beginPath(); ctx.moveTo(ax + 2, ay); ctx.lineTo(topA.x + 2, topA.y); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(bx + 2, by); ctx.lineTo(topB.x + 2, topB.y); ctx.stroke();
+    // Chequer accents on posts
+    const postSegs = 5;
+    for (let s = 0; s < postSegs; s++) {
+      if (s & 1) continue;
+      const t0 = s / postSegs, t1 = (s + 1) / postSegs;
+      ctx.strokeStyle = 'rgba(28,28,30,0.75)';
+      ctx.lineWidth = 8;
+      ctx.beginPath();
+      ctx.moveTo(ax + (topA.x - ax) * t0, ay + (topA.y - ay) * t0);
+      ctx.lineTo(ax + (topA.x - ax) * t1, ay + (topA.y - ay) * t1);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(bx + (topB.x - bx) * t0, by + (topB.y - by) * t0);
+      ctx.lineTo(bx + (topB.x - bx) * t1, by + (topB.y - by) * t1);
+      ctx.stroke();
+    }
     // Crossbar
     ctx.strokeStyle = 'rgba(0,0,0,0.45)';
-    ctx.lineWidth = 10;
+    ctx.lineWidth = 12;
     ctx.beginPath(); ctx.moveTo(topA.x, topA.y + 2); ctx.lineTo(topB.x, topB.y + 2); ctx.stroke();
-    ctx.strokeStyle = '#e8ecf4';
-    ctx.lineWidth = 7;
+    ctx.strokeStyle = '#efeae0';
+    ctx.lineWidth = 8;
     ctx.beginPath(); ctx.moveTo(topA.x, topA.y); ctx.lineTo(topB.x, topB.y); ctx.stroke();
-    // Neon lights on bar
-    ctx.fillStyle = 'rgba(255, 200, 120, 0.55)';
-    for (let i = 0; i <= 6; i++) {
-      const t = i / 6;
+    // Warm sodium bulbs (not magenta)
+    ctx.fillStyle = 'rgba(255, 210, 140, 0.7)';
+    for (let i = 0; i <= 8; i++) {
+      const t = i / 8;
       const x = topA.x + (topB.x - topA.x) * t;
       const y = topA.y + (topB.y - topA.y) * t;
-      ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(x, y, 3.2, 0, Math.PI * 2); ctx.fill();
     }
-    ctx.fillStyle = hexAlpha(track.accent || '#ff2bd6', 0.55);
-    ctx.beginPath(); ctx.arc((topA.x + topB.x) * 0.5, topA.y - 5, 3.5, 0, Math.PI * 2); ctx.fill();
-    // Banner strip
-    ctx.fillStyle = 'rgba(12,16,24,0.75)';
-    const midY = topA.y + 8;
-    ctx.fillRect(Math.min(topA.x, topB.x) + 12, midY, Math.abs(topB.x - topA.x) - 24, 10);
-    ctx.fillStyle = 'rgba(255, 180, 90, 0.18)';
-    ctx.fillRect(Math.min(topA.x, topB.x) + 12, midY, Math.abs(topB.x - topA.x) - 24, 2);
+    // START/FINISH banner — readable top-down
+    const minX = Math.min(topA.x, topB.x);
+    const maxX = Math.max(topA.x, topB.x);
+    const barW = Math.max(80, maxX - minX - 20);
+    const midX = (topA.x + topB.x) * 0.5;
+    const midY = (topA.y + topB.y) * 0.5 + 10;
+    ctx.fillStyle = 'rgba(16,14,12,0.88)';
+    ctx.fillRect(midX - barW * 0.5, midY - 7, barW, 18);
+    ctx.fillStyle = 'rgba(255, 230, 190, 0.22)';
+    ctx.fillRect(midX - barW * 0.5, midY - 7, barW, 2);
+    ctx.fillStyle = '#f6f0e4';
+    ctx.font = `700 ${Math.max(10, Math.min(15, barW * 0.085))}px "Black Ops One", Impact, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('START / FINISH', midX, midY + 2);
   }
 
   function drawMine(ctx, m, t) {
@@ -1125,6 +1177,31 @@ export function createRenderer(canvas) {
     ctx.strokeStyle = hexAlpha(track.wall, 0.45);
     ctx.lineWidth = 1;
     ctx.stroke();
+
+    // Start/finish mark on the long ribbon
+    if (track.line && track.line.length) {
+      const sidx = (typeof track.startIndex === 'number')
+        ? ((track.startIndex % track.line.length) + track.line.length) % track.line.length
+        : 0;
+      const sp = track.line[sidx];
+      if (sp) {
+        const mx = ox + sp.x * sx, my = oy + sp.y * sy;
+        ctx.strokeStyle = 'rgba(248,246,240,0.95)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(mx - 5, my); ctx.lineTo(mx + 5, my);
+        ctx.moveTo(mx, my - 4); ctx.lineTo(mx, my + 4);
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(20,20,22,0.9)';
+        ctx.fillRect(mx - 3, my - 3, 3, 3);
+        ctx.fillStyle = 'rgba(248,246,240,0.95)';
+        ctx.fillRect(mx, my - 3, 3, 3);
+        ctx.fillStyle = 'rgba(248,246,240,0.95)';
+        ctx.fillRect(mx - 3, my, 3, 3);
+        ctx.fillStyle = 'rgba(20,20,22,0.9)';
+        ctx.fillRect(mx, my, 3, 3);
+      }
+    }
 
     for (const c of cars) {
       if (c.dead) ctx.globalAlpha = 0.35;

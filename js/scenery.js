@@ -858,17 +858,24 @@ export function buildTrackScenery(track) {
     ? track.landmarks
     : [{ id: 'start_finish', x: startX, y: startY, kind: 'start' }];
 
+  // Scale spacing / landmark radii with perimeter so long circuits don't explode stamp count
+  const sizeScale = Math.sqrt(((track.width || 1600) * (track.height || 1000)) / (1600 * 1000));
+  const ss = Math.max(1, Math.min(2.2, sizeScale));
+  const stepFar = 84 * ss;
+  const stepMid = 62 * ss;
+  const stepNear = 48 * ss; // was 40 — fewer palms/props on long tracks
+
   function landmarkBoost(x, y) {
     let best = 0;
     let nearest = null;
     for (const lm of landmarks) {
       const d = Math.hypot(x - lm.x, y - lm.y);
-      let radius = 160;
+      let radius = 160 * ss;
       let weight = 0.55;
-      if (lm.kind === 'start' || lm.id === 'start_finish') { radius = 300; weight = 1; }
-      else if (lm.kind === 'pit') { radius = 240; weight = 0.9; }
-      else if (lm.kind === 'chicane' || lm.kind === 'kink') { radius = 200; weight = 0.75; }
-      else if (lm.kind === 'corner') { radius = 220; weight = 0.8; }
+      if (lm.kind === 'start' || lm.id === 'start_finish') { radius = 300 * ss; weight = 1; }
+      else if (lm.kind === 'pit') { radius = 240 * ss; weight = 0.9; }
+      else if (lm.kind === 'chicane' || lm.kind === 'kink') { radius = 200 * ss; weight = 0.75; }
+      else if (lm.kind === 'corner') { radius = 220 * ss; weight = 0.8; }
       if (d < radius) {
         const b = weight * (1 - d / radius);
         if (b > best) { best = b; nearest = lm; }
@@ -920,7 +927,7 @@ export function buildTrackScenery(track) {
 
   // Far skyline buildings — warehouse-dominated; towers/billboards hard-capped (v19)
   for (const e of edges) {
-    const steps = Math.max(2, Math.floor(e.len / 84)); // sparser — horizon carries distance
+    const steps = Math.max(2, Math.floor(e.len / stepFar)); // sparser — horizon carries distance
     for (let s = 0; s < steps; s++) {
       const t = (s + 0.5) / steps;
       const bx = e.ax + (e.bx - e.ax) * t;
@@ -952,7 +959,7 @@ export function buildTrackScenery(track) {
   // Mid buildings — warehouse + grandstand mass; tower/billboard hard-capped (v19)
   for (const e of edges) {
     const dens = 0.7 + straightness(e) * 0.3;
-    const steps = Math.max(2, Math.floor((e.len / 62) * dens));
+    const steps = Math.max(2, Math.floor((e.len / stepMid) * dens));
     for (let s = 0; s < steps; s++) {
       const t = (s + rnd() * 0.6) / steps;
       const bx = e.ax + (e.bx - e.ax) * t;
@@ -1025,7 +1032,7 @@ export function buildTrackScenery(track) {
   // Near props along outer wall — NO thin crowd strips (v18). Crowds only with grandstands.
   for (const e of edges) {
     const dens = 0.7 + straightness(e) * 0.35;
-    const steps = Math.max(2, Math.floor((e.len / 40) * dens));
+    const steps = Math.max(2, Math.floor((e.len / stepNear) * dens));
     for (let s = 0; s < steps; s++) {
       const t = (s + 0.3 + rnd() * 0.4) / steps;
       const bx = e.ax + (e.bx - e.ax) * t;
@@ -1040,12 +1047,12 @@ export function buildTrackScenery(track) {
       const roll = rnd();
       let img, scale;
       // Fewer neon lamps; prefer props + palms with scale variety
-      if (roll < 0.26) { img = pick(sprites.props.barrel, rnd); scale = varyScale(rnd, 0.75, 1.25); }
-      else if (roll < 0.48) { img = pick(sprites.props.cone, rnd); scale = varyScale(rnd, 0.75, 1.3); }
-      else if (roll < 0.64) { img = pick(sprites.props.fence, rnd); scale = varyScale(rnd, 0.8, 1.25); }
-      else if (roll < 0.70) { img = pick(sprites.props.light, rnd); scale = varyScale(rnd, 0.7, 1.05); }
-      else if (roll < 0.76) { img = pick(sprites.props.lamp, rnd); scale = varyScale(rnd, 0.7, 1.05); }
-      else { img = pick(sprites.props.palm, rnd); scale = varyScale(rnd, 0.7, 1.4); }
+      if (roll < 0.28) { img = pick(sprites.props.barrel, rnd); scale = varyScale(rnd, 0.75, 1.25); }
+      else if (roll < 0.52) { img = pick(sprites.props.cone, rnd); scale = varyScale(rnd, 0.75, 1.3); }
+      else if (roll < 0.70) { img = pick(sprites.props.fence, rnd); scale = varyScale(rnd, 0.8, 1.25); }
+      else if (roll < 0.78) { img = pick(sprites.props.light, rnd); scale = varyScale(rnd, 0.7, 1.05); }
+      else if (roll < 0.88) { img = pick(sprites.props.lamp, rnd); scale = varyScale(rnd, 0.7, 1.05); }
+      else { img = pick(sprites.props.palm, rnd); scale = varyScale(rnd, 0.7, 1.35); } // fewer palms
       if (!stampOk(stampLog, img, x, y, 70, 1)) continue;
       addItem(near, img, x, y, scale, 'near');
       stampLog.push({ img, x, y });
@@ -1541,7 +1548,7 @@ export function drawArenaBackground(ctx, scenery, cam, W, H) {
 
     // Soft sodium wash — city stays readable
     ctx.globalCompositeOperation = 'screen';
-    ctx.globalAlpha = 0.11;
+    ctx.globalAlpha = 0.16;
     ctx.fillStyle = '#ffc070';
     ctx.fillRect(0, horizonY - H * 0.06, W, H * 0.1);
     ctx.globalCompositeOperation = 'source-over';
@@ -1587,7 +1594,7 @@ export function drawGroundPlate(ctx, scenery, track, zoom = 1) {
   ctx.imageSmoothingEnabled = true;
   // At grid/overview zoom, pull plate alpha so screen-space horizon stays readable (v19)
   const z = zoom || 1;
-  const fade = z < 0.7 ? (0.55 + z * 0.5) : 1; // ~0.55–0.9 when zoomed out
+  const fade = z < 0.7 ? (0.42 + z * 0.55) : 1; // pull plate more so horizon reads
   ctx.save();
   ctx.globalAlpha = Math.max(0.5, Math.min(1, fade));
   ctx.drawImage(g, -margin, -margin, g.width * scale, g.height * scale);
@@ -1617,6 +1624,13 @@ function drawLayer(ctx, items, cam, W, H, zoom, pad) {
       if (aspect > 2.4 && it.h < 52) continue;
       if (it.h < 36) continue;
     }
+    // Soft contact shadow under stamp
+    const shX = left + (it.w - dw) * 0.5 + dw * 0.5;
+    const shY = top + (it.h - dh) + dh * 0.92;
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.beginPath();
+    ctx.ellipse(shX, shY, dw * 0.38, Math.max(3, dh * 0.06), 0, 0, Math.PI * 2);
+    ctx.fill();
     ctx.drawImage(it.img, left + (it.w - dw) * 0.5, top + (it.h - dh), dw, dh);
   }
 }

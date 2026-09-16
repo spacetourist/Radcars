@@ -1,5 +1,5 @@
 import { getTrack, buildStartingGrid } from './tracks.js';
-import { createCar, CAR_COLORS, AI_NAMES, updateCheckpoints, syncCarFromSave } from './cars.js';
+import { createCar, CAR_COLORS, AI_NAMES, updateCheckpoints, raceProgress, syncCarFromSave } from './cars.js';
 import { stepCar, triggerNitro } from './physics.js';
 import { createWeaponsState, tryFire, stepWeapons, cycleWeapon } from './weapons.js';
 import { stepAI } from './ai.js';
@@ -137,7 +137,14 @@ export function createGame(canvas, input) {
       cars[0].aiWp = best;
     }
 
-    for (const c of cars) updateCheckpoints(c, track);
+    // Past S/F gate already — next CP is ahead; lap completes when returning to CP0
+    for (const c of cars) {
+      c.checkpoint = 1;
+      c._lapStartMs = 0;
+      c.lastLapMs = 0;
+      c.bestLapMs = 0;
+      c.progress = raceProgress(c, track);
+    }
 
     // Grid camera centre
     let gx = 0, gy = 0;
@@ -162,7 +169,10 @@ export function createGame(canvas, input) {
         finishedCount: 0,
         over: false,
         placesAssigned: 0,
-        live: false
+        live: false,
+        lapFlashMs: 0,
+        lapFlashLast: 0,
+        lapFlashBest: 0
       },
       dt: 16,
       save
@@ -336,7 +346,16 @@ export function createGame(canvas, input) {
       updateCheckpoints(c, track);
       if (c._justLapped) {
         c._justLapped = false;
-        if (c.isPlayer && c.lap < race.totalLaps) sfx('lap');
+        const lapMs = Math.max(1, race.time - (c._lapStartMs || 0));
+        c.lastLapMs = lapMs;
+        if (!c.bestLapMs || lapMs < c.bestLapMs) c.bestLapMs = lapMs;
+        c._lapStartMs = race.time;
+        if (c.isPlayer) {
+          race.lapFlashMs = 2800;
+          race.lapFlashLast = lapMs;
+          race.lapFlashBest = c.bestLapMs;
+          if (c.lap < race.totalLaps) sfx('lap');
+        }
       }
       if (!c.finished && c.lap >= race.totalLaps) {
         c.finished = true;
@@ -346,6 +365,7 @@ export function createGame(canvas, input) {
         if (c.isPlayer) sfx('finish');
       }
     }
+    if (race.lapFlashMs > 0) race.lapFlashMs = Math.max(0, race.lapFlashMs - dt);
 
     const allDone = cars.every((c) => c.finished || c.dead);
     const timeout = race.time > race.totalLaps * 120000;
@@ -375,7 +395,9 @@ export function createGame(canvas, input) {
         name: c.name,
         isPlayer: c.isPlayer,
         dead: c.dead,
-        prize
+        prize,
+        finishTime: c.finishTime,
+        bestLapMs: c.bestLapMs || 0
       };
     });
 
@@ -410,7 +432,9 @@ export function createGame(canvas, input) {
       playerPlace,
       trackName: track.name,
       prize,
-      mode: race.mode
+      mode: race.mode,
+      totalTime: player.finishTime || race.time,
+      bestLapMs: player.bestLapMs || 0
     };
 
     setTimeout(() => {
@@ -437,8 +461,11 @@ export function createGame(canvas, input) {
     const mm = Math.floor(t / 60);
     const ss = Math.floor(t % 60).toString().padStart(2, '0');
     const cs = Math.floor((t % 1) * 100).toString().padStart(2, '0');
+    const displayLap = p.finished
+      ? world.race.totalLaps
+      : Math.min(p.lap + 1, world.race.totalLaps);
     return {
-      lap: Math.min(p.lap, world.race.totalLaps - 1),
+      lap: displayLap,
       totalLaps: world.race.totalLaps,
       place,
       total: world.cars.length,
@@ -447,7 +474,12 @@ export function createGame(canvas, input) {
       weapon: p.selectedWeapon,
       ammo: p.weapons[p.selectedWeapon] || 0,
       nitro: p.nitroCharges,
-      time: `${mm}:${ss}.${cs}`
+      time: `${mm}:${ss}.${cs}`,
+      lastLapMs: p.lastLapMs || 0,
+      bestLapMs: p.bestLapMs || 0,
+      lapFlashMs: world.race.lapFlashMs || 0,
+      lapFlashLast: world.race.lapFlashLast || 0,
+      lapFlashBest: world.race.lapFlashBest || 0
     };
   }
 
