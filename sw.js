@@ -1,4 +1,4 @@
-const CACHE = 'radcars-v25-difficulty';
+const CACHE = 'radcars-v27-pack-fidelity';
 const ASSETS = [
   './',
   './index.html',
@@ -45,6 +45,8 @@ const ASSETS = [
   './assets/generated/scenery/scenery-props.png',
   './assets/generated/scenery/scenery-palms.png',
   './assets/generated/scenery/scenery-billboard.png',
+  './assets/generated/scenery/scenery-crane.png',
+  './assets/generated/scenery/scenery-containers.png',
   './assets/generated/tex-asphalt.png'
 ];
 

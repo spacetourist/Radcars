@@ -161,9 +161,11 @@ function softFringeCleanup(ctx, w, h) {
     const magBalanced = Math.abs(r - b) <= 60;
     const isMag = magBalanced && rb > 100 && g < rb * 0.55;
     const isPureMag = magBalanced && rb > 200 && g < 60;
+    // Rose plate (containers ~195,41,106) — treat as key even when R>>B
+    const isRosePlate = r > 150 && g < 95 && b > 50 && r > g * 1.7 && (r - g) > 80;
     const isGrn = g > 140 && r < g * 0.55 && b < g * 0.55 && (g - Math.max(r, b)) > 40;
     const isPureGrn = g > 200 && r < 50 && b < 50;
-    if (isPureMag || isPureGrn || ((isMag || isGrn) && a < 250)) {
+    if (isPureMag || isPureGrn || isRosePlate || ((isMag || isGrn) && a < 250)) {
       d[i + 3] = 0;
       continue;
     }
@@ -343,6 +345,11 @@ export function chromaKeyAndCrop(source, opts = {}) {
     if (x === w) { x = 0; y++; }
     const r = d[i], g = d[i + 1], b = d[i + 2], a = d[i + 3];
     if (a === 0) continue;
+    // Rose/hot-pink solid plates (containers/crane) — not only classic #FF00FF
+    if (r > 145 && g < 100 && b > 50 && r > g * 1.65 && (r - g) > 70) {
+      d[i + 3] = 0;
+      continue;
+    }
 
     const dist = Math.abs(r - key.r) + Math.abs(g - key.g) + Math.abs(b - key.b);
     const rb = Math.min(r, b);
@@ -418,6 +425,69 @@ export function chromaKeyAndCrop(source, opts = {}) {
 }
 
 /**
+ * Zero solid hot-pink / magenta KEY PLATES (not just #FF00FF).
+ * Quay assets (containers/crane) often bake as rose/magenta ~#(C0,28,6A)
+ * which softFringe misses when R/B unbalanced. Always run before bbox.
+ */
+export function keyHotPinkPlate(canvas) {
+  if (!canvas || !canvas.width) return canvas;
+  const w = canvas.width | 0;
+  const h = canvas.height | 0;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  const id = ctx.getImageData(0, 0, w, h);
+  const d = id.data;
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] < 1) continue;
+    const r = d[i], g = d[i + 1], b = d[i + 2];
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    const sat = max - min;
+    // Classic magenta key
+    const classic = Math.abs(r - b) <= 55 && r > 160 && g < 90;
+    // Rose / hot-pink plate (containers/crane bg ~195,41,106)
+    const rose = r > 140 && g < 95 && b > 55 && r > g * 1.7 && sat > 70 && (r + b) > g * 3.2;
+    // Deep fuchsia plate
+    const fuchsia = r > 120 && b > 90 && g < 70 && r > 100 && sat > 80;
+    if (classic || rose || fuchsia) {
+      d[i + 3] = 0;
+    }
+  }
+  ctx.putImageData(id, 0, 0);
+  return bboxCrop(canvas, 1);
+}
+
+/**
+ * Remap high-sat magenta/pink neon outlines → yellow sodium (Cargo quay).
+ * Keeps stamped art readable without pink sky wash at grid zoom.
+ */
+export function neutralizePinkNeon(canvas) {
+  if (!canvas || !canvas.width) return canvas;
+  const w = canvas.width | 0;
+  const h = canvas.height | 0;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  const id = ctx.getImageData(0, 0, w, h);
+  const d = id.data;
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] < 12) continue;
+    const r = d[i], g = d[i + 1], b = d[i + 2];
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    const sat = max - min;
+    if (sat < 45 || max < 90) continue;
+    // Magenta / fuchsia / hot-pink neon (including unbalanced rose)
+    const isPink =
+      (r > 120 && b > 80 && g < Math.min(r, b) * 0.85 && r + b > g * 2.2) ||
+      (Math.abs(r - b) <= 50 && r > 140 && g < 100);
+    if (!isPink) continue;
+    const lum = (r * 0.3 + g * 0.4 + b * 0.3) / 255;
+    // Yellow sodium
+    d[i] = Math.min(255, Math.round(220 + lum * 35));
+    d[i + 1] = Math.min(255, Math.round(150 + lum * 60));
+    d[i + 2] = Math.min(255, Math.round(30 + lum * 40));
+  }
+  ctx.putImageData(id, 0, 0);
+  return canvas;
+}
+
+/**
  * Prefer baked alpha → soft fringe only + bbox crop.
  * Else chroma with opts.keyColor (hex). Magenta paint cars must pass green key.
  */
@@ -430,7 +500,7 @@ export function processPackSprite(source, opts = {}) {
   const baked = hasMeaningfulAlpha(id.data, w, h);
 
   let out;
-  if (baked) {
+  if (baked && !opts.forceChroma && !opts.forcePlateKey) {
     if (opts.softFringe !== false) {
       softFringeCleanup(ctx, w, h);
       erodeFringe1px(ctx, w, h);
@@ -450,6 +520,10 @@ export function processPackSprite(source, opts = {}) {
   // Neon plate strip is opt-in — scenery stamps enable it; cars keep edge paint
   if (opts.stripNeonEdge) {
     out = stripNeonEdgeFrames(out, opts.neonEdgePx != null ? opts.neonEdgePx : 3, true);
+  }
+  // Quay sprites: force hot-pink plate key even when baked alpha fooled the loader
+  if (opts.forcePlateKey) {
+    out = keyHotPinkPlate(out);
   }
   return out;
 }
@@ -552,7 +626,9 @@ export function loadAssetPack() {
           'scenery/scenery-palms.png',
           'scenery/scenery-billboard.png',
           'scenery/scenery-crowd-dense.png',
-          'scenery/scenery-grandstand-large.png'
+          'scenery/scenery-grandstand-large.png',
+          'scenery/scenery-crane.png',
+          'scenery/scenery-containers.png'
         ];
     const sceneryList = rawSceneryList.filter((rel) => {
       const s = String(rel || '');
@@ -621,7 +697,16 @@ export function loadAssetPack() {
     // Scenery kinds from manifest list
     const sceneryResults = await Promise.all(sceneryList.map(async (rel) => {
       const key = keyFromRel(rel);
-      const canvas = await tryProcessed(rel, { keyColor: chromaDefault, stripNeonEdge: true, neonEdgePx: 3 });
+      const quay = /crane|containers/i.test(key) || /crane|containers/i.test(rel);
+      const canvas = await tryProcessed(rel, {
+        keyColor: chromaDefault,
+        stripNeonEdge: true,
+        neonEdgePx: quay ? 5 : 3,
+        forcePlateKey: quay,
+        // Quay PNGs may have partial alpha fringe but solid rose plate — don't trust baked-only
+        softFringe: true,
+        forceChroma: quay
+      });
       return [key, canvas];
     }));
     for (const [key, canvas] of sceneryResults) {
@@ -655,8 +740,9 @@ export function loadAssetPack() {
     const billboard = pack.scenery.billboard;
 
     if (warehouse) {
-      pack.scenery.warehouseSm = warmCyanToSodium(fitScenery(warehouse, 96, 110));
-      pack.scenery.warehouseMd = warmCyanToSodium(fitScenery(warehouse, 120, 90));
+      // v27: larger Md; single light cyan→sodium (no double flatten)
+      pack.scenery.warehouseSm = warmCyanToSodium(fitScenery(warehouse, 110, 120));
+      pack.scenery.warehouseMd = warmCyanToSodium(fitScenery(warehouse, 168, 130));
       pack.scenery.warehouse = warmCyanToSodium(warehouse);
     }
     if (grandstand || grandstandLarge) {
@@ -673,9 +759,9 @@ export function loadAssetPack() {
     if (tower) {
       // Pack tower art is often landscape after bbox; allow wider fits so mid/far reads
       // Warm cyan window/neon grids → sodium (v19) without new PNGs
-      pack.scenery.towerSm = warmCyanToSodium(warmCyanToSodium(fitScenery(tower, 100, 120)));
-      pack.scenery.towerMd = warmCyanToSodium(warmCyanToSodium(fitScenery(tower, 130, 150)));
-      pack.scenery.tower = warmCyanToSodium(warmCyanToSodium(tower));
+      pack.scenery.towerSm = warmCyanToSodium(fitScenery(tower, 110, 130));
+      pack.scenery.towerMd = warmCyanToSodium(fitScenery(tower, 150, 170));
+      pack.scenery.tower = warmCyanToSodium(tower);
     }
     if (crowd || crowdDense) {
       // Thin strip = filler; dense = S/F + major apex masses
@@ -708,14 +794,31 @@ export function loadAssetPack() {
       pack.scenery.palmMd = fitScenery(palms, 56, 96);
     }
     if (billboard) {
-      // Soften cyan neon frames → warm sodium accents (v19)
-      pack.scenery.billboardSm = warmCyanToSodium(warmCyanToSodium(fitScenery(billboard, 96, 72)));
-      pack.scenery.billboardMd = warmCyanToSodium(warmCyanToSodium(fitScenery(billboard, 128, 96)));
-      pack.scenery.billboard = warmCyanToSodium(warmCyanToSodium(billboard));
+      // v27: larger billboardMd for Gridlock street beads; single warm pass
+      pack.scenery.billboardSm = warmCyanToSodium(fitScenery(billboard, 110, 84));
+      pack.scenery.billboardMd = warmCyanToSodium(fitScenery(billboard, 168, 120));
+      pack.scenery.billboard = warmCyanToSodium(billboard);
     }
 
+    // v2.5/v27 Cargo quay — baked alpha + bbox; larger Md for race zoom; no warmCyan flatten
+    const crane = pack.scenery.crane;
+    const containers = pack.scenery.containers;
+    if (crane) {
+      const c0 = neutralizePinkNeon(keyHotPinkPlate(crane));
+      pack.scenery.crane = c0;
+      pack.scenery.craneSm = neutralizePinkNeon(keyHotPinkPlate(fitScenery(c0, 160, 180)));
+      pack.scenery.craneMd = neutralizePinkNeon(keyHotPinkPlate(fitScenery(c0, 240, 260)));
+    }
+    if (containers) {
+      const k0 = neutralizePinkNeon(keyHotPinkPlate(containers));
+      pack.scenery.containers = k0;
+      pack.scenery.containersSm = neutralizePinkNeon(keyHotPinkPlate(fitScenery(k0, 130, 96)));
+      pack.scenery.containersMd = neutralizePinkNeon(keyHotPinkPlate(fitScenery(k0, 200, 150)));
+    }
+    pack.trackHints = (manifest && manifest.trackHints) || {};
+
     const anyCar = Object.values(pack.cars).some(Boolean);
-    const anyScenery = !!(warehouse || grandstand || grandstandLarge || tower || crowd || crowdDense || tyrewall || props || palms || billboard);
+    const anyScenery = !!(warehouse || grandstand || grandstandLarge || tower || crowd || crowdDense || tyrewall || props || palms || billboard || crane || containers);
     pack.ready = !!(anyCar || anyScenery || skyline);
     _pack = pack;
     try {
@@ -738,8 +841,11 @@ export function loadAssetPack() {
             tyrewall: !!tyrewall,
             props: !!props,
             palms: !!palms,
-            billboard: !!billboard
+            billboard: !!billboard,
+            crane: !!crane,
+            containers: !!containers
           },
+          trackHints: pack.trackHints,
           skyline: !!skyline,
           skylineRel: bgRel,
           tower: !!tower,
