@@ -1,4 +1,4 @@
-const CACHE = 'radcars-v9-steer-balance';
+const CACHE = 'radcars-v10-neon-loop-art';
 const ASSETS = [
   './',
   './index.html',

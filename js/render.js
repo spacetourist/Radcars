@@ -176,6 +176,9 @@ export function createRenderer(canvas) {
     // Near props / crowds on top of asphalt edge (still outside racing line visually)
     if (scenery) drawSceneryNear(ctx, scenery, cam, W, H, zoom);
 
+    // Gantry above trackside clutter so countdown grid reads the start structure
+    drawStartGantryOnly(ctx, track);
+
     for (const m of weapons.mines) {
       if (!m.alive) continue;
       drawMine(ctx, m, fxTime);
@@ -231,13 +234,34 @@ export function createRenderer(canvas) {
   }
 
   function drawTrack(ctx, track) {
-    // dark asphalt plate with subtle texture
+    // Soft runoff apron outside outer wall (gravel/dirt) — behind asphalt
+    ctx.save();
+    ctx.beginPath();
+    // Expanded outer ring approx via stroked wide path then filled differently:
+    // Draw apron as thick stroke centered on outer wall, clipped outside asphalt
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(28, 24, 18, 0.92)';
+    ctx.lineWidth = 46;
+    strokeLoop(ctx, track.outer);
+    ctx.strokeStyle = 'rgba(42, 36, 28, 0.55)';
+    ctx.lineWidth = 28;
+    strokeLoop(ctx, track.outer);
+    // gravel grit
+    ctx.strokeStyle = 'rgba(70, 58, 40, 0.25)';
+    ctx.lineWidth = 18;
+    ctx.setLineDash([3, 7]);
+    strokeLoop(ctx, track.outer);
+    ctx.setLineDash([]);
+    ctx.restore();
+
+    // Warm asphalt plate
     ctx.beginPath();
     pathPoly(ctx, track.outer);
     const asphaltGrad = ctx.createLinearGradient(0, 0, track.width, track.height);
     asphaltGrad.addColorStop(0, track.asphalt);
-    asphaltGrad.addColorStop(0.5, shade(track.asphalt, -10));
-    asphaltGrad.addColorStop(1, track.asphalt);
+    asphaltGrad.addColorStop(0.5, shade(track.asphalt, -8));
+    asphaltGrad.addColorStop(1, shade(track.asphalt, 4));
     ctx.fillStyle = asphaltGrad;
     ctx.fill();
 
@@ -245,29 +269,45 @@ export function createRenderer(canvas) {
     ctx.beginPath();
     pathPoly(ctx, track.outer);
     ctx.clip();
-    // Subtle asphalt grit (deterministic pattern, clipped to track)
-    ctx.fillStyle = 'rgba(255,255,255,0.025)';
+    // Subtle asphalt grit
+    ctx.fillStyle = 'rgba(255,255,255,0.028)';
     for (let y = 0; y < track.height; y += 17) {
       for (let x = (y % 34); x < track.width; x += 23) {
         ctx.fillRect(x, y, 1.5, 1.5);
       }
     }
-    ctx.fillStyle = 'rgba(0,0,0,0.04)';
+    ctx.fillStyle = 'rgba(0,0,0,0.045)';
     for (let y = 8; y < track.height; y += 29) {
       for (let x = 11; x < track.width; x += 31) {
         ctx.fillRect(x, y, 2, 1);
       }
     }
-    // Outer lane edge (wear / rubber)
-    ctx.strokeStyle = 'rgba(255,255,255,0.04)';
-    ctx.lineWidth = 22;
+
+    // Worn racing groove — lighter rubber band along racing line
+    ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+    ctx.lineWidth = 34;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
     ctx.beginPath();
     pathPoly(ctx, track.line);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(220, 210, 190, 0.11)';
+    ctx.lineWidth = 18;
+    ctx.beginPath();
+    pathPoly(ctx, track.line);
+    ctx.closePath();
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    pathPoly(ctx, track.line);
+    ctx.closePath();
     ctx.stroke();
 
-    // Dual lane dashes
-    ctx.strokeStyle = 'rgba(255,255,255,0.14)';
-    ctx.lineWidth = 2.5;
+    // Dual lane dashes (subtle)
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 2.2;
     ctx.setLineDash([18, 16]);
     ctx.beginPath();
     pathPoly(ctx, track.line);
@@ -275,17 +315,7 @@ export function createRenderer(canvas) {
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // Accent hazard dashes offset from racing line
-    ctx.strokeStyle = hexAlpha(track.accent, 0.18);
-    ctx.lineWidth = 2;
-    ctx.setLineDash([10, 28]);
-    ctx.beginPath();
-    pathPoly(ctx, track.line);
-    ctx.closePath();
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Soft curb shadow along outer wall (inside track)
+    // Soft curb shadow along walls (inside track)
     ctx.strokeStyle = 'rgba(0,0,0,0.28)';
     ctx.lineWidth = 10;
     strokeLoop(ctx, track.outer);
@@ -294,71 +324,41 @@ export function createRenderer(canvas) {
     strokeLoop(ctx, track.inner);
     ctx.restore();
 
-    // infield — metal pit / void
-    ctx.beginPath();
-    pathPoly(ctx, track.inner);
-    ctx.fillStyle = shade(track.bg, -10);
-    ctx.fill();
-    ctx.save();
-    ctx.beginPath();
-    pathPoly(ctx, track.inner);
-    ctx.clip();
-    ctx.strokeStyle = 'rgba(255,230,0,0.045)';
-    ctx.lineWidth = 1;
-    for (let x = 0; x < track.width; x += 28) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x + track.height, track.height);
-      ctx.stroke();
-    }
-    // infield panel dots
-    ctx.fillStyle = 'rgba(255,255,255,0.03)';
-    for (let y = 40; y < track.height; y += 56) {
-      for (let x = 40; x < track.width; x += 56) {
-        ctx.fillRect(x, y, 2, 2);
-      }
-    }
-    ctx.restore();
+    // infield — industrial yard / parking plate (not dead black)
+    drawInfieldYard(ctx, track);
 
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
 
-    // Controlled neon barrier glow (thin, not full-scene blur)
-    ctx.strokeStyle = track.wall + '55';
+    // Red/white (or accent) block kerbs on INNER apexes
+    drawBlockKerbs(ctx, track);
+
+    // Outer edge: soft cyan dashed safety glow only (no solid editor outline)
+    ctx.strokeStyle = 'rgba(18, 22, 28, 0.95)'; // dark physical rail
+    ctx.lineWidth = 5;
+    strokeLoop(ctx, track.outer);
+    ctx.strokeStyle = hexAlpha(track.wall, 0.2);
     ctx.lineWidth = 11;
     strokeLoop(ctx, track.outer);
-    strokeLoop(ctx, track.inner);
-
-    // hazard stripe underlay
     ctx.save();
-    ctx.lineWidth = 8;
-    ctx.strokeStyle = '#111111';
+    ctx.setLineDash([5, 10]);
+    ctx.strokeStyle = hexAlpha(track.wall, 0.55);
+    ctx.lineWidth = 2.4;
     strokeLoop(ctx, track.outer);
-    strokeLoop(ctx, track.inner);
-    ctx.setLineDash([9, 9]);
-    ctx.strokeStyle = '#ffe600';
-    ctx.globalAlpha = 0.6;
-    strokeLoop(ctx, track.outer);
-    strokeLoop(ctx, track.inner);
     ctx.setLineDash([]);
-    ctx.globalAlpha = 1;
     ctx.restore();
 
-    // solid neon barrier
-    ctx.strokeStyle = track.wall;
-    ctx.lineWidth = 4;
-    strokeLoop(ctx, track.outer);
+    // Inner wall: subdued rail under block kerbs
+    ctx.strokeStyle = hexAlpha(track.wall, 0.55);
+    ctx.lineWidth = 2.5;
+    strokeLoop(ctx, track.inner);
+    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+    ctx.lineWidth = 1;
     strokeLoop(ctx, track.inner);
 
-    // crisp highlight edge
-    ctx.strokeStyle = 'rgba(255,255,255,0.22)';
-    ctx.lineWidth = 1.1;
-    strokeLoop(ctx, track.outer);
-    strokeLoop(ctx, track.inner);
-
-    // chevrons along racing line
-    ctx.fillStyle = hexAlpha(track.accent, 0.4);
-    for (let i = 0; i < track.line.length; i += 6) {
+    // Direction arrows — very quiet once groove + kerbs carry readability
+    ctx.fillStyle = hexAlpha(track.accent, 0.06);
+    for (let i = 0; i < track.line.length; i += 18) {
       const p = track.line[i];
       const n = track.line[(i + 1) % track.line.length];
       const a = Math.atan2(n.y - p.y, n.x - p.x);
@@ -366,24 +366,163 @@ export function createRenderer(canvas) {
       ctx.translate(p.x, p.y);
       ctx.rotate(a);
       ctx.beginPath();
-      ctx.moveTo(11, 0);
-      ctx.lineTo(-5, 6);
-      ctx.lineTo(-5, -6);
+      ctx.moveTo(7, 0);
+      ctx.lineTo(-3, 3.5);
+      ctx.lineTo(-3, -3.5);
       ctx.closePath();
       ctx.fill();
       ctx.restore();
     }
+  }
 
-    // Corner hazard marks (static — no flicker)
-    ctx.fillStyle = hexAlpha(track.accent, 0.22);
-    for (let i = 0; i < track.line.length; i += 11) {
-      const p = track.line[i];
-      const n = track.line[(i + 1) % track.line.length];
-      const a = Math.atan2(n.y - p.y, n.x - p.x);
-      const px = Math.cos(a + Math.PI / 2) * 28;
-      const py = Math.sin(a + Math.PI / 2) * 28;
-      ctx.fillRect(p.x + px - 4, p.y + py - 1.5, 8, 3);
-      ctx.fillRect(p.x - px - 4, p.y - py - 1.5, 8, 3);
+  /** Industrial infield: parking plate, seams, low yard marks — loop sits in a yard. */
+  function drawInfieldYard(ctx, track) {
+    const plate = '#2c3440';
+    const plateHi = '#3a4452';
+    ctx.beginPath();
+    pathPoly(ctx, track.inner);
+    const g = ctx.createRadialGradient(
+      track.width * 0.5, track.height * 0.48, 40,
+      track.width * 0.5, track.height * 0.5, Math.max(track.width, track.height) * 0.35
+    );
+    g.addColorStop(0, plateHi);
+    g.addColorStop(0.55, plate);
+    g.addColorStop(1, '#242a34');
+    ctx.fillStyle = g;
+    ctx.fill();
+
+    ctx.save();
+    ctx.beginPath();
+    pathPoly(ctx, track.inner);
+    ctx.clip();
+
+    // Concrete panel grid
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < track.width; x += 64) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, track.height); ctx.stroke();
+    }
+    for (let y = 0; y < track.height; y += 64) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(track.width, y); ctx.stroke();
+    }
+
+    // Parking bay chevrons / stalls (faint)
+    ctx.strokeStyle = 'rgba(255,230,0,0.18)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([10, 14]);
+    const cx = track.width * 0.5, cy = track.height * 0.5;
+    for (let row = -2; row <= 2; row++) {
+      const y = cy + row * 48;
+      ctx.beginPath();
+      ctx.moveTo(cx - 160, y);
+      ctx.lineTo(cx + 160, y);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    // Stall ticks
+    ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+    ctx.lineWidth = 1.5;
+    for (let col = -3; col <= 3; col++) {
+      const x = cx + col * 42;
+      ctx.beginPath();
+      ctx.moveTo(x, cy - 110);
+      ctx.lineTo(x, cy + 110);
+      ctx.stroke();
+    }
+
+    // Worn patches
+    ctx.fillStyle = 'rgba(0,0,0,0.12)';
+    ctx.beginPath(); ctx.ellipse(cx - 70, cy + 30, 55, 28, 0.3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(cx + 90, cy - 40, 40, 22, -0.2, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.03)';
+    ctx.beginPath(); ctx.ellipse(cx + 20, cy + 60, 70, 18, 0.1, 0, Math.PI * 2); ctx.fill();
+
+    // Hazard tape strips (Gridlock vocabulary)
+    ctx.strokeStyle = 'rgba(255,230,0,0.14)';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([8, 8]);
+    ctx.strokeStyle = '#1a1a1a';
+    ctx.beginPath();
+    ctx.moveTo(cx - 130, cy - 90);
+    ctx.lineTo(cx - 40, cy - 90);
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,230,0,0.35)';
+    ctx.beginPath();
+    ctx.moveTo(cx - 130, cy - 90);
+    ctx.lineTo(cx - 40, cy - 90);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Low service hut silhouette marks
+    ctx.fillStyle = 'rgba(30, 36, 46, 0.85)';
+    ctx.fillRect(cx - 30, cy - 20, 70, 36);
+    ctx.fillStyle = 'rgba(0,232,255,0.12)';
+    ctx.fillRect(cx - 24, cy - 12, 16, 10);
+    ctx.fillRect(cx + 4, cy - 12, 16, 10);
+    ctx.fillStyle = 'rgba(255,43,214,0.1)';
+    ctx.fillRect(cx - 30, cy - 22, 70, 2);
+
+    // Grit
+    ctx.fillStyle = 'rgba(255,255,255,0.035)';
+    for (let y = 40; y < track.height; y += 28) {
+      for (let x = 40 + (y % 40); x < track.width; x += 37) {
+        ctx.fillRect(x, y, 1.5, 1.5);
+      }
+    }
+    ctx.restore();
+  }
+
+  /** Block kerbs along high-curvature / landmark apexes on the inner wall. */
+  function drawBlockKerbs(ctx, track) {
+    const poly = track.inner;
+    if (!poly || poly.length < 4) return;
+    const n = poly.length;
+    const landmarkIdx = new Set();
+    if (track.landmarks) {
+      for (const lm of track.landmarks) {
+        if (lm.kind !== 'corner' && lm.kind !== 'chicane' && lm.kind !== 'kink') continue;
+        let best = 0, bd = Infinity;
+        for (let i = 0; i < n; i++) {
+          const d = Math.hypot(poly[i].x - lm.x, poly[i].y - lm.y);
+          if (d < bd) { bd = d; best = i; }
+        }
+        for (let k = -2; k <= 5; k++) landmarkIdx.add((best + k + n) % n);
+      }
+    }
+    for (let i = 0; i < n; i++) {
+      const a = poly[(i - 1 + n) % n];
+      const b = poly[i];
+      const c = poly[(i + 1) % n];
+      const a0 = Math.atan2(b.y - a.y, b.x - a.x);
+      const a1 = Math.atan2(c.y - b.y, c.x - b.x);
+      let d = a1 - a0;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      const turn = Math.abs(d);
+      const force = landmarkIdx.has(i);
+      if (turn < 0.04 && !force) continue;
+      const edgeLen = Math.hypot(c.x - b.x, c.y - b.y) || 1;
+      const blocks = Math.max(2, Math.min(12, Math.floor(edgeLen / 12)));
+      const ang = Math.atan2(c.y - b.y, c.x - b.x);
+      let ox = Math.cos(ang + Math.PI / 2);
+      let oy = Math.sin(ang + Math.PI / 2);
+      const cx = track.width * 0.5, cy = track.height * 0.5;
+      const mx = (b.x + c.x) * 0.5, my = (b.y + c.y) * 0.5;
+      if ((mx - cx) * ox + (my - cy) * oy < 0) { ox = -ox; oy = -oy; }
+      const intensity = force ? 1 : Math.min(1, turn / 0.28);
+      for (let k = 0; k < blocks; k++) {
+        const t = (k + 0.5) / blocks;
+        const x = b.x + (c.x - b.x) * t + ox * 5;
+        const y = b.y + (c.y - b.y) * t + oy * 5;
+        const light = (k % 2 === 0);
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(ang);
+        ctx.globalAlpha = 0.7 + 0.3 * intensity;
+        ctx.fillStyle = light ? '#f2f2f2' : '#d0122a';
+        ctx.fillRect(-6.5, -3.8, 13, 7.5);
+        ctx.restore();
+      }
     }
   }
 
@@ -400,30 +539,102 @@ export function createRenderer(canvas) {
     for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i].x, poly[i].y);
   }
 
+
+  function drawStartGantryOnly(ctx, track) {
+    const line = track.line;
+    if (!line || !line.length) return;
+    const idx = (typeof track.startIndex === 'number')
+      ? ((track.startIndex % line.length) + line.length) % line.length
+      : 0;
+    const p = line[idx];
+    if (!p) return;
+    const p1 = line[(idx + 1) % line.length] || p;
+    const heading = Math.atan2(p1.y - p.y, p1.x - p.x);
+    const s = track.spawns && track.spawns[0];
+    const ang = (s && s.angle != null) ? s.angle : heading;
+    drawGantry(ctx, track, p, ang);
+  }
+
   function drawStartLine(ctx, track) {
-    const s = track.spawns[0];
-    if (!s) return;
+    const line = track.line;
+    const idx = (typeof track.startIndex === 'number')
+      ? ((track.startIndex % line.length) + line.length) % line.length
+      : 0;
+    const p = line[idx] || (track.spawns && track.spawns[0]);
+    if (!p) return;
+    const p1 = line[(idx + 1) % line.length] || p;
+    const heading = Math.atan2(p1.y - p.y, p1.x - p.x);
+    const s = track.spawns && track.spawns[0] ? track.spawns[0] : p;
+    const ang = (s.angle != null) ? s.angle : heading;
+
+    // Chequer band across track at start/finish
     ctx.save();
-    ctx.translate(s.x, s.y);
-    ctx.rotate(s.angle + Math.PI / 2);
-    // Shadow under grid
-    ctx.fillStyle = 'rgba(0,0,0,0.4)';
-    ctx.fillRect(-52, -14, 104, 28);
-    // Wider chequered start/finish stripe
-    for (let i = -6; i < 7; i++) {
+    ctx.translate(p.x, p.y);
+    ctx.rotate(ang + Math.PI / 2);
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(-56, -16, 112, 32);
+    for (let i = -7; i < 8; i++) {
       for (let j = 0; j < 3; j++) {
-        ctx.fillStyle = ((i + j) & 1) ? 'rgba(255,230,0,0.9)' : 'rgba(8,8,10,0.88)';
+        ctx.fillStyle = ((i + j) & 1) ? 'rgba(245,245,245,0.92)' : 'rgba(12,12,14,0.9)';
         ctx.fillRect(i * 8, j * 8 - 12, 8, 8);
       }
     }
-    // Neon edge rails
-    ctx.fillStyle = hexAlpha(track.accent || '#ff2bd6', 0.75);
-    ctx.fillRect(-52, -15, 104, 2);
-    ctx.fillRect(-52, 12, 104, 2);
-    ctx.fillStyle = hexAlpha(track.wall || '#00e8ff', 0.55);
-    ctx.fillRect(-52, -17, 104, 1.5);
-    ctx.fillRect(-52, 14, 104, 1.5);
+    ctx.fillStyle = hexAlpha(track.accent || '#ff2bd6', 0.7);
+    ctx.fillRect(-56, -17, 112, 2);
+    ctx.fillRect(-56, 12, 112, 2);
     ctx.restore();
+
+    // Simple gantry: 2 posts + crossbar spanning near startIndex
+    drawGantry(ctx, track, p, ang);
+  }
+
+  function drawGantry(ctx, track, p, ang) {
+    const lx = -Math.sin(ang), ly = Math.cos(ang);
+    const half = 92;
+    const postH = 68;
+    const ax = p.x + lx * half;
+    const ay = p.y + ly * half;
+    const bx = p.x - lx * half;
+    const by = p.y - ly * half;
+    // Slight foreshortening so posts read in top-down
+    const topA = { x: ax - lx * 4, y: ay - postH };
+    const topB = { x: bx + lx * 4, y: by - postH };
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.beginPath(); ctx.ellipse(ax, ay + 2, 8, 4, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(bx, by + 2, 8, 4, 0, 0, Math.PI * 2); ctx.fill();
+    // Posts as thick uprights
+    ctx.strokeStyle = '#9aa3b0';
+    ctx.lineWidth = 7;
+    ctx.lineCap = 'square';
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(topA.x, topA.y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(topB.x, topB.y); ctx.stroke();
+    ctx.strokeStyle = '#dce2ec';
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(ax + 2, ay); ctx.lineTo(topA.x + 2, topA.y); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(bx + 2, by); ctx.lineTo(topB.x + 2, topB.y); ctx.stroke();
+    // Crossbar
+    ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+    ctx.lineWidth = 10;
+    ctx.beginPath(); ctx.moveTo(topA.x, topA.y + 2); ctx.lineTo(topB.x, topB.y + 2); ctx.stroke();
+    ctx.strokeStyle = '#e8ecf4';
+    ctx.lineWidth = 7;
+    ctx.beginPath(); ctx.moveTo(topA.x, topA.y); ctx.lineTo(topB.x, topB.y); ctx.stroke();
+    // Neon lights on bar
+    ctx.fillStyle = hexAlpha(track.wall || '#00e8ff', 0.95);
+    for (let i = 0; i <= 6; i++) {
+      const t = i / 6;
+      const x = topA.x + (topB.x - topA.x) * t;
+      const y = topA.y + (topB.y - topA.y) * t;
+      ctx.beginPath(); ctx.arc(x, y, 3, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.fillStyle = hexAlpha(track.accent || '#ff2bd6', 0.55);
+    ctx.beginPath(); ctx.arc((topA.x + topB.x) * 0.5, topA.y - 5, 3.5, 0, Math.PI * 2); ctx.fill();
+    // Banner strip
+    ctx.fillStyle = 'rgba(12,16,24,0.75)';
+    const midY = topA.y + 8;
+    ctx.fillRect(Math.min(topA.x, topB.x) + 12, midY, Math.abs(topB.x - topA.x) - 24, 10);
+    ctx.fillStyle = hexAlpha(track.wall || '#00e8ff', 0.35);
+    ctx.fillRect(Math.min(topA.x, topB.x) + 12, midY, Math.abs(topB.x - topA.x) - 24, 2);
   }
 
   function drawMine(ctx, m, t) {

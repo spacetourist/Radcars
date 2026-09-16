@@ -1,0 +1,24 @@
+{
+  "track": "neon_loop",
+  "swCache": "radcars-v10-neon-loop-art",
+  "server": "http://127.0.0.1:4173 (200)",
+  "shots": [
+    "01-title.webp",
+    "02-neon-loop-grid.webp / .png",
+    "03-neon-loop-countdown.webp",
+    "04-neon-loop-race.webp / .png"
+  ],
+  "landmarks": [
+    "start_finish", "pit", "kink", "chicane",
+    "corner_east", "corner_south_east", "corner_south_west",
+    "corner_west", "corner_north_west", "corner_north_east"
+  ],
+  "geometry": {
+    "samples": 96,
+    "widthVar": "±18%",
+    "pitRecess": "outer north bay (~96px out)",
+    "kink": "NW approach lateral shove",
+    "chicane": "south inner/outer pinch + S-offset"
+  },
+  "note": "Hard-refresh / unregister SW if shots look stale; cache bumped to v10."
+}

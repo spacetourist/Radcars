@@ -97,7 +97,7 @@ function themeFor(track) {
   const id = track.id || '';
   if (id === 'gridlock') {
     return {
-      skyTop: '#05070c', skyMid: '#0a1020', skyBot: '#12181c',
+      skyTop: '#070a12', skyMid: '#0c1424', skyBot: '#141a22',
       ground: '#0c1014', groundHi: '#141820',
       neonA: wall, neonB: accent, neonC: '#ffe600',
       brick: '#2a3038', brickHi: '#3a4250', metal: '#1a1e26',
@@ -106,7 +106,7 @@ function themeFor(track) {
   }
   if (id === 'razor_hairpin') {
     return {
-      skyTop: '#0a0612', skyMid: '#160a1c', skyBot: '#1a1018',
+      skyTop: '#0e0816', skyMid: '#1a0e22', skyBot: '#1e1420',
       ground: '#100c14', groundHi: '#1a1420',
       neonA: wall, neonB: accent, neonC: '#b8ff00',
       brick: '#2c2030', brickHi: '#3c3040', metal: '#1c1420',
@@ -115,7 +115,7 @@ function themeFor(track) {
   }
   if (id === 'cargo_dock') {
     return {
-      skyTop: '#060c08', skyMid: '#0a1410', skyBot: '#101810',
+      skyTop: '#08140c', skyMid: '#0e1a14', skyBot: '#142018',
       ground: '#0a100c', groundHi: '#141c14',
       neonA: wall, neonB: accent, neonC: '#ff8a00',
       brick: '#243028', brickHi: '#344038', metal: '#141c16',
@@ -123,11 +123,11 @@ function themeFor(track) {
     };
   }
   return {
-    skyTop: '#040810', skyMid: '#081428', skyBot: '#0e1820',
-    ground: '#0a0e14', groundHi: '#121820',
+    skyTop: '#061018', skyMid: '#0c1a2c', skyBot: '#141c28',
+    ground: '#0e141c', groundHi: '#181e28',
     neonA: wall, neonB: accent, neonC: '#b8ff00',
-    brick: '#222830', brickHi: '#323840', metal: '#161a22',
-    window: '#182030', glowWin: wall
+    brick: '#262c36', brickHi: '#363c48', metal: '#1a1e28',
+    window: '#1a2434', glowWin: wall
   };
 }
 
@@ -610,19 +610,41 @@ export function buildTrackScenery(track) {
   const near = [];
   const edges = perimeterNormals(track.outer);
 
-  // Density weights along perimeter — straights + near start
   const start = track.spawns && track.spawns[0];
   const startX = start ? start.x : track.width * 0.5;
   const startY = start ? start.y : track.height * 0.2;
 
+  // Landmark anchors (from track) drive clustering; thin mid-straights
+  const landmarks = (track.landmarks && track.landmarks.length)
+    ? track.landmarks
+    : [{ id: 'start_finish', x: startX, y: startY, kind: 'start' }];
+
+  function landmarkBoost(x, y) {
+    let best = 0;
+    let nearest = null;
+    for (const lm of landmarks) {
+      const d = Math.hypot(x - lm.x, y - lm.y);
+      let radius = 160;
+      let weight = 0.55;
+      if (lm.kind === 'start' || lm.id === 'start_finish') { radius = 300; weight = 1; }
+      else if (lm.kind === 'pit') { radius = 240; weight = 0.9; }
+      else if (lm.kind === 'chicane' || lm.kind === 'kink') { radius = 200; weight = 0.75; }
+      else if (lm.kind === 'corner') { radius = 220; weight = 0.8; }
+      if (d < radius) {
+        const b = weight * (1 - d / radius);
+        if (b > best) { best = b; nearest = lm; }
+      }
+    }
+    return { boost: best, nearest };
+  }
+
   function straightness(e) {
-    // longer edges = straighter sections on rect tracks; for ovals all similar
     return Math.min(1.5, e.len / 80);
   }
 
-  // Far skyline buildings — further out
+  // Far skyline buildings — further out; denser near landmarks
   for (const e of edges) {
-    const steps = Math.max(2, Math.floor(e.len / 55));
+    const steps = Math.max(2, Math.floor(e.len / 60));
     for (let s = 0; s < steps; s++) {
       const t = (s + 0.5) / steps;
       const bx = e.ax + (e.bx - e.ax) * t;
@@ -634,6 +656,10 @@ export function buildTrackScenery(track) {
       const y = by + e.ny * distOut + jy;
       if (!tryPlace(track, x, y, 40)) continue;
       if (pointInPoly(x, y, track.inner)) continue;
+      const { boost } = landmarkBoost(x, y);
+      // Thin mid-straights: skip more when far from landmarks
+      if (boost < 0.15 && rnd() > 0.45) continue;
+      if (boost < 0.35 && rnd() > 0.7) continue;
       const roll = rnd();
       let img, scale;
       if (roll < 0.28) { img = pick(sprites.buildings.tower, rnd); scale = 0.85 + rnd() * 0.45; }
@@ -641,16 +667,15 @@ export function buildTrackScenery(track) {
       else if (roll < 0.7) { img = pick(sprites.buildings.chimney, rnd); scale = 0.8 + rnd() * 0.4; }
       else if (roll < 0.85) { img = pick(sprites.buildings.water, rnd); scale = 0.75 + rnd() * 0.35; }
       else { img = pick(sprites.buildings.billboard, rnd); scale = 0.7 + rnd() * 0.3; }
-      addItem(far, img, x, y, scale, 'far', y + (img.height * scale) * 0.5);
+      addItem(far, img, x, y, scale * (1 + boost * 0.15), 'far', y + (img.height * scale) * 0.5);
     }
   }
 
-  // Mid buildings — closer to track
+  // Mid buildings — closer to track; cluster at landmarks
   for (const e of edges) {
-    const dens = 1.1 + straightness(e) * 0.6;
-    const steps = Math.max(2, Math.floor((e.len / 42) * dens));
+    const dens = 0.75 + straightness(e) * 0.35;
+    const steps = Math.max(2, Math.floor((e.len / 48) * dens));
     for (let s = 0; s < steps; s++) {
-      if (rnd() > 0.82) continue;
       const t = (s + rnd() * 0.6) / steps;
       const bx = e.ax + (e.bx - e.ax) * t;
       const by = e.ay + (e.by - e.ay) * t;
@@ -659,13 +684,19 @@ export function buildTrackScenery(track) {
       const y = by + e.ny * distOut + (rnd() - 0.5) * 18;
       if (!tryPlace(track, x, y, 28)) continue;
       if (pointInPoly(x, y, track.outer)) continue;
+      const { boost, nearest } = landmarkBoost(x, y);
+      if (boost < 0.12 && rnd() > 0.35) continue; // thin mid-straights
+      if (boost < 0.3 && rnd() > 0.55) continue;
       const dStart = Math.hypot(x - startX, y - startY);
-      const nearStart = dStart < 280;
+      const nearStart = dStart < 280 || (nearest && (nearest.kind === 'start' || nearest.id === 'start_finish'));
       const roll = rnd();
       let img, scale;
-      if (nearStart && roll < 0.35) {
+      if (nearStart && roll < 0.4) {
         img = pick(sprites.buildings.stand, rnd);
-        scale = 0.95 + rnd() * 0.25;
+        scale = 0.95 + rnd() * 0.3;
+      } else if (boost > 0.5 && nearest && nearest.kind === 'pit' && roll < 0.45) {
+        img = pick(sprites.buildings.warehouse, rnd);
+        scale = 0.85 + rnd() * 0.3;
       } else if (roll < 0.3) {
         img = pick(sprites.buildings.shop, rnd);
         scale = 0.85 + rnd() * 0.3;
@@ -686,10 +717,10 @@ export function buildTrackScenery(track) {
     }
   }
 
-  // Near props + crowds along outer wall
+  // Near props + crowds along outer wall — crowds bias to landmarks
   for (const e of edges) {
-    const dens = 1.2 + straightness(e) * 0.8;
-    const steps = Math.max(3, Math.floor((e.len / 28) * dens));
+    const dens = 0.85 + straightness(e) * 0.5;
+    const steps = Math.max(3, Math.floor((e.len / 32) * dens));
     for (let s = 0; s < steps; s++) {
       const t = (s + 0.3 + rnd() * 0.4) / steps;
       const bx = e.ax + (e.bx - e.ax) * t;
@@ -699,11 +730,11 @@ export function buildTrackScenery(track) {
       const y = by + e.ny * distOut + (rnd() - 0.5) * 8;
       if (!tryPlace(track, x, y, 12)) continue;
       if (pointInPoly(x, y, track.outer)) continue;
-      const dStart = Math.hypot(x - startX, y - startY);
-      const crowdBias = dStart < 320 ? 0.55 : 0.28;
+      const { boost } = landmarkBoost(x, y);
+      if (boost < 0.1 && rnd() > 0.4) continue;
+      const crowdBias = 0.18 + boost * 0.55;
       if (rnd() < crowdBias) {
-        // crowd cluster
-        const n = 2 + (rnd() * 4) | 0;
+        const n = 2 + (rnd() * (boost > 0.4 ? 5 : 3)) | 0;
         for (let k = 0; k < n; k++) {
           const img = pick(sprites.characters, rnd);
           const scale = 0.85 + rnd() * 0.35;
@@ -726,26 +757,127 @@ export function buildTrackScenery(track) {
     }
   }
 
-  // Extra grandstand + dense crowd near start/finish
+  // Few large grandstands facing the start straight (+ pit / major corners)
+  const standAnchors = landmarks.filter((lm) =>
+    lm.kind === 'start' || lm.id === 'start_finish' || lm.kind === 'pit' || lm.kind === 'corner');
+  for (const lm of standAnchors) {
+    const isStart = lm.kind === 'start' || lm.id === 'start_finish';
+    const count = isStart ? 4 : (lm.kind === 'pit' ? 2 : 1);
+    // Face outward from track center
+    const cx = track.width * 0.5, cy = track.height * 0.5;
+    const dx = lm.x - cx, dy = lm.y - cy;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = dx / len, ny = dy / len;
+    const tx = -ny, ty = nx;
+    for (let i = 0; i < count; i++) {
+      const lat = (i - (count - 1) * 0.5) * (isStart ? 70 : 55);
+      const out = isStart ? (95 + i * 8) : 80;
+      const x = lm.x + nx * out + tx * lat;
+      const y = lm.y + ny * out + ty * lat;
+      if (!tryPlace(track, x, y, 28)) continue;
+      if (pointInPoly(x, y, track.outer)) continue;
+      const img = pick(sprites.buildings.stand, rnd);
+      const scale = isStart ? (1.15 + rnd() * 0.2) : (1.0 + rnd() * 0.15);
+      addItem(mid, img, x, y, scale, 'mid');
+      const crowdN = isStart ? 10 : 5;
+      for (let k = 0; k < crowdN; k++) {
+        const cimg = pick(sprites.characters, rnd);
+        addItem(near, cimg,
+          x + (rnd() - 0.5) * 70,
+          y + 18 + rnd() * 20,
+          0.9 + rnd() * 0.3, 'near');
+      }
+    }
+  }
+
+  // Extra dense crowd at start/finish (countdown zoom must show life)
   if (start) {
     const ang = start.angle || 0;
     const lx = -Math.sin(ang), ly = Math.cos(ang);
     for (const side of [-1, 1]) {
-      for (let i = 0; i < 3; i++) {
-        const x = startX + lx * side * (70 + i * 50) - Math.cos(ang) * (20 + i * 30);
-        const y = startY + ly * side * (70 + i * 50) - Math.sin(ang) * (20 + i * 30);
-        if (!tryPlace(track, x, y, 30)) continue;
+      for (let i = 0; i < 2; i++) {
+        const x = startX + lx * side * (85 + i * 55) - Math.cos(ang) * (15 + i * 25);
+        const y = startY + ly * side * (85 + i * 55) - Math.sin(ang) * (15 + i * 25);
+        if (!tryPlace(track, x, y, 24)) continue;
         if (pointInPoly(x, y, track.outer)) continue;
-        const img = pick(sprites.buildings.stand, rnd);
-        addItem(mid, img, x, y, 1.05 + rnd() * 0.2, 'mid');
-        for (let k = 0; k < 8; k++) {
+        for (let k = 0; k < 6; k++) {
           const cimg = pick(sprites.characters, rnd);
           addItem(near, cimg,
-            x + (rnd() - 0.5) * 60,
-            y + 20 + rnd() * 18,
-            0.9 + rnd() * 0.3, 'near');
+            x + (rnd() - 0.5) * 50,
+            y + 12 + rnd() * 16,
+            0.95 + rnd() * 0.25, 'near');
+        }
+        if (rnd() > 0.4) {
+          addItem(near, pick(sprites.props.lamp, rnd), x + side * 20, y - 10, 1, 'near');
         }
       }
+    }
+  }
+
+  // Gridlock-style trackside hazard vocabulary at pit + start (cones/barrels/fences)
+  const hazardLms = landmarks.filter((lm) =>
+    lm.kind === 'start' || lm.id === 'start_finish' || lm.kind === 'pit' || lm.kind === 'chicane');
+  for (const lm of hazardLms) {
+    const cx = track.width * 0.5, cy = track.height * 0.5;
+    const dx = lm.x - cx, dy = lm.y - cy;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = dx / len, ny = dy / len;
+    const tx = -ny, ty = nx;
+    const heavy = (lm.kind === 'pit' || lm.kind === 'start' || lm.id === 'start_finish');
+    const nProps = heavy ? 14 : 6;
+    for (let i = 0; i < nProps; i++) {
+      const lat = (rnd() - 0.5) * (heavy ? 140 : 80);
+      const out = 18 + rnd() * (heavy ? 36 : 28);
+      const x = lm.x + nx * out + tx * lat;
+      const y = lm.y + ny * out + ty * lat;
+      if (!tryPlace(track, x, y, 10)) continue;
+      if (pointInPoly(x, y, track.outer)) continue;
+      const roll = rnd();
+      let img, scale;
+      if (roll < 0.28) { img = pick(sprites.props.cone, rnd); scale = 0.95 + rnd() * 0.2; }
+      else if (roll < 0.52) { img = pick(sprites.props.barrel, rnd); scale = 0.9 + rnd() * 0.25; }
+      else if (roll < 0.7) { img = pick(sprites.props.fence, rnd); scale = 0.85 + rnd() * 0.2; }
+      else if (roll < 0.85) { img = pick(sprites.props.light, rnd); scale = 0.85 + rnd() * 0.2; }
+      else { img = pick(sprites.props.lamp, rnd); scale = 0.9 + rnd() * 0.2; }
+      addItem(near, img, x, y, scale, 'near');
+    }
+    // Yellow hazard fence run along pit outer
+    if (lm.kind === 'pit' || heavy) {
+      for (let i = 0; i < 4; i++) {
+        const x = lm.x + nx * (22 + i * 2) + tx * (i - 1.5) * 36;
+        const y = lm.y + ny * (22 + i * 2) + ty * (i - 1.5) * 36;
+        if (!tryPlace(track, x, y, 8)) continue;
+        if (pointInPoly(x, y, track.outer)) continue;
+        addItem(near, pick(sprites.props.fence, rnd), x, y, 1.0, 'near');
+      }
+    }
+  }
+
+  // Infield yard props (inside inner ring) — low industrial clutter so oval sits in a yard
+  {
+    const cx = track.width * 0.5, cy = track.height * 0.5;
+    const infieldN = track.id === 'neon_loop' ? 28 : 12;
+    for (let i = 0; i < infieldN; i++) {
+      const ang = rnd() * Math.PI * 2;
+      const rad = 40 + rnd() * 140;
+      const x = cx + Math.cos(ang) * rad * (track.width / 1600);
+      const y = cy + Math.sin(ang) * rad * (track.height / 1000) * 0.85;
+      if (!pointInPoly(x, y, track.inner)) continue;
+      // keep clear of inner wall
+      let nearWall = false;
+      for (const p of track.inner) {
+        if (Math.hypot(p.x - x, p.y - y) < 36) { nearWall = true; break; }
+      }
+      if (nearWall) continue;
+      const roll = rnd();
+      let img, scale;
+      if (roll < 0.25) { img = pick(sprites.props.barrel, rnd); scale = 0.85 + rnd() * 0.2; }
+      else if (roll < 0.45) { img = pick(sprites.props.cone, rnd); scale = 0.8 + rnd() * 0.2; }
+      else if (roll < 0.6) { img = pick(sprites.props.fence, rnd); scale = 0.75 + rnd() * 0.2; }
+      else if (roll < 0.75) { img = pick(sprites.props.lamp, rnd); scale = 0.7 + rnd() * 0.2; }
+      else if (roll < 0.88) { img = pick(sprites.buildings.warehouse, rnd); scale = 0.45 + rnd() * 0.2; }
+      else { img = pick(sprites.props.light, rnd); scale = 0.75 + rnd() * 0.2; }
+      addItem(near, img, x, y, scale, 'near');
     }
   }
 
@@ -931,9 +1063,10 @@ export function drawGroundPlate(ctx, scenery, track) {
 }
 
 function drawLayer(ctx, items, cam, W, H, zoom, pad) {
-  // Frustum cull in world space
-  const hw = (W * 0.5) / zoom + pad;
-  const hh = (H * 0.5) / zoom + pad;
+  // Frustum cull in world space — extra pad when zoomed out (countdown grid)
+  const zoomPad = zoom < 0.85 ? 220 : 0;
+  const hw = (W * 0.5) / zoom + pad + zoomPad;
+  const hh = (H * 0.5) / zoom + pad + zoomPad;
   const minX = cam.x - hw, maxX = cam.x + hw;
   const minY = cam.y - hh, maxY = cam.y + hh;
   ctx.imageSmoothingEnabled = true;
