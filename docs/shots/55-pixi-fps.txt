@@ -1,0 +1,1 @@
+Pixi Neon Loop ZOOM_FAR(~0.60) mid-straight: ~60.4 FPS over 2.00s (121 frames, cam locked / frozen pose). vs Canvas A.1 ~23.1 FPS.

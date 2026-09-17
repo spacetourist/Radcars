@@ -929,6 +929,21 @@ function stampOk(placed, img, x, y, radius, maxSame) {
   return true;
 }
 
+/** Plate family key for A.1.1 anti-clone (cityblock / cityblock-b / …). */
+function plateSrcKey(img) {
+  if (!img) return null;
+  return img._srcKey || img.__srcKey || null;
+}
+
+/** Alternate plate for city family within ~400wu (A.1.1 hard rule). */
+function cityAlternateKey(key) {
+  if (key === 'cityblock') return 'cityblock-b';
+  if (key === 'cityblock-b') return 'cityblock';
+  if (key === 'citystreet') return 'citystreet-b';
+  if (key === 'citystreet-b') return 'citystreet';
+  return null;
+}
+
 function varyScale(rnd, lo, hi) {
   return lo + rnd() * (hi - lo);
 }
@@ -1361,6 +1376,21 @@ export function buildTrackScenery(track) {
   const bbMdList = (sprites.buildings.billboardMd && sprites.buildings.billboardMd.length)
     ? sprites.buildings.billboardMd : sprites.buildings.billboard;
 
+  // A.1.1: map sourceKey → alternate plate canvas (Md preferred)
+  const cityAltByKey = Object.create(null);
+  {
+    const cbMd = sprites.buildings.cityblockMd || sprites.buildings.cityblock || [];
+    const csMd = sprites.buildings.citystreetMd || sprites.buildings.citystreet || [];
+    for (const im of cbMd) {
+      const k = plateSrcKey(im);
+      if (k) cityAltByKey[k] = im;
+    }
+    for (const im of csMd) {
+      const k = plateSrcKey(im);
+      if (k) cityAltByKey[k] = im;
+    }
+  }
+
   function tryAddStamp(list, img, x, y, scale, layer, sortY, kind, opts) {
     if (!img) return false;
     if (kind === 'tower') {
@@ -1370,6 +1400,39 @@ export function buildTrackScenery(track) {
       if (billboardCount >= BILLBOARD_CAP) return false;
     }
     const cityKind = (kind === 'cityblock' || kind === 'citystreet');
+    // A.1.1 hard rule: no identical plate (same source key) within ~400 world units —
+    // force alternate cityblock↔cityblock-b / citystreet↔citystreet-b when placing.
+    if (cityKind) {
+      let key = plateSrcKey(img);
+      if (key) {
+        const antiR2 = 400 * 400;
+        let conflict = false;
+        for (const p of stampLog) {
+          if (p.kind !== kind) continue;
+          const pk = p.srcKey || plateSrcKey(p.img);
+          if (pk !== key) continue;
+          const dx = p.x - x, dy = p.y - y;
+          if (dx * dx + dy * dy < antiR2) { conflict = true; break; }
+        }
+        if (conflict) {
+          const altKey = cityAlternateKey(key);
+          const altImg = altKey ? cityAltByKey[altKey] : null;
+          if (!altImg || altImg === img) return false;
+          // Verify alternate also free of same-key neighbours
+          let altConflict = false;
+          for (const p of stampLog) {
+            if (p.kind !== kind) continue;
+            const pk = p.srcKey || plateSrcKey(p.img);
+            if (pk !== altKey) continue;
+            const dx = p.x - x, dy = p.y - y;
+            if (dx * dx + dy * dy < antiR2) { altConflict = true; break; }
+          }
+          if (altConflict) return false;
+          img = altImg;
+          key = altKey;
+        }
+      }
+    }
     if (!stampOk(stampLog, img, x, y, kind === 'tower' ? 160 : (kind === 'containers' ? 150 : (cityKind ? 150 : 110)), 1)) return false;
     // Extra spacing for towers/billboards/containers/city so corners don't cluster
     if (kind === 'tower' || kind === 'billboard' || kind === 'containers' || cityKind) {
@@ -1383,7 +1446,7 @@ export function buildTrackScenery(track) {
       }
     }
     addItem(list, img, x, y, scale, layer, sortY, kind || null, opts || null);
-    stampLog.push({ img, x, y, kind: kind || 'other' });
+    stampLog.push({ img, x, y, kind: kind || 'other', srcKey: plateSrcKey(img) });
     if (kind === 'tower') towerCount++;
     if (kind === 'billboard') billboardCount++;
     return true;
@@ -1962,7 +2025,13 @@ export function buildTrackScenery(track) {
         if (!inInner && !inOuter && !tryPlace(track, x, y, pad)) continue;
         // Infield S/F mass must be near-layer (yard fill covers mid)
         const startLayer = inInner ? near : mid;
-        addItem(startLayer, imgLarge, x, y, 1.9, inInner ? 'near' : 'mid', y + 110, sfKind || null, sfOpts || null);
+        const startLayerName = inInner ? 'near' : 'mid';
+        if (profile.cityCircuit && (sfKind === 'cityblock' || sfKind === 'citystreet')) {
+          if (!tryAddStamp(startLayer, imgLarge, x, y, 1.9, startLayerName, y + 110, sfKind, sfOpts)) continue;
+        } else {
+          addItem(startLayer, imgLarge, x, y, 1.9, startLayerName, y + 110, sfKind || null, sfOpts || null);
+          stampLog.push({ img: imgLarge, x, y, kind: sfKind || 'other', srcKey: plateSrcKey(imgLarge) });
+        }
         placedStartBlock = true;
         // Architecture silhouette only — dense crowd sheets read as confetti (v19)
         // Optional single oversized mass tucked into stand base, never a slab field
@@ -2305,10 +2374,16 @@ export function buildTrackScenery(track) {
           stampOpts = (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null;
         } else { img = pick(sprites.props.barrel, rnd); scale = varyScale(rnd, 0.7, 1.1); }
       } else { img = pick(sprites.props.barrel, rnd); scale = varyScale(rnd, 0.7, 1.1); }
-      if (!stampOk(stampLog, img, x, y, 55, 1)) continue;
-      if (stampOpts) {
+      const infieldCityKey = profile.cityCircuit ? plateSrcKey(img) : null;
+      if (infieldCityKey) {
+        const k = infieldCityKey.startsWith('citystreet') ? 'citystreet' : 'cityblock';
+        tryAddStamp(near, img, x, y, scale, 'near', y, k, stampOpts);
+        stampOpts = null;
+      } else if (!stampOk(stampLog, img, x, y, 55, 1)) {
+        continue;
+      } else if (stampOpts) {
         addItem(near, img, x, y, scale, 'near', y, null, stampOpts);
-        stampLog.push({ img, x, y, kind: 'cityblock' });
+        stampLog.push({ img, x, y, kind: 'other', srcKey: plateSrcKey(img) });
         stampOpts = null;
       } else {
         addItem(near, img, x, y, scale, 'near');

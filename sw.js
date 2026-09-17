@@ -1,4 +1,4 @@
-const CACHE = 'radcars-v36-city-a1-pixi';
+const CACHE = 'radcars-v37-pixi-proofs';
 const ASSETS = [
   './',
   './index.html',

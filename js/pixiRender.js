@@ -7,6 +7,7 @@ import {
   Application,
   Container,
   Sprite,
+  TilingSprite,
   Texture,
   Graphics,
   Text
@@ -166,6 +167,9 @@ export async function createPixiRenderer(opts) {
     powerPreference: 'high-performance'
   });
 
+  // Drive render from game loop only (avoid double rAF cost)
+  try { app.ticker.stop(); } catch (_) {}
+
   const view = app.canvas;
   view.id = 'pixi-game';
   view.setAttribute('aria-label', 'Radcars Pixi race view');
@@ -242,9 +246,23 @@ export async function createPixiRenderer(opts) {
     trackLayer.addChild(trackSprite);
   }
 
+  // Sprite pools — reuse instead of destroy/recreate (fewer binds / less GC)
+  const layerPools = new WeakMap();
+  function poolFor(container) {
+    let p = layerPools.get(container);
+    if (!p) { p = []; layerPools.set(container, p); }
+    return p;
+  }
+
+  /** Fill layer with pooled sprites; sort by texture uid for batch-friendly draw order. */
   function fillLayer(container, items, cam, zoom, pad, visCap) {
-    clearContainer(container);
-    if (!items || !items.length) return;
+    const pool = poolFor(container);
+    // Hide / reclaim existing
+    for (const spr of pool) spr.visible = false;
+    if (!items || !items.length) {
+      while (container.children.length) container.removeChildAt(0);
+      return;
+    }
     const zoomPad = zoom < 0.85 ? 220 : 0;
     const hw = (cssWidth * 0.5) / zoom + pad + zoomPad;
     const hh = (cssHeight * 0.5) / zoom + pad + zoomPad;
@@ -254,9 +272,9 @@ export async function createPixiRenderer(opts) {
     const maxY = cam.y + hh;
     const farZoom = zoom < 0.75;
     const cap = visCap > 0 ? visCap : 999;
-    let drawn = 0;
+    const visible = [];
     for (const it of items) {
-      if (drawn >= cap) break;
+      if (visible.length >= cap) break;
       if (farZoom && it.kind === 'crowd') continue;
       const left = it.x - it.w * 0.5;
       const top = it.y - it.h;
@@ -268,15 +286,105 @@ export async function createPixiRenderer(opts) {
       }
       const tex = textureFrom(it.img);
       if (!tex) continue;
-      const spr = new Sprite(tex);
-      spr.anchor.set(0.5, 1);
+      visible.push({ it, tex, uid: tex.uid || tex.source?.uid || 0 });
+    }
+    // Batch stamps: group identical textures together (fewer binds)
+    visible.sort((a, b) => (a.uid - b.uid) || (a.it.sortY - b.it.sortY) || (a.it.y - b.it.y));
+
+    while (container.children.length) container.removeChildAt(0);
+    let pi = 0;
+    for (const { it, tex } of visible) {
+      let spr = pool[pi];
+      if (!spr) {
+        spr = new Sprite(tex);
+        spr.anchor.set(0.5, 1);
+        pool[pi] = spr;
+      } else if (spr.texture !== tex) {
+        spr.texture = tex;
+      }
+      spr.visible = true;
       spr.x = it.x;
       spr.y = it.y;
+      // width/height then optional flip (keep batch path simple)
       spr.width = it.w;
       spr.height = it.h;
+      if (it.flipX) spr.scale.x = -Math.abs(spr.scale.x);
+      else if (spr.scale.x < 0) spr.scale.x = Math.abs(spr.scale.x);
+      if (it.rot) spr.rotation = it.rot;
+      else spr.rotation = 0;
       container.addChild(spr);
-      drawn++;
+      pi++;
     }
+  }
+
+  let groundSprite = null;
+  let groundTrackId = null;
+  let groundMode = null; // 'tile' | 'plate' | 'gfx'
+
+  function ensureGround(track, scenery, zoom) {
+    const tid = track && track.id;
+    let fade = 0.7;
+    if (zoom < 0.7) fade = 0.55 + zoom * 0.4;
+    else if (zoom < 1.05) fade = 0.70 + (zoom - 0.7) * 0.18;
+    else if (zoom < 1.35) fade = 0.50;
+    else fade = 0.46;
+    fade = Math.max(0.48, Math.min(0.86, fade));
+
+    // Single tinted/tiled ground sprite (never N drawImages)
+    const pack = getAssetPack();
+    const asphalt = pack && pack.ready && pack.asphalt ? pack.asphalt : null;
+    const needRebuild = !groundSprite || groundTrackId !== tid;
+
+    if (needRebuild) {
+      clearContainer(groundLayer);
+      groundSprite = null;
+      groundMode = null;
+      // Prefer one baked plate sprite (already continuous fabric)
+      if (scenery.ground) {
+        const g = scenery.ground;
+        const margin = g._margin || 200;
+        const scale = g._scale || 2;
+        const tex = textureFrom(g);
+        if (tex) {
+          const spr = new Sprite(tex);
+          spr.x = -margin;
+          spr.y = -margin;
+          spr.width = g.width * scale;
+          spr.height = g.height * scale;
+          groundLayer.addChild(spr);
+          groundSprite = spr;
+          groundMode = 'plate';
+        }
+      }
+      // Else one asphalt TilingSprite
+      if (!groundSprite && asphalt) {
+        const tex = textureFrom(asphalt);
+        if (tex) {
+          try { tex.source.style.addressMode = 'repeat'; } catch (_) {}
+          const margin = 720;
+          const tw = (track.width || 2900) + margin * 2;
+          const th = (track.height || 2100) + margin * 2;
+          const tile = new TilingSprite({ texture: tex, width: tw, height: th });
+          tile.x = -margin;
+          tile.y = -margin;
+          tile.tileScale.set(0.55, 0.55);
+          tile.tint = 0xc8b090;
+          groundLayer.addChild(tile);
+          groundSprite = tile;
+          groundMode = 'tile';
+        }
+      }
+      if (!groundSprite) {
+        const gfx = new Graphics();
+        gfx.rect(-400, -400, (track.width || 2900) + 800, (track.height || 2100) + 800);
+        gfx.fill({ color: parseInt(String(track.bg || '#161410').replace('#', ''), 16) || 0x161410 });
+        groundLayer.addChild(gfx);
+        groundSprite = gfx;
+        groundMode = 'gfx';
+      }
+      groundTrackId = tid;
+    }
+    if (groundSprite) groundSprite.alpha = fade;
   }
 
   function syncScenery(track, cam, zoom) {
@@ -290,47 +398,26 @@ export async function createPixiRenderer(opts) {
     dirtyScenery = false;
     lastSceneryKey = key;
 
-    clearContainer(groundLayer);
-    if (scenery.ground) {
-      const g = scenery.ground;
-      const margin = g._margin || 200;
-      const scale = g._scale || 2;
-      const tex = textureFrom(g);
-      if (tex) {
-        const spr = new Sprite(tex);
-        spr.x = -margin;
-        spr.y = -margin;
-        spr.width = g.width * scale;
-        spr.height = g.height * scale;
-        let fade = 0.7;
-        if (zoom < 0.7) fade = 0.55 + zoom * 0.4;
-        else if (zoom < 1.05) fade = 0.70 + (zoom - 0.7) * 0.18;
-        else if (zoom < 1.35) fade = 0.50;
-        else fade = 0.46;
-        spr.alpha = Math.max(0.48, Math.min(0.86, fade));
-        groundLayer.addChild(spr);
-      }
-    } else {
-      const gfx = new Graphics();
-      gfx.rect(-400, -400, (track.width || 2900) + 800, (track.height || 2100) + 800);
-      gfx.fill({ color: parseInt(String(track.bg || '#161410').replace('#', ''), 16) || 0x161410 });
-      groundLayer.addChild(gfx);
-    }
+    ensureGround(track, scenery, zoom);
 
     fillLayer(farLayer, scenery.far, cam, zoom, 160, 10);
     fillLayer(midLayer, scenery.mid, cam, zoom, 120, 18);
-    let nearItems = scenery.near;
-    let nearCap = 12;
+    // Perf: drop near layer entirely when zoom < ~0.7 (overview / ZOOM_FAR)
     if (zoom < 0.7) {
-      nearItems = scenery.nearThin || scenery.near;
-      nearCap = 5;
-    } else if (zoom < 0.85) nearCap = 8;
-    fillLayer(nearLayer, nearItems, cam, zoom, 80, nearCap);
+      clearContainer(nearLayer);
+      const pool = poolFor(nearLayer);
+      for (const spr of pool) spr.visible = false;
+    } else {
+      const nearCap = zoom < 0.85 ? 8 : 12;
+      fillLayer(nearLayer, scenery.near, cam, zoom, 80, nearCap);
+    }
     return scenery;
   }
 
+  let lastSkyKey = '';
+  let skySprites = { gfx: null, pack: null };
+
   function drawSky(scenery, cam, track) {
-    clearContainer(skyLayer);
     const W = cssWidth;
     const H = cssHeight;
     const theme = (scenery && scenery.theme) || {};
@@ -338,52 +425,75 @@ export async function createPixiRenderer(opts) {
     const packSky = pack && pack.ready && pack.skyline ? pack.skyline : null;
     const z = (cam && cam.zoom) || 1;
     const raceZoom = z >= 1.15;
+    // Rebuild sky only when size / theme / zoom-band changes (not every frame)
+    const skyKey = `${W}x${H}|${raceZoom ? 1 : 0}|${theme.skyTop || ''}|${!!packSky}`;
+    const needRebuild = skyKey !== lastSkyKey || !skyLayer.children.length;
+    lastSkyKey = skyKey;
 
     const top = parseInt(String(theme.skyTop || '#061018').replace('#', ''), 16) || 0x061018;
     const mid = parseInt(String(theme.skyMid || '#0c1a2c').replace('#', ''), 16) || 0x0c1a2c;
     const botCol = raceZoom ? 0x141210 : (parseInt(String(theme.ground || track.bg || '#161410').replace('#', ''), 16) || 0x161410);
 
-    const gfx = new Graphics();
-    gfx.rect(0, 0, W, H * 0.45).fill({ color: top });
-    gfx.rect(0, H * 0.35, W, H * 0.35).fill({ color: mid });
-    gfx.rect(0, H * 0.6, W, H * 0.4).fill({ color: botCol });
-    skyLayer.addChild(gfx);
+    if (needRebuild) {
+      clearContainer(skyLayer);
+      skySprites = { gfx: null, pack: null };
+      const gfx = new Graphics();
+      gfx.rect(0, 0, W, H * 0.45).fill({ color: top });
+      gfx.rect(0, H * 0.35, W, H * 0.35).fill({ color: mid });
+      gfx.rect(0, H * 0.6, W, H * 0.4).fill({ color: botCol });
+      skyLayer.addChild(gfx);
+      skySprites.gfx = gfx;
 
-    if (packSky) {
-      const tex = textureFrom(packSky);
-      if (tex) {
-        const parallax = 0.14;
-        const scale = (W / packSky.width) * (raceZoom ? 1.12 : 1.18);
-        const dw = packSky.width * scale;
-        const dh = packSky.height * scale;
-        const ox = (W - dw) * 0.5 - ((cam.x * parallax) % Math.max(1, dw * 0.12));
-        const horizonY = H * (raceZoom ? 0.36 : 0.44);
-        const buildingBase = raceZoom ? 0.72 : 0.80;
-        let oy = horizonY - dh * buildingBase - (cam.y * parallax * 0.035);
-        if (oy > -2) oy = -Math.max(4, H * 0.02);
-        const spr = new Sprite(tex);
-        spr.x = ox;
-        spr.y = oy;
-        spr.width = dw;
-        spr.height = dh;
-        skyLayer.addChild(spr);
-      }
-    } else if (scenery && scenery.skyline) {
-      const img = scenery.skyline;
-      const tex = textureFrom(img);
-      if (tex) {
-        const parallax = 0.15;
-        const ox = -((cam.x * parallax) % img.width);
-        const oy = H * 0.28 - (cam.y * parallax * 0.05);
-        for (let i = -1; i <= 2; i++) {
-          const s = new Sprite(tex);
-          s.x = ox + i * img.width;
-          s.y = oy;
-          s.width = img.width;
-          s.height = img.height * 0.85;
-          s.alpha = 0.95;
-          skyLayer.addChild(s);
+      if (packSky) {
+        const tex = textureFrom(packSky);
+        if (tex) {
+          const spr = new Sprite(tex);
+          skyLayer.addChild(spr);
+          skySprites.pack = spr;
         }
+      } else if (scenery && scenery.skyline) {
+        const img = scenery.skyline;
+        const tex = textureFrom(img);
+        if (tex) {
+          for (let i = -1; i <= 2; i++) {
+            const s = new Sprite(tex);
+            s.alpha = 0.95;
+            skyLayer.addChild(s);
+          }
+        }
+      }
+    }
+
+    // Cheap parallax update on existing skyline sprite(s)
+    if (packSky && skySprites.pack) {
+      const spr = skySprites.pack;
+      const parallax = 0.14;
+      const scale = (W / packSky.width) * (raceZoom ? 1.12 : 1.18);
+      const dw = packSky.width * scale;
+      const dh = packSky.height * scale;
+      const ox = (W - dw) * 0.5 - ((cam.x * parallax) % Math.max(1, dw * 0.12));
+      const horizonY = H * (raceZoom ? 0.36 : 0.44);
+      const buildingBase = raceZoom ? 0.72 : 0.80;
+      let oy = horizonY - dh * buildingBase - (cam.y * parallax * 0.035);
+      if (oy > -2) oy = -Math.max(4, H * 0.02);
+      spr.x = ox;
+      spr.y = oy;
+      spr.width = dw;
+      spr.height = dh;
+    } else if (scenery && scenery.skyline && skyLayer.children.length > 1) {
+      const img = scenery.skyline;
+      const parallax = 0.15;
+      const ox = -((cam.x * parallax) % img.width);
+      const oy = H * 0.28 - (cam.y * parallax * 0.05);
+      let si = 0;
+      for (let i = 0; i < skyLayer.children.length; i++) {
+        const s = skyLayer.children[i];
+        if (s === skySprites.gfx) continue;
+        s.x = ox + (si - 1) * img.width;
+        s.y = oy;
+        s.width = img.width;
+        s.height = img.height * 0.85;
+        si++;
       }
     }
   }
@@ -474,6 +584,7 @@ export async function createPixiRenderer(opts) {
     drawSky(scenery, cam, track);
     applyCamera(cam);
     syncCars(cars || [], zoom);
+    try { app.render(); } catch (_) {}
     // fxLayer reserved (boom / nitro stub)
   }
 
@@ -489,7 +600,7 @@ export async function createPixiRenderer(opts) {
   }
 
   try {
-    window.__RAD_PIXI__ = { app, draw, resize, version: 'pixi-spike-v1' };
+    window.__RAD_PIXI__ = { app, draw, resize, version: 'pixi-spike-v2-batch' };
   } catch (_) {}
 
   return { draw, resize, drawCountdown, destroy, app, canvas: view };

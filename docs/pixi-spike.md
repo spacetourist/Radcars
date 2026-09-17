@@ -39,7 +39,7 @@ Default is **off** — normal Canvas play is unchanged.
 | `js/game.js` | Flag gate: skip Canvas world draw when Pixi ready |
 | `package.json` | `pixi.js@^8` for installs / upgrades |
 | `index.html` | `importmap` → `pixi.js` → vendor bundle |
-| `sw.js` | Lists `pixiRender.js` + vendor; cache `radcars-v36-pixi-spike` |
+| `sw.js` | Lists `pixiRender.js` + vendor; cache `radcars-v37-pixi-proofs` |
 
 ## Dependency / serve notes
 
@@ -56,6 +56,13 @@ Runtime import uses **`../vendor/pixi.min.mjs`** (offline-friendly). Same bytes 
 1. Open `/` — Canvas Neon Loop plays as before.
 2. Open `/?pixi=1` — Pixi stage shows Neon Loop with skyline + ground tint + city stamps + cars under the same camera (`window.__RAD_PIXI_READY__ === true`, `#pixi-game` present).
 3. Layers ordered; scenery from pack-baked stamps (Md/Sm), not raw 1280 plates.
+
+## Perf notes (v37 proofs)
+
+- Stamp sprites pooled + sorted by texture uid (fewer binds).
+- Near layer dropped entirely when `zoom < ~0.7`.
+- Ground is a **single** tinted `TilingSprite` (asphalt) when pack ready; else one baked plate sprite.
+- Bake caps unchanged (≤384 / hero ≤512).
 
 ## Blockers / follow-ups
 

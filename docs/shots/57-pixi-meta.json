@@ -1,0 +1,103 @@
+[
+  {
+    "id": "neon_loop",
+    "meta": {
+      "trackId": "neon_loop",
+      "warehouseBias": 0,
+      "cityCircuit": true,
+      "stampCounts": {
+        "tower": 0,
+        "billboard": 8,
+        "crane": 0,
+        "containers": 0,
+        "cityblock": 39,
+        "citystreet": 28,
+        "warehouse": 0,
+        "warehouseAfterScrub": 0,
+        "cityblockMdPool": 2,
+        "citystreetMdPool": 2,
+        "far": 10,
+        "mid": 18,
+        "near": 12,
+        "farRaw": 31,
+        "midRaw": 35,
+        "nearRaw": 243,
+        "caps": {
+          "mid": 18,
+          "far": 10,
+          "near": 12
+        }
+      },
+      "kinds": {
+        "cityblock": 17,
+        "citystreet": 14,
+        "billboard": 8,
+        "other": 1
+      },
+      "srcKeys": {
+        "cityblock-b": 7,
+        "cityblock": 10,
+        "citystreet-b": 10,
+        "citystreet": 4
+      },
+      "cloneHits400": 0,
+      "pixi": "pixi-spike-v2-batch"
+    }
+  },
+  {
+    "fps": {
+      "ok": true,
+      "frames": 121,
+      "elapsed": 2.002800000011921,
+      "fps": 60.41541841386049,
+      "zoom": 0.6,
+      "pixiReady": true,
+      "canvas": "pixi"
+    },
+    "fpsLine": "Pixi Neon Loop ZOOM_FAR(~0.60) mid-straight: ~60.4 FPS over 2.00s (121 frames, cam locked / frozen pose). vs Canvas A.1 ~23.1 FPS."
+  },
+  {
+    "id": "gridlock",
+    "meta": {
+      "trackId": "gridlock",
+      "warehouseBias": 0,
+      "cityCircuit": true,
+      "stampCounts": {
+        "tower": 0,
+        "billboard": 10,
+        "crane": 0,
+        "containers": 0,
+        "cityblock": 39,
+        "citystreet": 30,
+        "warehouse": 1,
+        "warehouseAfterScrub": 0,
+        "cityblockMdPool": 2,
+        "citystreetMdPool": 2,
+        "far": 10,
+        "mid": 17,
+        "near": 12,
+        "farRaw": 28,
+        "midRaw": 41,
+        "nearRaw": 300,
+        "caps": {
+          "mid": 18,
+          "far": 10,
+          "near": 12
+        }
+      },
+      "kinds": {
+        "cityblock": 20,
+        "citystreet": 11,
+        "billboard": 8
+      },
+      "srcKeys": {
+        "cityblock-b": 10,
+        "cityblock": 10,
+        "citystreet-b": 9,
+        "citystreet": 2
+      },
+      "cloneHits400": 0,
+      "pixi": "pixi-spike-v2-batch"
+    }
+  }
+]

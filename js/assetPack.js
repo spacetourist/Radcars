@@ -951,19 +951,25 @@ export function loadAssetPack() {
     // Phase A.1 city circuit landmarks — base + -b unique plates; Sm/Md (hero ≤512 / ≤384)
     const cityblockB = pack.scenery['cityblock-b'] || pack.scenery.cityblockB;
     const citystreetB = pack.scenery['citystreet-b'] || pack.scenery.citystreetB;
-    function bakeCityFamily(src, maxL) {
+    function tagSrcKey(canvas, key) {
+      if (canvas) canvas._srcKey = key;
+      return canvas;
+    }
+    function bakeCityFamily(src, maxL, srcKey) {
       if (!src) return null;
       const baked = warmCyanToSodium(bakeLongEdge(src, maxL, { stripNeonEdge: true }));
       const lod = makeLodPair(baked, maxL);
-      return {
-        md: lod.md || baked,
-        sm: lod.sm || bakeLongEdge(baked, Math.max(48, Math.round(Math.max(baked.width, baked.height) * 0.5)))
-      };
+      const md = lod.md || baked;
+      const sm = lod.sm || bakeLongEdge(baked, Math.max(48, Math.round(Math.max(baked.width, baked.height) * 0.5)));
+      tagSrcKey(md, srcKey);
+      tagSrcKey(sm, srcKey);
+      tagSrcKey(baked, srcKey);
+      return { md, sm };
     }
-    const cbA = cityblock ? bakeCityFamily(cityblock, heroStampPx) : null;
-    const cbB = cityblockB ? bakeCityFamily(cityblockB, heroStampPx) : null;
-    const csA = citystreet ? bakeCityFamily(citystreet, maxStampPx) : null;
-    const csB = citystreetB ? bakeCityFamily(citystreetB, maxStampPx) : null;
+    const cbA = cityblock ? bakeCityFamily(cityblock, heroStampPx, 'cityblock') : null;
+    const cbB = cityblockB ? bakeCityFamily(cityblockB, heroStampPx, 'cityblock-b') : null;
+    const csA = citystreet ? bakeCityFamily(citystreet, maxStampPx, 'citystreet') : null;
+    const csB = citystreetB ? bakeCityFamily(citystreetB, maxStampPx, 'citystreet-b') : null;
     // Flat keys (compat) + variant arrays so pick() gets unique plates, not only LOD of one source
     if (cbA || cbB) {
       const mds = [];
