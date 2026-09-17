@@ -1,4 +1,4 @@
-const CACHE = 'radcars-v32-speed-zoom';
+const CACHE = 'radcars-v33-zoom-out';
 const ASSETS = [
   './',
   './index.html',

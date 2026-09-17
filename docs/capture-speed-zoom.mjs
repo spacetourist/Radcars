@@ -21,11 +21,11 @@ await page.evaluate(async () => {
   for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister();
 }).catch(() => {});
 await page.reload({ waitUntil: 'domcontentloaded' });
-await sleep(900);
+await sleep(800);
 await page.click('.menu-btns [data-act="single"]');
 await page.waitForSelector('#tracks button.btn.primary');
 await (await page.$$('#tracks button.btn.primary'))[0].click();
-await sleep(1400);
+await sleep(1200);
 
 async function holdAtSpeed(spd, frames) {
   return page.evaluate(async (spd, frames) => {
@@ -33,7 +33,6 @@ async function holdAtSpeed(spd, frames) {
     const w = g.world;
     w.race.countdown = 0; w.race.live = true; w.race.goFlash = 0;
     const p = w.player;
-    // Mid-track sample on Neon Loop line
     const line = w.track.line;
     const i = (line.length * 0.35) | 0;
     const a = line[i], b = line[(i + 1) % line.length];
@@ -50,10 +49,10 @@ async function holdAtSpeed(spd, frames) {
   }, spd, frames);
 }
 
-const fast = await holdAtSpeed(1.25, 75);
-await page.screenshot({ path: join(OUT, '51-zoom-fast.png') });
-console.log('fast', fast);
-const slow = await holdAtSpeed(0.15, 75);
-await page.screenshot({ path: join(OUT, '51b-zoom-slow.png') });
-console.log('slow', slow);
+const crawl = await holdAtSpeed(0.08, 55);
+await page.screenshot({ path: join(OUT, '52-zoom-crawl.png') });
+console.log('crawl', crawl);
+const pace = await holdAtSpeed(0.9, 55);
+await page.screenshot({ path: join(OUT, '52b-zoom-pace.png') });
+console.log('pace', pace);
 await browser.close();

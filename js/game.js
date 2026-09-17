@@ -9,18 +9,19 @@ import { sfx } from './audio.js';
 import { placePrize, persistSave } from './career.js';
 import { clamp } from './util.js';
 
-/** Camera: idle close; real race speeds (~0.4–1.5) pull out hard (v32). */
-const ZOOM_NEAR = 1.68;
-const ZOOM_FAR = 0.72;
+/** Camera: stay open after GO; speed pulls further out (v33).
+ *  Near must stay close to grid zoom — a high NEAR made race start zoom *in*
+ *  and never feel like it zoomed out again. */
+const ZOOM_NEAR = 1.02;   // crawl / just after GO (barely tighter than grid)
+const ZOOM_FAR = 0.48;    // pace — lots of upcoming track
 const ZOOM_GRID = 0.88;
-const ZOOM_LERP_RACE = 0.14;
+const ZOOM_LERP_RACE = 0.18;
 const ZOOM_LERP_GRID = 0.08;
-/** Look-ahead along facing grows with speed so upcoming track fills the frame. */
-const LOOKAHEAD_MIN = 18;
-const LOOKAHEAD_MAX = 220;
-/** Actual in-race |v| peaks ~1.2–1.5 on stock engine — not the soft top-speed constant. */
-const SPD_ZOOM_LO = 0.2;
-const SPD_ZOOM_HI = 1.15;
+const LOOKAHEAD_MIN = 40;
+const LOOKAHEAD_MAX = 280;
+/** Full zoom-out by modest race pace (|v| often only ~0.8–1.4). */
+const SPD_ZOOM_LO = 0.05;
+const SPD_ZOOM_HI = 0.65;
 
 export function createGame(canvas, input) {
   const renderer = createRenderer(canvas);
@@ -256,22 +257,22 @@ export function createGame(canvas, input) {
       return;
     }
 
-    // Speed → zoom out + look ahead (mapped to real |v|, not soft top-speed)
+    // Speed → zoom OUT + look ahead. Low HI so any real pace opens the frame.
     const spd = Math.hypot(p.vx, p.vy);
     const tSpd = clamp((spd - SPD_ZOOM_LO) / (SPD_ZOOM_HI - SPD_ZOOM_LO), 0, 1);
-    // Ease-in so mid pace already opens the frame
-    const eased = Math.sqrt(tSpd);
+    // Ease-out: early speed already pulls back hard
+    const eased = 1 - (1 - tSpd) * (1 - tSpd);
     let targetZoom = ZOOM_NEAR + (ZOOM_FAR - ZOOM_NEAR) * eased;
     if (p.nitroTimer > 0) {
-      targetZoom = Math.max(ZOOM_FAR * 0.92, targetZoom - 0.08);
+      targetZoom = Math.max(ZOOM_FAR * 0.9, targetZoom - 0.06);
     }
-    targetZoom = clamp(targetZoom, ZOOM_FAR * 0.92, ZOOM_NEAR);
+    targetZoom = clamp(targetZoom, ZOOM_FAR * 0.9, ZOOM_NEAR);
 
     const look = LOOKAHEAD_MIN + (LOOKAHEAD_MAX - LOOKAHEAD_MIN) * eased;
     const tx = p.x + Math.cos(p.angle) * look;
     const ty = p.y + Math.sin(p.angle) * look;
-    world.cam.x += (tx - world.cam.x) * 0.16;
-    world.cam.y += (ty - world.cam.y) * 0.16;
+    world.cam.x += (tx - world.cam.x) * 0.18;
+    world.cam.y += (ty - world.cam.y) * 0.18;
     world.cam.zoom += (targetZoom - world.cam.zoom) * ZOOM_LERP_RACE;
   }
 
