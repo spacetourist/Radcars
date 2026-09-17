@@ -192,7 +192,7 @@ function buildNeonLoopGeometry() {
     checkpoints,
     startIndex,
     landmarks,
-    cpHitRadius: 160
+    cpHitRadius: 280
   };
 }
 
@@ -322,7 +322,7 @@ export const TRACKS = [
         { id: 'corner_sw', x: 210 * S, y: 890 * S, kind: 'corner', index: Math.round(dense.length * 0.75) },
         { id: 'corner_nw', x: 190 * S, y: 340 * S, kind: 'corner', index: Math.round(dense.length * 0.9) }
       ];
-      return { outer, inner, line: dense, spawns, checkpoints, startIndex, landmarks, cpHitRadius: 130 };
+      return { outer, inner, line: dense, spawns, checkpoints, startIndex, landmarks, cpHitRadius: 260 };
     })()
   },
   {
@@ -404,7 +404,7 @@ export const TRACKS = [
         { id: 'waist_south', x: line[(n * 0.25) | 0].x, y: line[(n * 0.25) | 0].y, kind: 'kink', index: (n * 0.25) | 0 },
         { id: 'waist_north', x: line[(n * 0.75) | 0].x, y: line[(n * 0.75) | 0].y, kind: 'kink', index: (n * 0.75) | 0 }
       ];
-      return { outer, inner, line, spawns, checkpoints, startIndex, landmarks, cpHitRadius: 130 };
+      return { outer, inner, line, spawns, checkpoints, startIndex, landmarks, cpHitRadius: 260 };
     })()
   },
   {
@@ -482,7 +482,7 @@ export const TRACKS = [
         { id: 'dock_pinch', x: dense[pinchIdx].x, y: dense[pinchIdx].y, kind: 'kink', index: pinchIdx },
         { id: 'quay_east', x: 1495 * S, y: 280 * S, kind: 'corner', index: Math.round(dense.length * 0.22) }
       ];
-      return { outer, inner, line: dense, spawns, checkpoints, startIndex, landmarks, cpHitRadius: 130 };
+      return { outer, inner, line: dense, spawns, checkpoints, startIndex, landmarks, cpHitRadius: 260 };
     })()
   }
 ];

@@ -73,25 +73,90 @@ export function checkpointHitRadius(track) {
   if (track && track.cpHitRadius) return track.cpHitRadius;
   const w = (track && track.width) || 1600;
   const h = (track && track.height) || 1000;
-  // Scale with world size so denser long circuits stay reliable
-  return Math.max(90, Math.min(200, Math.min(w, h) * 0.055));
+  return Math.max(160, Math.min(300, Math.min(w, h) * 0.09));
 }
 
+/** Nearest racing-line index to a world point. */
+function nearestLineIndex(track, x, y) {
+  const line = track.line;
+  let bestI = 0;
+  let bestD = Infinity;
+  for (let i = 0; i < line.length; i++) {
+    const dx = x - line[i].x, dy = y - line[i].y;
+    const d = dx * dx + dy * dy;
+    if (d < bestD) { bestD = d; bestI = i; }
+  }
+  return bestI;
+}
+
+/**
+ * Lap gates follow racing-line progress so a missed centre CP cannot freeze
+ * the counter. Also accepts a large radius / gate-plane cross for catch-up.
+ */
 export function updateCheckpoints(car, track) {
   if (car.finished || car.dead) return;
   const cps = track.checkpoints;
-  const next = car.checkpoint % cps.length;
-  const cp = cps[next];
-  const dx = car.x - cp.x, dy = car.y - cp.y;
-  const hitR = checkpointHitRadius(track);
-  // crossed when near gate
-  if (dx * dx + dy * dy < hitR * hitR) {
-    car.checkpoint++;
-    if (car.checkpoint >= cps.length) {
-      car.checkpoint = 0;
-      car.lap++;
-      car._justLapped = true;
+  const line = track.line;
+  if (!cps || !cps.length || !line || !line.length) return;
+
+  const nLine = line.length;
+  const start = ((track.startIndex % nLine) + nLine) % nLine;
+  const li = nearestLineIndex(track, car.x, car.y);
+  const along = (li - start + nLine) % nLine;
+  const cpCount = cps.length;
+  const pos = (along / nLine) * cpCount; // 0 .. cpCount around from S/F
+
+  if (car._cpPosPrev == null) car._cpPosPrev = pos;
+
+  const hitR = Math.max(checkpointHitRadius(track), 260);
+  const hitR2 = hitR * hitR;
+  const lx = line[li].x - car.x, ly = line[li].y - car.y;
+  const onRibbon = (lx * lx + ly * ly) < hitR2 * 5; // ~2.2× hitR
+
+  let guard = 0;
+  while (guard++ < cpCount + 1) {
+    const next = car.checkpoint % cpCount;
+    const cp = cps[next];
+    const dx = car.x - cp.x, dy = car.y - cp.y;
+    const near = (dx * dx + dy * dy) < hitR2;
+    const ahead = dx * cp.nx + dy * cp.ny;
+    const lat = Math.abs(-dx * cp.ny + dy * cp.nx);
+    const crossed = ahead > -40 && ahead < hitR && lat < hitR;
+
+    let progressHit = false;
+    if (onRibbon && !car._lapLock) {
+      if (next === 0) {
+        // S/F only after arming on the final sector — prevents double-lap when
+        // catch-up wraps while pos is still high, then snaps low next frame.
+        progressHit = !car._lapLock && !!car._sfArmed && car._cpPosPrev > cpCount - 0.85 && pos < 1.1;
+      } else {
+        progressHit = pos >= next + 0.05;
+        if (next >= cpCount - 2) car._sfArmed = true;
+      }
     }
+
+    if (near || crossed || progressHit) {
+      car.checkpoint++;
+      if (car.checkpoint >= cpCount) {
+        car.checkpoint = 0;
+        car.lap++;
+        car._justLapped = true;
+        car._sfArmed = false;
+        car._cpPosPrev = Math.min(pos, 0.35);
+        car._lapLock = 12; // frames to ignore S/F / progress wrap after a lap
+        break;
+      }
+      // Progress catch-up is one gate/frame so a high stale pos cannot cascade a full lap
+      if (progressHit && !near && !crossed) break;
+      continue;
+    }
+    break;
+  }
+
+  if (car._lapLock > 0) car._lapLock--;
+  // Do not overwrite a post-lap snap with a still-high pre-wrap pos
+  if (!(car._justLapped || (car._lapLock > 0 && pos > cpCount * 0.5))) {
+    car._cpPosPrev = pos;
   }
   car.progress = raceProgress(car, track);
 }
