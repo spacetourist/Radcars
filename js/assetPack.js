@@ -658,7 +658,7 @@ function makeLodPair(source, maxLong, opts = {}) {
 }
 
 const HERO_STAMP_KEYS = new Set([
-  'crane', 'grandstand-large', 'grandstandLarge', 'cityblock', 'standLarge'
+  'crane', 'grandstand-large', 'grandstandLarge', 'cityblock', 'cityblock-b', 'standLarge'
 ]);
 
 
@@ -948,20 +948,58 @@ export function loadAssetPack() {
       pack.scenery.billboard = pack.scenery.billboardMd;
     }
 
-    // Phase A city circuit landmarks — cityblock + citystreet Sm/Md (hero ≤512)
-    if (cityblock) {
-      const cb = warmCyanToSodium(bakeLongEdge(cityblock, heroStampPx, { stripNeonEdge: true }));
-      const lod = makeLodPair(cb, heroStampPx);
-      pack.scenery.cityblockMd = lod.md || cb;
-      pack.scenery.cityblockSm = lod.sm || bakeLongEdge(cb, Math.max(48, Math.round(Math.max(cb.width, cb.height) * 0.5)));
-      pack.scenery.cityblock = pack.scenery.cityblockMd;
+    // Phase A.1 city circuit landmarks — base + -b unique plates; Sm/Md (hero ≤512 / ≤384)
+    const cityblockB = pack.scenery['cityblock-b'] || pack.scenery.cityblockB;
+    const citystreetB = pack.scenery['citystreet-b'] || pack.scenery.citystreetB;
+    function bakeCityFamily(src, maxL) {
+      if (!src) return null;
+      const baked = warmCyanToSodium(bakeLongEdge(src, maxL, { stripNeonEdge: true }));
+      const lod = makeLodPair(baked, maxL);
+      return {
+        md: lod.md || baked,
+        sm: lod.sm || bakeLongEdge(baked, Math.max(48, Math.round(Math.max(baked.width, baked.height) * 0.5)))
+      };
     }
-    if (citystreet) {
-      const cs = warmCyanToSodium(bakeLongEdge(citystreet, maxStampPx, { stripNeonEdge: true }));
-      const lod = makeLodPair(cs, maxStampPx);
-      pack.scenery.citystreetMd = lod.md || cs;
-      pack.scenery.citystreetSm = lod.sm || bakeLongEdge(cs, Math.max(48, Math.round(Math.max(cs.width, cs.height) * 0.5)));
-      pack.scenery.citystreet = pack.scenery.citystreetMd;
+    const cbA = cityblock ? bakeCityFamily(cityblock, heroStampPx) : null;
+    const cbB = cityblockB ? bakeCityFamily(cityblockB, heroStampPx) : null;
+    const csA = citystreet ? bakeCityFamily(citystreet, maxStampPx) : null;
+    const csB = citystreetB ? bakeCityFamily(citystreetB, maxStampPx) : null;
+    // Flat keys (compat) + variant arrays so pick() gets unique plates, not only LOD of one source
+    if (cbA || cbB) {
+      const mds = [];
+      const sms = [];
+      if (cbA) { mds.push(cbA.md); sms.push(cbA.sm); pack.scenery.cityblockMd = cbA.md; pack.scenery.cityblockSm = cbA.sm; }
+      if (cbB) {
+        mds.push(cbB.md); sms.push(cbB.sm);
+        pack.scenery['cityblock-b'] = cbB.md;
+        pack.scenery.cityblockB = cbB.md;
+        pack.scenery['cityblock-b-md'] = cbB.md;
+        pack.scenery['cityblock-b-sm'] = cbB.sm;
+        pack.scenery.cityblockBMd = cbB.md;
+        pack.scenery.cityblockBSm = cbB.sm;
+      }
+      pack.scenery.cityblock = mds[0];
+      pack.scenery.cityblockMdVariants = mds;
+      pack.scenery.cityblockSmVariants = sms;
+      pack.scenery.cityblockVariants = mds;
+    }
+    if (csA || csB) {
+      const mds = [];
+      const sms = [];
+      if (csA) { mds.push(csA.md); sms.push(csA.sm); pack.scenery.citystreetMd = csA.md; pack.scenery.citystreetSm = csA.sm; }
+      if (csB) {
+        mds.push(csB.md); sms.push(csB.sm);
+        pack.scenery['citystreet-b'] = csB.md;
+        pack.scenery.citystreetB = csB.md;
+        pack.scenery['citystreet-b-md'] = csB.md;
+        pack.scenery['citystreet-b-sm'] = csB.sm;
+        pack.scenery.citystreetBMd = csB.md;
+        pack.scenery.citystreetBSm = csB.sm;
+      }
+      pack.scenery.citystreet = mds[0];
+      pack.scenery.citystreetMdVariants = mds;
+      pack.scenery.citystreetSmVariants = sms;
+      pack.scenery.citystreetVariants = mds;
     }
 
     // v2.6 Cargo quay — green-keyed crane; larger Md; neutralize residual rose → yellow sodium
@@ -992,7 +1030,7 @@ export function loadAssetPack() {
     pack.trackHints = (manifest && manifest.trackHints) || {};
 
     const anyCar = Object.values(pack.cars).some(Boolean);
-    const anyScenery = !!(warehouse || grandstand || grandstandLarge || tower || crowd || crowdDense || tyrewall || props || palms || billboard || crane || containers || cityblock || citystreet);
+    const anyScenery = !!(warehouse || grandstand || grandstandLarge || tower || crowd || crowdDense || tyrewall || props || palms || billboard || crane || containers || cityblock || citystreet || cityblockB || citystreetB);
     pack.ready = !!(anyCar || anyScenery || skyline);
     _pack = pack;
     try {
@@ -1020,12 +1058,18 @@ export function loadAssetPack() {
             containers: !!containers,
             cityblock: !!cityblock,
             citystreet: !!citystreet,
+            cityblockB: !!cityblockB,
+            citystreetB: !!citystreetB,
             cityblockMd: !!(pack.scenery.cityblockMd),
-            citystreetMd: !!(pack.scenery.citystreetMd)
+            citystreetMd: !!(pack.scenery.citystreetMd),
+            cityblockVariants: (pack.scenery.cityblockMdVariants || []).length,
+            citystreetVariants: (pack.scenery.citystreetMdVariants || []).length
           },
           stampSizes: {
             cityblock: pack.scenery.cityblock && [pack.scenery.cityblock.width, pack.scenery.cityblock.height],
             citystreet: pack.scenery.citystreet && [pack.scenery.citystreet.width, pack.scenery.citystreet.height],
+            cityblockB: pack.scenery['cityblock-b'] && [pack.scenery['cityblock-b'].width, pack.scenery['cityblock-b'].height],
+            citystreetB: pack.scenery['citystreet-b'] && [pack.scenery['citystreet-b'].width, pack.scenery['citystreet-b'].height],
             warehouse: pack.scenery.warehouse && [pack.scenery.warehouse.width, pack.scenery.warehouse.height],
             maxStampPx,
             heroStampPx

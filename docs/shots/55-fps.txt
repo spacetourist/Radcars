@@ -1,0 +1,1 @@
+Neon Loop ZOOM_FAR(~0.60) mid-straight: ~23.1 FPS over 2.03s (47 frames, cam locked / frozen pose).

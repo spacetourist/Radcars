@@ -1,0 +1,121 @@
+[
+  {
+    "id": "neon_loop",
+    "meta": {
+      "trackId": "neon_loop",
+      "warehouseBias": 0,
+      "cityCircuit": true,
+      "stampCounts": {
+        "tower": 0,
+        "billboard": 8,
+        "crane": 0,
+        "containers": 0,
+        "cityblock": 50,
+        "citystreet": 32,
+        "warehouse": 0,
+        "warehouseAfterScrub": 0,
+        "cityblockMdPool": 2,
+        "citystreetMdPool": 2,
+        "far": 10,
+        "mid": 18,
+        "near": 12,
+        "farRaw": 33,
+        "midRaw": 38,
+        "nearRaw": 258,
+        "caps": {
+          "mid": 18,
+          "far": 10,
+          "near": 12
+        }
+      },
+      "kinds": {
+        "cityblock": 20,
+        "citystreet": 12,
+        "billboard": 7,
+        "other": 1
+      },
+      "byLayer": {
+        "far": {
+          "cityblock": 10
+        },
+        "mid": {
+          "citystreet": 9,
+          "cityblock": 2,
+          "billboard": 7
+        },
+        "near": {
+          "citystreet": 3,
+          "cityblock": 8,
+          "other": 1
+        }
+      },
+      "pools": {
+        "cityblockMd": 2,
+        "citystreetMd": 2
+      }
+    }
+  },
+  {
+    "fps": {
+      "ok": true,
+      "frames": 47,
+      "elapsed": 2.0305,
+      "fps": 23.147,
+      "zoom": 0.6
+    },
+    "fpsLine": "Neon Loop ZOOM_FAR(~0.60) mid-straight: ~23.1 FPS over 2.03s (47 frames, cam locked / frozen pose)."
+  },
+  {
+    "id": "gridlock",
+    "meta": {
+      "trackId": "gridlock",
+      "warehouseBias": 0,
+      "cityCircuit": true,
+      "stampCounts": {
+        "tower": 0,
+        "billboard": 10,
+        "crane": 0,
+        "containers": 0,
+        "cityblock": 41,
+        "citystreet": 30,
+        "warehouse": 1,
+        "warehouseAfterScrub": 0,
+        "cityblockMdPool": 2,
+        "citystreetMdPool": 2,
+        "far": 10,
+        "mid": 17,
+        "near": 12,
+        "farRaw": 28,
+        "midRaw": 41,
+        "nearRaw": 302,
+        "caps": {
+          "mid": 18,
+          "far": 10,
+          "near": 12
+        }
+      },
+      "kinds": {
+        "cityblock": 18,
+        "billboard": 8,
+        "citystreet": 13
+      },
+      "byLayer": {
+        "far": {
+          "cityblock": 10
+        },
+        "mid": {
+          "billboard": 8,
+          "citystreet": 9
+        },
+        "near": {
+          "cityblock": 8,
+          "citystreet": 4
+        }
+      },
+      "pools": {
+        "cityblockMd": 2,
+        "citystreetMd": 2
+      }
+    }
+  }
+]

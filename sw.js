@@ -1,4 +1,4 @@
-const CACHE = 'radcars-v35-city-phase-a';
+const CACHE = 'radcars-v36-city-a1-pixi';
 const ASSETS = [
   './',
   './index.html',
@@ -25,6 +25,8 @@ const ASSETS = [
   './js/sprites.js',
   './js/scenery.js',
   './js/assetPack.js',
+  './js/pixiRender.js',
+  './vendor/pixi.min.mjs',
   './assets/generated/manifest.json',
   './assets/generated/bg/bg-skyline-horizon.png',
   './assets/generated/cars/car-cyan.png',
@@ -49,6 +51,8 @@ const ASSETS = [
   './assets/generated/scenery/scenery-containers.png',
   './assets/generated/scenery/scenery-cityblock.png',
   './assets/generated/scenery/scenery-citystreet.png',
+  './assets/generated/scenery/scenery-cityblock-b.png',
+  './assets/generated/scenery/scenery-citystreet-b.png',
   './assets/generated/tex-asphalt.png'
 ];
 

@@ -795,24 +795,48 @@ function applyPackBuildingArt(buildings, characters, props) {
     if (sc.containers) variants.push(sc.containers);
     buildings.containers = variants;
   }
-  // Phase A city circuit — prefer Md landmarks
-  if (sc.cityblockMd || sc.cityblockSm || sc.cityblock) {
-    const variants = [];
-    if (sc.cityblockMd) variants.push(sc.cityblockMd);
-    if (sc.cityblockSm) variants.push(sc.cityblockSm);
-    if (sc.cityblock && variants.length < 2) variants.push(sc.cityblock);
-    buildings.cityblock = variants;
-    if (sc.cityblockMd) buildings.cityblockMd = [sc.cityblockMd];
-    else if (variants.length) buildings.cityblockMd = [variants[0]];
+  // A.1 city circuit — unique base + -b plates into Md/Sm pools (not only LOD of one source)
+  {
+    const cbMdPool = [];
+    const cbSmPool = [];
+    if (sc.cityblockMdVariants && sc.cityblockMdVariants.length) cbMdPool.push(...sc.cityblockMdVariants);
+    else {
+      if (sc.cityblockMd) cbMdPool.push(sc.cityblockMd);
+      if (sc.cityblockBMd || sc['cityblock-b-md']) cbMdPool.push(sc.cityblockBMd || sc['cityblock-b-md']);
+      if (sc['cityblock-b'] && !cbMdPool.includes(sc['cityblock-b'])) cbMdPool.push(sc['cityblock-b']);
+      if (sc.cityblock && !cbMdPool.includes(sc.cityblock)) cbMdPool.push(sc.cityblock);
+    }
+    if (sc.cityblockSmVariants && sc.cityblockSmVariants.length) cbSmPool.push(...sc.cityblockSmVariants);
+    else {
+      if (sc.cityblockSm) cbSmPool.push(sc.cityblockSm);
+      if (sc.cityblockBSm || sc['cityblock-b-sm']) cbSmPool.push(sc.cityblockBSm || sc['cityblock-b-sm']);
+    }
+    if (cbMdPool.length || cbSmPool.length) {
+      buildings.cityblock = cbMdPool.length ? cbMdPool.slice() : cbSmPool.slice();
+      buildings.cityblockMd = cbMdPool.length ? cbMdPool.slice() : buildings.cityblock.slice();
+      buildings.cityblockSm = cbSmPool.length ? cbSmPool.slice() : buildings.cityblockMd.slice();
+    }
   }
-  if (sc.citystreetMd || sc.citystreetSm || sc.citystreet) {
-    const variants = [];
-    if (sc.citystreetMd) variants.push(sc.citystreetMd);
-    if (sc.citystreetSm) variants.push(sc.citystreetSm);
-    if (sc.citystreet && variants.length < 2) variants.push(sc.citystreet);
-    buildings.citystreet = variants;
-    if (sc.citystreetMd) buildings.citystreetMd = [sc.citystreetMd];
-    else if (variants.length) buildings.citystreetMd = [variants[0]];
+  {
+    const csMdPool = [];
+    const csSmPool = [];
+    if (sc.citystreetMdVariants && sc.citystreetMdVariants.length) csMdPool.push(...sc.citystreetMdVariants);
+    else {
+      if (sc.citystreetMd) csMdPool.push(sc.citystreetMd);
+      if (sc.citystreetBMd || sc['citystreet-b-md']) csMdPool.push(sc.citystreetBMd || sc['citystreet-b-md']);
+      if (sc['citystreet-b'] && !csMdPool.includes(sc['citystreet-b'])) csMdPool.push(sc['citystreet-b']);
+      if (sc.citystreet && !csMdPool.includes(sc.citystreet)) csMdPool.push(sc.citystreet);
+    }
+    if (sc.citystreetSmVariants && sc.citystreetSmVariants.length) csSmPool.push(...sc.citystreetSmVariants);
+    else {
+      if (sc.citystreetSm) csSmPool.push(sc.citystreetSm);
+      if (sc.citystreetBSm || sc['citystreet-b-sm']) csSmPool.push(sc.citystreetBSm || sc['citystreet-b-sm']);
+    }
+    if (csMdPool.length || csSmPool.length) {
+      buildings.citystreet = csMdPool.length ? csMdPool.slice() : csSmPool.slice();
+      buildings.citystreetMd = csMdPool.length ? csMdPool.slice() : buildings.citystreet.slice();
+      buildings.citystreetSm = csSmPool.length ? csSmPool.slice() : buildings.citystreetMd.slice();
+    }
   }
 }
 
@@ -843,15 +867,17 @@ function pick(arr, rnd) {
   return arr[(rnd() * arr.length) | 0];
 }
 
-function addItem(list, img, x, y, scale, layer, sortY, kind) {
+function addItem(list, img, x, y, scale, layer, sortY, kind, opts) {
   if (!img) return;
   // Shorthand: addItem(..., layer, 'crowd') — string 7th arg is kind, not sortY
   let sy = sortY;
   let k = kind || null;
+  let o = opts || null;
   if (k == null && typeof sy === 'string' && (sy === 'crowd' || sy === 'prop' || sy === 'building')) {
     k = sy;
     sy = y;
   }
+  if (o == null && k && typeof k === 'object') { o = k; k = null; }
   // Retire thin colourful crowd strips; keep dense pack masses (v18)
   let s = scale;
   if (img.__radCrowd === 'thin') return;
@@ -861,7 +887,7 @@ function addItem(list, img, x, y, scale, layer, sortY, kind) {
     // Dense pack sheets may be wide; only drop unmarked/thin landscape strips
     if (img.__radCrowd !== 'dense' && aspect > 2.2) return;
   }
-  list.push({
+  const item = {
     img,
     x,
     y,
@@ -870,7 +896,12 @@ function addItem(list, img, x, y, scale, layer, sortY, kind) {
     layer,
     sortY: sy != null ? sy : y,
     kind: k
-  });
+  };
+  if (o) {
+    if (o.flipX) item.flipX = true;
+    if (o.rot) item.rot = o.rot;
+  }
+  list.push(item);
 }
 
 function tryPlace(track, x, y, pad) {
@@ -902,10 +933,25 @@ function varyScale(rnd, lo, hi) {
   return lo + rnd() * (hi - lo);
 }
 
-/** Phase A: prefer cityblockMd / citystreetMd / billboardMd when cityCircuit. */
+/** A.1 city circuit: mid/near = cityblock + citystreet + billboard only; far = darker cityblockSm. */
+function cityStampVariety(rnd, kind) {
+  // Anti-clone: flip / small rot or 180 / ±10–15% scale jitter
+  const flipX = rnd() < 0.48;
+  let rot = 0;
+  const r = rnd();
+  if (r < 0.18) rot = Math.PI; // 180 flip
+  else if (r < 0.42) rot = (rnd() - 0.5) * 0.22; // ~±6°
+  else if (r < 0.55) rot = (rnd() - 0.5) * 0.12;
+  const jitter = 1 + (rnd() - 0.5) * 0.28; // ±14%
+  return { flipX, rot, jitter };
+}
+
 function pickCityCircuitStamp(sprites, profile, rnd, opts = {}) {
   const preferFar = !!opts.preferFar;
-  const allowWh = profile.warehouseBias >= 0.05 && rnd() < Math.min(0.18, profile.warehouseBias);
+  // warehouseBias → 0: never emit warehouse for cityCircuit profiles
+  const cbSm = (sprites.buildings.cityblockSm && sprites.buildings.cityblockSm.length)
+    ? sprites.buildings.cityblockSm
+    : null;
   const cbMd = (sprites.buildings.cityblockMd && sprites.buildings.cityblockMd.length)
     ? sprites.buildings.cityblockMd
     : (sprites.buildings.cityblock || []);
@@ -915,12 +961,6 @@ function pickCityCircuitStamp(sprites, profile, rnd, opts = {}) {
   const bbMd = (sprites.buildings.billboardMd && sprites.buildings.billboardMd.length)
     ? sprites.buildings.billboardMd
     : (sprites.buildings.billboard || []);
-  const whSm = (sprites.buildings.warehouseSm && sprites.buildings.warehouseSm.length)
-    ? sprites.buildings.warehouseSm
-    : (sprites.buildings.warehouse || []);
-  const towerSm = (sprites.buildings.towerSm && sprites.buildings.towerSm.length)
-    ? sprites.buildings.towerSm
-    : (sprites.buildings.tower || []);
   const u = rnd();
   const cbW = Math.max(0.15, profile.cityblockBias || 0.4);
   const csW = Math.max(0.12, profile.citystreetBias || 0.3);
@@ -928,26 +968,37 @@ function pickCityCircuitStamp(sprites, profile, rnd, opts = {}) {
   const sum = cbW + csW + bbW;
   const cbCut = cbW / sum;
   const csCut = cbCut + csW / sum;
-  if (allowWh && whSm.length) {
-    return { img: pick(whSm, rnd), kind: 'warehouse', scale: varyScale(rnd, 0.7, 1.05) };
+
+  function wrap(img, kind, lo, hi) {
+    if (!img) return null;
+    const v = cityStampVariety(rnd, kind);
+    return {
+      img,
+      kind,
+      scale: varyScale(rnd, lo, hi) * v.jitter,
+      flipX: v.flipX,
+      rot: v.rot
+    };
   }
+
   if (preferFar) {
-    // Far: fewer larger cityblock + tower accents
-    if (u < 0.55 && cbMd.length) return { img: pick(cbMd, rnd), kind: 'cityblock', scale: varyScale(rnd, 0.85, 1.2) };
-    if (u < 0.8 && csMd.length) return { img: pick(csMd, rnd), kind: 'citystreet', scale: varyScale(rnd, 0.8, 1.15) };
-    if (towerSm.length) return { img: pick(towerSm, rnd), kind: 'tower', scale: varyScale(rnd, 0.65, 1.1) };
+    // Far: darker / smaller cityblockSm only (no warehouse, no tower)
+    const farPool = cbSm && cbSm.length ? cbSm : cbMd;
+    if (farPool.length) return wrap(pick(farPool, rnd), 'cityblock', 0.72, 1.05);
+    if (csMd.length) return wrap(pick(csMd, rnd), 'citystreet', 0.7, 0.98);
+    return null;
   }
   if (u < cbCut && cbMd.length) {
-    return { img: pick(cbMd, rnd), kind: 'cityblock', scale: varyScale(rnd, 0.9, 1.28) };
+    return wrap(pick(cbMd, rnd), 'cityblock', 0.9, 1.28);
   }
   if (u < csCut && csMd.length) {
-    return { img: pick(csMd, rnd), kind: 'citystreet', scale: varyScale(rnd, 0.88, 1.22) };
+    return wrap(pick(csMd, rnd), 'citystreet', 0.88, 1.22);
   }
   if (bbMd.length) {
-    return { img: pick(bbMd, rnd), kind: 'billboard', scale: varyScale(rnd, 0.88, 1.25) };
+    return wrap(pick(bbMd, rnd), 'billboard', 0.88, 1.25);
   }
-  if (cbMd.length) return { img: pick(cbMd, rnd), kind: 'cityblock', scale: varyScale(rnd, 0.9, 1.2) };
-  if (csMd.length) return { img: pick(csMd, rnd), kind: 'citystreet', scale: varyScale(rnd, 0.88, 1.18) };
+  if (cbMd.length) return wrap(pick(cbMd, rnd), 'cityblock', 0.9, 1.2);
+  if (csMd.length) return wrap(pick(csMd, rnd), 'citystreet', 0.88, 1.18);
   return null;
 }
 
@@ -1048,7 +1099,7 @@ export function getSceneryDensityProfile(track) {
     label: 'reference'
   };
   if (id === 'gridlock') {
-    // Phase A city circuit: cityblock + citystreet + billboards; warehouses rare
+    // A.1 city circuit: cityblock + citystreet + billboards only; warehouseBias 0
     return {
       ...base,
       beadOut: 560,
@@ -1056,7 +1107,7 @@ export function getSceneryDensityProfile(track) {
       billboardCap: 10,
       billboardBias: 0.42,
       warehouseScale: [0.68, 1.05],
-      warehouseBias: 0.08,
+      warehouseBias: 0,
       standBias: 0.05,
       infieldYardN: 12,
       palmChance: 0.02,
@@ -1110,7 +1161,7 @@ export function getSceneryDensityProfile(track) {
       label: 'industrial_quay'
     };
   }
-  // neon_loop — Phase A city circuit (warehouses rare; cityblock/citystreet/billboards)
+  // neon_loop — A.1 city circuit (no warehouses; cityblock/citystreet/billboards)
   return {
     ...base,
     beadOut: 540,
@@ -1118,7 +1169,7 @@ export function getSceneryDensityProfile(track) {
     infieldYardN: 18,
     palmChance: 0.08,
     standBias: 0.22,
-    warehouseBias: 0.10,
+    warehouseBias: 0,
     billboardBias: 0.28,
     billboardCap: 8,
     cityCircuit: true,
@@ -1310,7 +1361,7 @@ export function buildTrackScenery(track) {
   const bbMdList = (sprites.buildings.billboardMd && sprites.buildings.billboardMd.length)
     ? sprites.buildings.billboardMd : sprites.buildings.billboard;
 
-  function tryAddStamp(list, img, x, y, scale, layer, sortY, kind) {
+  function tryAddStamp(list, img, x, y, scale, layer, sortY, kind, opts) {
     if (!img) return false;
     if (kind === 'tower') {
       if (towerCount >= TOWER_CAP) return false;
@@ -1331,12 +1382,23 @@ export function buildTrackScenery(track) {
         if (nearSame >= 1) return false;
       }
     }
-    addItem(list, img, x, y, scale, layer, sortY, kind || null);
+    addItem(list, img, x, y, scale, layer, sortY, kind || null, opts || null);
     stampLog.push({ img, x, y, kind: kind || 'other' });
     if (kind === 'tower') towerCount++;
     if (kind === 'billboard') billboardCount++;
     return true;
   }
+  let stampOpts = null;
+  function applyCityPick(pickC) {
+    if (!pickC || !pickC.img) return null;
+    return {
+      img: pickC.img,
+      scale: pickC.scale,
+      kind: pickC.kind,
+      opts: (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null
+    };
+  }
+
 
   // Far skyline buildings — warehouse-dominated; towers/billboards hard-capped (v19)
   for (const e of edges) {
@@ -1364,7 +1426,7 @@ export function buildTrackScenery(track) {
         img = pick(sprites.buildings.stand, rnd); scale = varyScale(rnd, 0.85, 1.2); kind = 'stand';
       } else if (profile.cityCircuit) {
         const pickC = pickCityCircuitStamp(sprites, profile, rnd, { preferFar: true });
-        if (pickC && pickC.img) { img = pickC.img; scale = pickC.scale; kind = pickC.kind; }
+        if (pickC && pickC.img) { img = pickC.img; scale = pickC.scale; kind = pickC.kind; stampOpts = (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null; }
         else { img = pick(towerSmList, rnd); scale = varyScale(rnd, 0.65, 1.1); kind = 'tower'; }
       } else if (profile.urbanSkyline) {
         // Gridlock far: light warehouseSm / towerSm — save billboard cap for mid race beads
@@ -1430,8 +1492,9 @@ export function buildTrackScenery(track) {
           scale = varyScale(rnd, 0.95, 1.3);
         }
         kind = 'stand';
-      } else if (nearStart && allowStand && roll < (0.2 + profile.standBias * 0.7)) {
+      } else if (nearStart && allowStand && roll < (0.2 + profile.standBias * 0.7) && !profile.cityCircuit) {
         // Prefer architectural standLarge / standBlock — Cargo (standsOnlyAtSF) only here
+        // A.1: cityCircuit never places stands in mid — city stamps only
         if (hasStandLarge && rnd() < 0.55) {
           img = pick(sprites.buildings.standLarge, rnd);
           scale = varyScale(rnd, 0.85, 1.15);
@@ -1445,6 +1508,12 @@ export function buildTrackScenery(track) {
           scale = varyScale(rnd, 0.95, 1.35);
           kind = 'stand';
         }
+      } else if (nearStart && profile.cityCircuit && roll < 0.55) {
+        const pickC = pickCityCircuitStamp(sprites, profile, rnd);
+        if (pickC && pickC.img) {
+          img = pickC.img; scale = pickC.scale; kind = pickC.kind;
+          stampOpts = (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null;
+        }
       } else if (boost > 0.45 && nearest && (nearest.kind === 'pit' || nearest.kind === 'corner') && roll < 0.5) {
         if (allowStand && hasStandBlock && rnd() < 0.55) {
           img = pick(sprites.buildings.standBlock, rnd);
@@ -1456,7 +1525,7 @@ export function buildTrackScenery(track) {
           kind = 'containers';
         } else if (profile.cityCircuit) {
           const pickC = pickCityCircuitStamp(sprites, profile, rnd);
-          if (pickC && pickC.img) { img = pickC.img; scale = pickC.scale; kind = pickC.kind; }
+          if (pickC && pickC.img) { img = pickC.img; scale = pickC.scale; kind = pickC.kind; stampOpts = (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null; }
           else { img = pick(bbMdList, rnd); scale = varyScale(rnd, 0.85, 1.22); kind = 'billboard'; }
         } else if (profile.urbanSkyline) {
           img = pick(bbMdList, rnd);
@@ -1472,7 +1541,7 @@ export function buildTrackScenery(track) {
         const [wLo, wHi] = profile.warehouseScale;
         if (profile.cityCircuit) {
           const pickC = pickCityCircuitStamp(sprites, profile, rnd);
-          if (pickC && pickC.img) { img = pickC.img; scale = pickC.scale; kind = pickC.kind; }
+          if (pickC && pickC.img) { img = pickC.img; scale = pickC.scale; kind = pickC.kind; stampOpts = (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null; }
           else if (allowStand && hasStandLarge && rnd() < profile.standBias) {
             img = pick(sprites.buildings.standLarge, rnd); scale = varyScale(rnd, 0.72, 1.0); kind = 'stand';
           } else {
@@ -1527,7 +1596,7 @@ export function buildTrackScenery(track) {
         // Phase A city / Gridlock: city stamps first, warehouses scarce
         if (profile.cityCircuit) {
           const pickC = pickCityCircuitStamp(sprites, profile, rnd);
-          if (pickC && pickC.img) { img = pickC.img; scale = pickC.scale; kind = pickC.kind; }
+          if (pickC && pickC.img) { img = pickC.img; scale = pickC.scale; kind = pickC.kind; stampOpts = (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null; }
           else { img = pick(bbMdList, rnd); scale = varyScale(rnd, 0.85, 1.2); kind = 'billboard'; }
         } else {
         const whCut = profile.urbanSkyline
@@ -1597,7 +1666,7 @@ export function buildTrackScenery(track) {
           let img, kind = 'billboard', sc = varyScale(rnd, 0.95, 1.3);
           if (profile.cityCircuit) {
             const pickC = pickCityCircuitStamp(sprites, profile, rnd);
-            if (pickC && pickC.img) { img = pickC.img; kind = pickC.kind; sc = pickC.scale; }
+            if (pickC && pickC.img) { img = pickC.img; kind = pickC.kind; sc = pickC.scale; stampOpts = (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null; }
           }
           if (!img) img = pick(bbMdList.length ? bbMdList : sprites.buildings.billboard, rnd);
           if (!img) break;
@@ -1640,8 +1709,16 @@ export function buildTrackScenery(track) {
       const roll = rnd();
       let img, scale, kind = 'warehouse';
       if (isIn) {
-        // Lighter infield — Razor pinch: stands only; cut warehouses on narrow canyon
-        if (atPinch || (profile.pinchStandsOnly && profile.warehouseBias < 0.12) ||
+        // A.1 cityCircuit infield beads: city stamps only
+        if (profile.cityCircuit) {
+          const pickC = pickCityCircuitStamp(sprites, profile, rnd);
+          if (pickC && pickC.img) {
+            img = pickC.img; scale = pickC.scale; kind = pickC.kind;
+            stampOpts = (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null;
+          } else {
+            img = pick(bbMdList, rnd); scale = varyScale(rnd, 0.8, 1.1); kind = 'billboard';
+          }
+        } else if (atPinch || (profile.pinchStandsOnly && profile.warehouseBias < 0.12) ||
             (roll < (profile.pinchStandsOnly ? 0.7 : 0.4) && allowStand)) {
           img = pick(sprites.buildings.stand, rnd);
           scale = varyScale(rnd, 0.82, 1.08);
@@ -1673,7 +1750,7 @@ export function buildTrackScenery(track) {
         const [wLo, wHi] = profile.warehouseScale;
         if (profile.cityCircuit) {
           const pickC = pickCityCircuitStamp(sprites, profile, rnd);
-          if (pickC && pickC.img) { img = pickC.img; scale = pickC.scale; kind = pickC.kind; }
+          if (pickC && pickC.img) { img = pickC.img; scale = pickC.scale; kind = pickC.kind; stampOpts = (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null; }
           else { img = pick(bbMdList, rnd); scale = varyScale(rnd, 0.85, 1.18); kind = 'billboard'; }
         } else if (profile.urbanSkyline) {
           // Gridlock v28 race beads: billboardMd first, then towerSm; warehouses scarce
@@ -1753,8 +1830,16 @@ export function buildTrackScenery(track) {
         const atPinch = profile.pinchStandsOnly && nearPinch(x, y);
         const roll = rnd();
         let img, scale, kind;
-        // Razor: stands-only at pinch; cut warehouses from narrow geometry entirely
-        if (atPinch || (profile.pinchStandsOnly && profile.warehouseBias < 0.12 && roll < 0.72)) {
+        // A.1 cityCircuit infield: city stamps only (no warehouse / stand wall)
+        if (profile.cityCircuit) {
+          const pickC = pickCityCircuitStamp(sprites, profile, rnd);
+          if (pickC && pickC.img) {
+            img = pickC.img; scale = pickC.scale; kind = pickC.kind;
+            stampOpts = (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null;
+          } else {
+            img = pick(bbMdList, rnd); scale = varyScale(rnd, 0.8, 1.1); kind = 'billboard';
+          }
+        } else if (atPinch || (profile.pinchStandsOnly && profile.warehouseBias < 0.12 && roll < 0.72)) {
           img = pick(sprites.buildings.stand, rnd);
           scale = varyScale(rnd, 0.8, 1.05);
           kind = 'stand';
@@ -1823,11 +1908,25 @@ export function buildTrackScenery(track) {
     const tx = -ny, ty = nx;
 
     if (isStart && !placedStartBlock) {
-      // S/F mass: Neon Loop / Razor prefer standLarge; Cargo (low standBias) → warehouse quay mass
+      // S/F mass: cityCircuit → cityblock; Razor prefer standLarge; Cargo (low standBias) → warehouse
       let imgLarge;
-      if (profile.standBias < 0.25) {
+      let sfKind = 'stand';
+      let sfOpts = null;
+      if (profile.cityCircuit) {
+        const pickC = pickCityCircuitStamp(sprites, profile, rnd);
+        if (pickC && pickC.img) {
+          imgLarge = pickC.img;
+          sfKind = pickC.kind || 'cityblock';
+          sfOpts = (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null;
+        } else {
+          imgLarge = pick(sprites.buildings.cityblockMd || sprites.buildings.cityblock, rnd)
+            || pick(sprites.buildings.standBlock, rnd);
+          sfKind = 'cityblock';
+        }
+      } else if (profile.standBias < 0.25) {
         imgLarge = pick(sprites.buildings.warehouse, rnd)
           || pick(sprites.buildings.standBlock, rnd);
+        sfKind = 'warehouse';
       } else {
         imgLarge = (sprites.buildings.standLarge && sprites.buildings.standLarge.length)
           ? pick(sprites.buildings.standLarge, rnd)
@@ -1863,7 +1962,7 @@ export function buildTrackScenery(track) {
         if (!inInner && !inOuter && !tryPlace(track, x, y, pad)) continue;
         // Infield S/F mass must be near-layer (yard fill covers mid)
         const startLayer = inInner ? near : mid;
-        addItem(startLayer, imgLarge, x, y, 1.9, inInner ? 'near' : 'mid', y + 110);
+        addItem(startLayer, imgLarge, x, y, 1.9, inInner ? 'near' : 'mid', y + 110, sfKind || null, sfOpts || null);
         placedStartBlock = true;
         // Architecture silhouette only — dense crowd sheets read as confetti (v19)
         // Optional single oversized mass tucked into stand base, never a slab field
@@ -2197,12 +2296,24 @@ export function buildTrackScenery(track) {
         // Razor dark infield: fewer lit lamps
         if (profile.infieldDark && rnd() > 0.35) { img = pick(sprites.props.fence, rnd); scale = varyScale(rnd, 0.7, 1.1); }
         else { img = pick(sprites.props.lamp, rnd); scale = varyScale(rnd, 0.7, 1.1); }
-      } else if (roll < 0.64 + (profile.infieldDark ? 0.08 : profile.warehouseBias * 0.4)) {
+      } else if (!profile.cityCircuit && roll < 0.64 + (profile.infieldDark ? 0.08 : profile.warehouseBias * 0.4)) {
         img = pick(whSmListEarly, rnd); scale = varyScale(rnd, wLo * 0.85, wHi * 0.9);
+      } else if (profile.cityCircuit && roll < 0.78) {
+        const pickC = pickCityCircuitStamp(sprites, profile, rnd);
+        if (pickC && pickC.img) {
+          img = pickC.img; scale = pickC.scale * 0.85;
+          stampOpts = (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null;
+        } else { img = pick(sprites.props.barrel, rnd); scale = varyScale(rnd, 0.7, 1.1); }
       } else { img = pick(sprites.props.barrel, rnd); scale = varyScale(rnd, 0.7, 1.1); }
       if (!stampOk(stampLog, img, x, y, 55, 1)) continue;
-      addItem(near, img, x, y, scale, 'near');
-      stampLog.push({ img, x, y });
+      if (stampOpts) {
+        addItem(near, img, x, y, scale, 'near', y, null, stampOpts);
+        stampLog.push({ img, x, y, kind: 'cityblock' });
+        stampOpts = null;
+      } else {
+        addItem(near, img, x, y, scale, 'near');
+        stampLog.push({ img, x, y });
+      }
     }
   }
 
@@ -2221,7 +2332,7 @@ export function buildTrackScenery(track) {
     } else {
       if (profile.cityCircuit) {
         const pickC = pickCityCircuitStamp(sprites, profile, rnd, { preferFar: true });
-        if (pickC && pickC.img) { img = pickC.img; kind = pickC.kind; }
+        if (pickC && pickC.img) { img = pickC.img; kind = pickC.kind; stampOpts = (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null; }
         else { img = pick(sprites.buildings.billboard, rnd); kind = 'billboard'; }
       } else {
       const whCut = profile.warehouseBias < 0.15 ? profile.warehouseBias * 0.5 : (0.45 + profile.warehouseBias * 0.3);
@@ -2262,6 +2373,18 @@ export function buildTrackScenery(track) {
   // Thinner near list for low-zoom draw path (cam.zoom < ~0.7)
   const nearThin = enforceLayerCap(nearCapped, Math.max(4, Math.floor(nearCap * 0.45)), 160);
 
+  // A.1 hard scrub: cityCircuit mid/near/far never keep warehouse stamps
+  let farFinal = farCapped;
+  let midFinal = midCapped;
+  let nearFinal = nearCapped;
+  let nearThinFinal = nearThin;
+  if (profile.cityCircuit) {
+    const dropWh = (arr) => (arr || []).filter((it) => it && it.kind !== 'warehouse');
+    farFinal = dropWh(farFinal);
+    midFinal = dropWh(midFinal);
+    nearFinal = dropWh(nearFinal);
+    nearThinFinal = dropWh(nearThinFinal);
+  }
   const stampCounts = {
     tower: towerCount,
     billboard: billboardCount,
@@ -2270,7 +2393,12 @@ export function buildTrackScenery(track) {
     cityblock: stampLog.filter((p) => p.kind === 'cityblock').length,
     citystreet: stampLog.filter((p) => p.kind === 'citystreet').length,
     warehouse: stampLog.filter((p) => p.kind === 'warehouse').length,
-    far: farCapped.length, mid: midCapped.length, near: nearCapped.length,
+    warehouseAfterScrub: profile.cityCircuit
+      ? [...farFinal, ...midFinal, ...nearFinal].filter((it) => it.kind === 'warehouse').length
+      : null,
+    cityblockMdPool: (sprites.buildings.cityblockMd || []).length,
+    citystreetMdPool: (sprites.buildings.citystreetMd || []).length,
+    far: farFinal.length, mid: midFinal.length, near: nearFinal.length,
     farRaw: far.length, midRaw: mid.length, nearRaw: near.length,
     caps: { mid: midCap, far: farCap, near: nearCap }
   };
@@ -2279,10 +2407,10 @@ export function buildTrackScenery(track) {
     theme,
     profile,
     sprites,
-    far: farCapped,
-    mid: midCapped,
-    near: nearCapped,
-    nearThin,
+    far: farFinal,
+    mid: midFinal,
+    near: nearFinal,
+    nearThin: nearThinFinal,
     skyline,
     ground,
     startX,
@@ -2373,18 +2501,18 @@ function buildGroundPlate(track, theme) {
 
   const rnd = mulberry32(hashStr((track.id || '') + '-gnd'));
 
-  // Industrial plate panels across whole world (under + around track)
-  ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+  // Soft lot seams (not a harsh black void grid) — stamps sit on continuous fabric
+  ctx.strokeStyle = 'rgba(255,255,255,0.035)';
   ctx.lineWidth = 1;
-  const panel = 28;
+  const panel = 36;
   for (let x = 0; x < sw; x += panel) {
     ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, sh); ctx.stroke();
   }
   for (let y = 0; y < sh; y += panel) {
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(sw, y); ctx.stroke();
   }
-  // Darker seam every 4 panels
-  ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+  // Very soft block seams
+  ctx.strokeStyle = 'rgba(0,0,0,0.08)';
   for (let x = 0; x < sw; x += panel * 4) {
     ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, sh); ctx.stroke();
   }
@@ -2392,28 +2520,56 @@ function buildGroundPlate(track, theme) {
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(sw, y); ctx.stroke();
   }
 
-  // Optional pack asphalt tile over entire plate (not just racing surface)
+  // Continuous asphalt / lot / street fabric under scenery (A.1 — kill black void)
   try {
     const pack = getAssetPack();
     if (pack && pack.ready && pack.asphalt) {
-      const tw = 96, th = 54;
+      const tw = 128, th = 72;
       const tile = document.createElement('canvas');
       tile.width = tw; tile.height = th;
       const tctx = tile.getContext('2d');
       tctx.imageSmoothingEnabled = true;
       tctx.drawImage(pack.asphalt, 0, 0, tw, th);
       tctx.globalCompositeOperation = 'source-atop';
-      tctx.fillStyle = 'rgba(18, 16, 12, 0.45)';
+      // Warm lot tint — readable ground, not mud-black
+      tctx.fillStyle = 'rgba(28, 24, 18, 0.28)';
       tctx.fillRect(0, 0, tw, th);
       const pat = ctx.createPattern(tile, 'repeat');
       if (pat) {
-        ctx.globalAlpha = 0.42;
+        ctx.globalAlpha = 0.72;
         ctx.fillStyle = pat;
         ctx.fillRect(0, 0, sw, sh);
         ctx.globalAlpha = 1;
       }
+      // Second pass: slightly offset street fabric so stamps can overlap 10–20% into it
+      const tile2 = document.createElement('canvas');
+      tile2.width = tw; tile2.height = th;
+      const t2 = tile2.getContext('2d');
+      t2.drawImage(pack.asphalt, -tw * 0.15, -th * 0.1, tw, th);
+      t2.globalCompositeOperation = 'source-atop';
+      t2.fillStyle = 'rgba(22, 20, 16, 0.35)';
+      t2.fillRect(0, 0, tw, th);
+      const pat2 = ctx.createPattern(tile2, 'repeat');
+      if (pat2) {
+        ctx.globalAlpha = 0.28;
+        ctx.fillStyle = pat2;
+        ctx.fillRect(0, 0, sw, sh);
+        ctx.globalAlpha = 1;
+      }
+    } else {
+      // Procedural asphalt fallback lot
+      ctx.fillStyle = 'rgba(36, 32, 26, 0.55)';
+      ctx.fillRect(0, 0, sw, sh);
+      ctx.fillStyle = 'rgba(48, 44, 36, 0.18)';
+      for (let i = 0; i < 40; i++) {
+        const lx = rnd() * sw, ly = rnd() * sh;
+        ctx.fillRect(lx, ly, 40 + rnd() * 90, 28 + rnd() * 60);
+      }
     }
-  } catch (_) {}
+  } catch (_) {
+    ctx.fillStyle = 'rgba(36, 32, 26, 0.55)';
+    ctx.fillRect(0, 0, sw, sh);
+  }
 
   // Warm sodium pools + grit so plate isn't flat black
   for (let i = 0; i < 28; i++) {
@@ -2568,13 +2724,14 @@ export function drawGroundPlate(ctx, scenery, track, zoom = 1) {
   ctx.imageSmoothingEnabled = true;
   // Overview: plate still reads; race: stronger skyline peek through plate (v23)
   const z = zoom || 1;
-  let fade = 0.7;
-  if (z < 0.7) fade = 0.55 + z * 0.4;
-  else if (z < 1.05) fade = 0.70 + (z - 0.7) * 0.18; // grid ~0.88 → ~0.73
-  else if (z < 1.35) fade = 0.50; // v26 race zoom — more skyline peek
-  else fade = 0.46;
+  // A.1: stronger plate so stamps sit on continuous ground (less black void)
+  let fade = 0.82;
+  if (z < 0.7) fade = 0.70 + z * 0.35;
+  else if (z < 1.05) fade = 0.78 + (z - 0.7) * 0.2; // grid ~0.88 → ~0.82
+  else if (z < 1.35) fade = 0.68;
+  else fade = 0.62;
   ctx.save();
-  ctx.globalAlpha = Math.max(0.48, Math.min(0.86, fade));
+  ctx.globalAlpha = Math.max(0.62, Math.min(0.92, fade));
   ctx.drawImage(g, -margin, -margin, g.width * scale, g.height * scale);
   ctx.restore();
 }
@@ -2612,7 +2769,20 @@ function drawLayer(ctx, items, cam, W, H, zoom, pad, visCap) {
     ctx.beginPath();
     ctx.ellipse(shX, shY, dw * 0.38, Math.max(3, dh * 0.06), 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.drawImage(it.img, left + (it.w - dw) * 0.5, top + (it.h - dh), dw, dh);
+    const dx = left + (it.w - dw) * 0.5;
+    const dy = top + (it.h - dh);
+    if (it.flipX || it.rot) {
+      ctx.save();
+      const cx = dx + dw * 0.5;
+      const cy = dy + dh * 0.85; // pivot near ground contact
+      ctx.translate(cx, cy);
+      if (it.rot) ctx.rotate(it.rot);
+      if (it.flipX) ctx.scale(-1, 1);
+      ctx.drawImage(it.img, -dw * 0.5, -dh * 0.85, dw, dh);
+      ctx.restore();
+    } else {
+      ctx.drawImage(it.img, dx, dy, dw, dh);
+    }
     drawn++;
   }
 }

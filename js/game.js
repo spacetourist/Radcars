@@ -5,6 +5,7 @@ import { stepCar, triggerNitro } from './physics.js';
 import { createWeaponsState, tryFire, stepWeapons, cycleWeapon } from './weapons.js';
 import { stepAI } from './ai.js';
 import { createRenderer } from './render.js';
+import { isPixiFlagOn, createPixiRenderer } from './pixiRender.js';
 import { sfx } from './audio.js';
 import { placePrize, persistSave } from './career.js';
 import { clamp } from './util.js';
@@ -25,6 +26,15 @@ const SPD_ZOOM_HI = 0.65;
 
 export function createGame(canvas, input) {
   const renderer = createRenderer(canvas);
+  const pixiEnabled = isPixiFlagOn();
+  let pixi = null;
+  let pixiReady = false;
+  if (pixiEnabled) {
+    createPixiRenderer({ canvas, host: document.getElementById('app') })
+      .then((p) => { pixi = p; pixiReady = true; try { window.__RAD_PIXI_READY__ = true; } catch (_) {} })
+      .catch((err) => { console.warn('[radcars] Pixi init failed — Canvas fallback', err); });
+  }
+
   let running = false;
   let paused = false;
   let raf = 0;
@@ -43,6 +53,7 @@ export function createGame(canvas, input) {
     if (w === _fitW && h === _fitH && dpr === _fitDpr) return;
     _fitW = w; _fitH = h; _fitDpr = dpr;
     renderer.resize(w, h, dpr);
+    if (pixiReady && pixi) pixi.resize(w, h, dpr);
   }
 
   window.addEventListener('resize', fit);
@@ -221,7 +232,13 @@ export function createGame(canvas, input) {
     }
 
     updateCamera(dt);
-    renderer.draw(world);
+
+    const usePixi = pixiEnabled && pixiReady && pixi;
+    if (usePixi) {
+      pixi.draw(world);
+    } else {
+      renderer.draw(world);
+    }
 
     const race = world.race;
     if (race.countdown > 0 || race.goFlash > 0) {
@@ -233,11 +250,20 @@ export function createGame(canvas, input) {
         text = 'GO';
       }
       if (text) {
-        renderer.drawCountdown(renderer.ctx, text, canvas.clientWidth, canvas.clientHeight, {
-          flash: text === 'GO',
-          t: race.goFlash || race.countdown
-        });
+        if (usePixi) {
+          pixi.drawCountdown(text, {
+            flash: text === 'GO',
+            t: race.goFlash || race.countdown
+          });
+        } else {
+          renderer.drawCountdown(renderer.ctx, text, canvas.clientWidth, canvas.clientHeight, {
+            flash: text === 'GO',
+            t: race.goFlash || race.countdown
+          });
+        }
       }
+    } else if (usePixi) {
+      pixi.drawCountdown(null);
     }
 
     raf = requestAnimationFrame(loop);

@@ -66,6 +66,23 @@ html, body {
 }
 #menu-backdrop.visible { opacity: 1; }
 
+#pixi-game {
+  display: block;
+  position: relative;
+  z-index: 2;
+  max-width: 100%;
+  max-height: 100%;
+  background: #050608;
+  image-rendering: auto;
+  transform: translateZ(0);
+}
+
+.rad-pixi-hidden {
+  /* Canvas2D kept for layout/resize math while Pixi draws */
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
 #game {
   display: block;
   position: relative;
