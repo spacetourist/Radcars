@@ -15,7 +15,7 @@ setMuted(save.mute);
 
 const input = createInput();
 const game = createGame(canvas, input);
-try { window.__RAD_GAME__ = game; } catch (_) {}
+try { window.__RAD_GAME__ = game; window.__RAD_INPUT__ = input; } catch (_) {}
 
 const ui = createUI(uiRoot, {
   onMenu(act) {

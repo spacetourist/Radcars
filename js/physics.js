@@ -18,7 +18,7 @@ export function carTopSpeed(engineLevel) {
 export function stepCar(car, input, dt, track, others) {
   const brake = input.brake ? 1 : 0;
   const accel = input.accel ? 1 : 0;
-  const steer = clamp(input.steer || 0, -1, 1);
+  let steer = clamp(input.steer || 0, -1, 1);
 
   let nitroMul = 1;
   if (car.nitroTimer > 0) {
@@ -34,6 +34,17 @@ export function stepCar(car, input, dt, track, others) {
   // Slightly softer than raw twitchy 1.0, firm enough to make corners at speed
   // Cap yaw hard — full steer must stay controllable at speed
   const turnRate = 0.0017 * turnFactor * (0.65 + Math.min(1, speed / 1.35));
+
+  // Radial aim: chase absolute world heading (screen atan2); keyboard uses relative steer
+  if (input.aimAngle != null && Number.isFinite(input.aimAngle)) {
+    const err = angleDiff(car.angle, input.aimAngle);
+    // ~0.9 rad (~50°) error → full turn; small deadzone avoids buzz when locked
+    if (Math.abs(err) < 0.035) {
+      steer = 0;
+    } else {
+      steer = clamp(err / 0.9, -1, 1);
+    }
+  }
   car.angle = normalizeAngle(car.angle + steer * turnRate * dt);
 
   // Accel along facing

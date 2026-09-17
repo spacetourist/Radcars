@@ -1,4 +1,4 @@
-const CACHE = 'radcars-v29-crane-rekey';
+const CACHE = 'radcars-v30-radial-aim';
 const ASSETS = [
   './',
   './index.html',

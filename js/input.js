@@ -11,22 +11,25 @@ export function createInput() {
     weaponCycle: 0,
     left: false,
     right: false,
-    /** Continuous steer from slider / keys in [-1, 1] */
-    sliderSteer: 0,
-    sliderActive: false
+    /** Absolute world heading from radial pad (radians); only while aimActive */
+    aimAngle: null,
+    aimActive: false,
+    /** Relative steer from keys in [-1, 1] when pad inactive */
+    keySteer: 0
   };
 
   const keys = new Set();
 
   function syncSteer() {
-    // Keyboard / leftover left-right still work; slider overrides while dragged
-    if (state.sliderActive) {
-      state.steer = state.sliderSteer;
+    if (state.aimActive && state.aimAngle != null) {
+      // Radial owns heading; steer left for AI-compat only unused by physics when aim set
+      state.steer = 0;
       return;
     }
     const keyR = keys.has('ArrowRight') || keys.has('d') || keys.has('D') || state.right;
     const keyL = keys.has('ArrowLeft') || keys.has('a') || keys.has('A') || state.left;
-    state.steer = (keyR ? 1 : 0) - (keyL ? 1 : 0);
+    state.keySteer = (keyR ? 1 : 0) - (keyL ? 1 : 0);
+    state.steer = state.keySteer;
   }
 
   function onKeyDown(e) {
@@ -100,120 +103,86 @@ export function createInput() {
     }
   }
 
-  function bindSteerSlider() {
-    const root = document.getElementById('steer-slider');
-    const thumb = document.getElementById('steer-thumb');
-    if (!root || !thumb) return;
+  /**
+   * Radial aim pad: angle from pad centre → world heading.
+   * Camera is axis-aligned; canvas +Y is down, so atan2(dy, dx) matches car.angle
+   * (0 = right / +X). Centre deadzone ignores noise; release clears aim (no spring).
+   */
+  function bindAimPad() {
+    const root = document.getElementById('aim-pad');
+    const knob = document.getElementById('aim-knob');
+    if (!root || !knob) return;
 
     let pointerId = null;
-    let springRaf = 0;
+    const DEAD = 0.18; // fraction of radius — ignore near centre
 
-    /** Map raw slider [-1,1] → gameplay steer with deadzone + ease-in.
-     *  Thumb follows finger (raw); only the value sent to physics is shaped.
-     *  Smaller max + cubic ease-in so full throw cannot spin the car out. */
-    function curveSteer(raw) {
-      const DZ = 0.12;
-      const MAX = 0.52;
-      const a = Math.abs(raw);
-      if (a < DZ) return 0;
-      const t = (a - DZ) / (1 - DZ); // 0..1 past deadzone
-      const shaped = t * t * t;        // cubic: calm centre, capped throw
-      return Math.sign(raw) * shaped * MAX;
+    function setKnob(nx, ny, active) {
+      // nx,ny in [-1,1] pad space (y down)
+      const mag = Math.hypot(nx, ny);
+      const cx = mag > 1 ? nx / mag : nx;
+      const cy = mag > 1 ? ny / mag : ny;
+      const maxPx = root.clientWidth * 0.32;
+      knob.style.transform = `translate(${cx * maxPx}px, ${cy * maxPx}px)`;
+      root.classList.toggle('tc-aim-active', !!active);
+      root.classList.toggle('active', !!active);
     }
 
-    function setThumb(norm) {
-      // norm in [-1, 1] — visual / spring uses raw; gameplay uses curve
-      const n = Math.max(-1, Math.min(1, norm));
-      state.sliderSteer = curveSteer(n);
-      state._sliderRaw = n;
-      syncSteer();
-      const pct = (n + 1) * 50; // 0..100
-      thumb.style.left = pct + '%';
-      root.classList.toggle('tc-steer-active', Math.abs(n) > 0.02);
-    }
-
-    function normFromClientX(clientX) {
+    function applyFromClient(clientX, clientY) {
       const rect = root.getBoundingClientRect();
-      const pad = 24; // thumb radius-ish (matches smaller thumb)
-      const x = clientX - rect.left;
-      const t = (x - pad) / Math.max(1, rect.width - pad * 2);
-      return Math.max(-1, Math.min(1, t * 2 - 1));
-    }
-
-    function cancelSpring() {
-      if (springRaf) {
-        cancelAnimationFrame(springRaf);
-        springRaf = 0;
+      const cx = rect.left + rect.width * 0.5;
+      const cy = rect.top + rect.height * 0.5;
+      const dx = clientX - cx;
+      const dy = clientY - cy;
+      const r = Math.max(1, rect.width * 0.5);
+      const nx = dx / r;
+      const ny = dy / r;
+      const mag = Math.hypot(nx, ny);
+      if (mag < DEAD) {
+        // Held in deadzone: keep last aim if already aiming, else idle knob
+        setKnob(0, 0, state.aimActive);
+        return;
       }
+      // World heading matches screen atan2 (camera unrotated)
+      state.aimAngle = Math.atan2(dy, dx);
+      state.aimActive = true;
+      setKnob(nx, ny, true);
+      syncSteer();
     }
 
-    function springToCentre() {
-      cancelSpring();
-      const step = () => {
-        const v = state._sliderRaw ?? 0;
-        if (Math.abs(v) < 0.02) {
-          setThumb(0);
-          state.sliderActive = false;
-          syncSteer();
-          springRaf = 0;
-          return;
-        }
-        setThumb(v * 0.72);
-        springRaf = requestAnimationFrame(step);
-      };
-      springRaf = requestAnimationFrame(step);
+    function clearAim() {
+      state.aimActive = false;
+      state.aimAngle = null;
+      setKnob(0, 0, false);
+      syncSteer();
     }
 
     const onDown = (ev) => {
       ev.preventDefault();
-      cancelSpring();
-      state.sliderActive = true;
       pointerId = ev.pointerId;
       try { root.setPointerCapture(pointerId); } catch (_) {}
-      setThumb(normFromClientX(ev.clientX));
-      root.classList.add('active');
+      applyFromClient(ev.clientX, ev.clientY);
     };
 
     const onMove = (ev) => {
-      if (!state.sliderActive) return;
-      if (pointerId != null && ev.pointerId !== pointerId) return;
+      if (pointerId == null || ev.pointerId !== pointerId) return;
       ev.preventDefault();
-      setThumb(normFromClientX(ev.clientX));
+      applyFromClient(ev.clientX, ev.clientY);
     };
 
     const onUp = (ev) => {
       if (pointerId != null && ev.pointerId !== pointerId) return;
       ev.preventDefault();
       pointerId = null;
-      root.classList.remove('active');
       try { root.releasePointerCapture(ev.pointerId); } catch (_) {}
-      springToCentre();
+      clearAim();
     };
 
     root.addEventListener('pointerdown', onDown);
     root.addEventListener('pointermove', onMove);
     root.addEventListener('pointerup', onUp);
     root.addEventListener('pointercancel', onUp);
-    // Mouse desktop testing (in case pointer events partial)
-    root.addEventListener('mousedown', (ev) => {
-      ev.preventDefault();
-      cancelSpring();
-      state.sliderActive = true;
-      setThumb(normFromClientX(ev.clientX));
-      root.classList.add('active');
-      const move = (e) => { e.preventDefault(); setThumb(normFromClientX(e.clientX)); };
-      const up = (e) => {
-        e.preventDefault();
-        window.removeEventListener('mousemove', move);
-        window.removeEventListener('mouseup', up);
-        root.classList.remove('active');
-        springToCentre();
-      };
-      window.addEventListener('mousemove', move);
-      window.addEventListener('mouseup', up);
-    });
 
-    setThumb(0);
+    setKnob(0, 0, false);
   }
 
   function bindTouchUI() {
@@ -222,7 +191,7 @@ export function createInput() {
     root.querySelectorAll('[data-action]').forEach((btn) => {
       bindButton(btn, btn.getAttribute('data-action'));
     });
-    bindSteerSlider();
+    bindAimPad();
   }
 
   bindTouchUI();
@@ -231,6 +200,7 @@ export function createInput() {
     syncSteer();
     const out = {
       steer: state.steer,
+      aimAngle: state.aimActive ? state.aimAngle : null,
       accel: state.accel,
       brake: state.brake,
       fire: state.firePressed,

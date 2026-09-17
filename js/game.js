@@ -321,6 +321,7 @@ export function createGame(canvas, input) {
       player.fireCooldown = Math.max(0, player.fireCooldown - dt);
       stepCar(player, {
         steer: flags.steer,
+        aimAngle: flags.aimAngle,
         accel: flags.accel || input.state.accel,
         brake: flags.brake || input.state.brake
       }, dt, track, cars);
