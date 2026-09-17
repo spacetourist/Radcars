@@ -624,6 +624,44 @@ function fitScenery(source, maxW, maxH) {
   return fitCanvas(source, maxW, maxH, { stripNeonEdge: true });
 }
 
+/**
+ * Phase A bake-down: scale so long edge ≤ maxLong (never leave raw 1280×720 in race path).
+ * Returns source unchanged (same canvas ref ok) when already within budget.
+ */
+function bakeLongEdge(source, maxLong, opts = {}) {
+  if (!source || !source.width) return source;
+  const sw = source.width | 0;
+  const sh = source.height | 0;
+  const long = Math.max(sw, sh);
+  if (long <= maxLong) {
+    if (opts.stripNeonEdge) {
+      return stripNeonEdgeFrames(source, opts.neonEdgePx != null ? opts.neonEdgePx : 3, true, {
+        preserveYellow: !!opts.preserveYellow
+      });
+    }
+    return source;
+  }
+  const s = maxLong / long;
+  const dw = Math.max(1, Math.round(sw * s));
+  const dh = Math.max(1, Math.round(sh * s));
+  return fitCanvas(source, dw, dh, opts);
+}
+
+/** Md = full bake; Sm ≈ 50% of bake long-edge. */
+function makeLodPair(source, maxLong, opts = {}) {
+  if (!source || !source.width) return { md: null, sm: null, hero: null };
+  const md = bakeLongEdge(source, maxLong, { stripNeonEdge: true, ...opts });
+  if (!md) return { md: null, sm: null, hero: null };
+  const smLong = Math.max(48, Math.round(Math.max(md.width, md.height) * 0.5));
+  const sm = bakeLongEdge(md, smLong, { stripNeonEdge: true, ...opts });
+  return { md, sm, hero: md };
+}
+
+const HERO_STAMP_KEYS = new Set([
+  'crane', 'grandstand-large', 'grandstandLarge', 'cityblock', 'standLarge'
+]);
+
+
 /** Resolve pack car key for a colour / player flag. */
 export function resolvePackCarKey(color, isPlayer) {
   if (!_pack || !_pack.ready) return null;
@@ -703,7 +741,9 @@ export function loadAssetPack() {
           'scenery/scenery-crowd-dense.png',
           'scenery/scenery-grandstand-large.png',
           'scenery/scenery-crane.png',
-          'scenery/scenery-containers.png'
+          'scenery/scenery-containers.png',
+          'scenery/scenery-cityblock.png',
+          'scenery/scenery-citystreet.png'
         ];
     const sceneryList = rawSceneryList.filter((rel) => {
       const s = String(rel || '');
@@ -808,6 +848,23 @@ export function loadAssetPack() {
       }
     }
 
+    const perf = (manifest && manifest.perfHints) || {};
+    const maxStampPx = (perf.maxStampPx | 0) || 384;
+    const heroStampPx = Math.max(maxStampPx, 512);
+    pack.perfHints = { maxStampPx, heroStampPx, bakeAtLoad: perf.bakeAtLoad !== false,
+      skipNearLayerWhenZoomBelow: perf.skipNearLayerWhenZoomBelow != null ? perf.skipNearLayerWhenZoomBelow : 0.7 };
+
+    // Phase A: bake every scenery key so draw path never holds raw 1280×720 plates
+    for (const k of Object.keys(pack.scenery)) {
+      const src = pack.scenery[k];
+      if (!src || !src.width) continue;
+      const maxL = HERO_STAMP_KEYS.has(k) || /cityblock|crane|grandstand-large/i.test(k)
+        ? heroStampPx : maxStampPx;
+      if (Math.max(src.width, src.height) > maxL) {
+        pack.scenery[k] = bakeLongEdge(src, maxL, { stripNeonEdge: true });
+      }
+    }
+
     const warehouse = pack.scenery.warehouse;
     const grandstand = pack.scenery.grandstand;
     const grandstandLarge = pack.scenery['grandstand-large'] || pack.scenery.grandstandLarge;
@@ -818,88 +875,124 @@ export function loadAssetPack() {
     const props = pack.scenery.props;
     const palms = pack.scenery.palms;
     const billboard = pack.scenery.billboard;
+    const cityblock = pack.scenery.cityblock;
+    const citystreet = pack.scenery.citystreet;
 
     if (warehouse) {
-      // v27: larger Md; single light cyan→sodium (no double flatten)
-      pack.scenery.warehouseSm = warmCyanToSodium(fitScenery(warehouse, 110, 120));
-      pack.scenery.warehouseMd = warmCyanToSodium(fitScenery(warehouse, 168, 130));
-      pack.scenery.warehouse = warmCyanToSodium(warehouse);
+      // v35: bake ≤384; Sm/Md LOD — never leave keyed 1280 in race path
+      const wh = warmCyanToSodium(bakeLongEdge(warehouse, maxStampPx, { stripNeonEdge: true }));
+      const lod = makeLodPair(wh, maxStampPx);
+      pack.scenery.warehouseMd = lod.md || warmCyanToSodium(fitScenery(wh, 168, 130));
+      pack.scenery.warehouseSm = lod.sm || warmCyanToSodium(fitScenery(wh, 110, 120));
+      pack.scenery.warehouse = pack.scenery.warehouseMd;
     }
     if (grandstand || grandstandLarge) {
-      // v2.3: prefer large grandstand for block mass; keep standard for flanking stands
       const standSrc = grandstand || grandstandLarge;
       const blockSrc = grandstandLarge || grandstand;
       pack.scenery.stand = warmCyanToSodium(fitScenery(standSrc, 160, 80));
-      pack.scenery.standBlock = warmCyanToSodium(fitScenery(blockSrc, 280, 140));
+      pack.scenery.standBlock = warmCyanToSodium(fitScenery(blockSrc, Math.min(280, maxStampPx), Math.min(140, maxStampPx)));
       if (grandstandLarge) {
-        pack.scenery.standLarge = warmCyanToSodium(fitScenery(grandstandLarge, 300, 150));
-        pack.scenery.grandstandLarge = warmCyanToSodium(grandstandLarge);
+        const gl = bakeLongEdge(grandstandLarge, heroStampPx, { stripNeonEdge: true });
+        pack.scenery.standLarge = warmCyanToSodium(fitScenery(gl, Math.min(300, heroStampPx), Math.min(150, heroStampPx)));
+        pack.scenery.grandstandLarge = warmCyanToSodium(gl);
       }
     }
     if (tower) {
-      // Pack tower art is often landscape after bbox; allow wider fits so mid/far reads
-      // Warm cyan window/neon grids → sodium (v19) without new PNGs
-      pack.scenery.towerSm = warmCyanToSodium(fitScenery(tower, 110, 130));
-      pack.scenery.towerMd = warmCyanToSodium(fitScenery(tower, 150, 170));
-      pack.scenery.tower = warmCyanToSodium(tower);
+      const tw = warmCyanToSodium(bakeLongEdge(tower, maxStampPx, { stripNeonEdge: true }));
+      const lod = makeLodPair(tw, maxStampPx);
+      pack.scenery.towerSm = lod.sm || warmCyanToSodium(fitScenery(tw, 110, 130));
+      pack.scenery.towerMd = lod.md || warmCyanToSodium(fitScenery(tw, 150, 170));
+      pack.scenery.tower = pack.scenery.towerMd;
     }
     if (crowd || crowdDense) {
-      // Thin strip = filler; dense = S/F + major apex masses
       if (crowd) {
-        pack.scenery.crowdSm = fitScenery(crowd, 72, 36);
-        pack.scenery.crowdMd = fitScenery(crowd, 110, 48);
-        pack.scenery.crowdLg = fitScenery(crowd, 160, 64);
+        const c0 = bakeLongEdge(crowd, maxStampPx, { stripNeonEdge: true });
+        pack.scenery.crowdSm = fitScenery(c0, 72, 36);
+        pack.scenery.crowdMd = fitScenery(c0, 110, 48);
+        pack.scenery.crowdLg = fitScenery(c0, 160, 64);
+        pack.scenery.crowd = pack.scenery.crowdMd;
       }
       if (crowdDense) {
-        pack.scenery.crowdDense = crowdDense;
-        pack.scenery.crowdDenseSm = fitScenery(crowdDense, 100, 48);
-        pack.scenery.crowdDenseMd = fitScenery(crowdDense, 160, 72);
-        pack.scenery.crowdDenseLg = fitScenery(crowdDense, 220, 96);
+        const cd = bakeLongEdge(crowdDense, maxStampPx, { stripNeonEdge: true });
+        pack.scenery.crowdDense = cd;
+        pack.scenery.crowdDenseSm = fitScenery(cd, 100, 48);
+        pack.scenery.crowdDenseMd = fitScenery(cd, 160, 72);
+        pack.scenery.crowdDenseLg = fitScenery(cd, 220, 96);
       }
     }
     if (tyrewall) {
-      pack.scenery.tyrewallSm = fitScenery(tyrewall, 56, 36);
-      pack.scenery.tyrewallMd = fitScenery(tyrewall, 80, 48);
+      const tw = bakeLongEdge(tyrewall, maxStampPx, { stripNeonEdge: true });
+      pack.scenery.tyrewall = tw;
+      pack.scenery.tyrewallSm = fitScenery(tw, 56, 36);
+      pack.scenery.tyrewallMd = fitScenery(tw, 80, 48);
     }
     if (props) {
-      pack.scenery.propsSm = fitScenery(props, 40, 36);
-      pack.scenery.propsMd = fitScenery(props, 56, 48);
-      // Also expose as cone/barrel stand-ins for placement code
-      pack.scenery.propCone = fitScenery(props, 28, 32);
-      pack.scenery.propBarrel = fitScenery(props, 32, 36);
+      const pr = bakeLongEdge(props, maxStampPx, { stripNeonEdge: true });
+      pack.scenery.props = pr;
+      pack.scenery.propsSm = fitScenery(pr, 40, 36);
+      pack.scenery.propsMd = fitScenery(pr, 56, 48);
+      pack.scenery.propCone = fitScenery(pr, 28, 32);
+      pack.scenery.propBarrel = fitScenery(pr, 32, 36);
     }
     if (palms) {
-      // Tall fits — pack sheet is often a palm cluster; contain keeps aspect
-      pack.scenery.palmSm = fitScenery(palms, 40, 72);
-      pack.scenery.palmMd = fitScenery(palms, 56, 96);
+      const pl = bakeLongEdge(palms, maxStampPx, { stripNeonEdge: true });
+      pack.scenery.palms = pl;
+      pack.scenery.palmSm = fitScenery(pl, 40, 72);
+      pack.scenery.palmMd = fitScenery(pl, 56, 96);
     }
     if (billboard) {
-      // v27: larger billboardMd for Gridlock street beads; single warm pass
-      pack.scenery.billboardSm = warmCyanToSodium(fitScenery(billboard, 110, 84));
-      pack.scenery.billboardMd = warmCyanToSodium(fitScenery(billboard, 168, 120));
-      pack.scenery.billboard = warmCyanToSodium(billboard);
+      const bb = warmCyanToSodium(bakeLongEdge(billboard, maxStampPx, { stripNeonEdge: true }));
+      const lod = makeLodPair(bb, maxStampPx);
+      pack.scenery.billboardSm = lod.sm || warmCyanToSodium(fitScenery(bb, 110, 84));
+      pack.scenery.billboardMd = lod.md || warmCyanToSodium(fitScenery(bb, 168, 120));
+      pack.scenery.billboard = pack.scenery.billboardMd;
+    }
+
+    // Phase A city circuit landmarks — cityblock + citystreet Sm/Md (hero ≤512)
+    if (cityblock) {
+      const cb = warmCyanToSodium(bakeLongEdge(cityblock, heroStampPx, { stripNeonEdge: true }));
+      const lod = makeLodPair(cb, heroStampPx);
+      pack.scenery.cityblockMd = lod.md || cb;
+      pack.scenery.cityblockSm = lod.sm || bakeLongEdge(cb, Math.max(48, Math.round(Math.max(cb.width, cb.height) * 0.5)));
+      pack.scenery.cityblock = pack.scenery.cityblockMd;
+    }
+    if (citystreet) {
+      const cs = warmCyanToSodium(bakeLongEdge(citystreet, maxStampPx, { stripNeonEdge: true }));
+      const lod = makeLodPair(cs, maxStampPx);
+      pack.scenery.citystreetMd = lod.md || cs;
+      pack.scenery.citystreetSm = lod.sm || bakeLongEdge(cs, Math.max(48, Math.round(Math.max(cs.width, cs.height) * 0.5)));
+      pack.scenery.citystreet = pack.scenery.citystreetMd;
     }
 
     // v2.6 Cargo quay — green-keyed crane; larger Md; neutralize residual rose → yellow sodium
     const crane = pack.scenery.crane;
     const containers = pack.scenery.containers;
     if (crane) {
-      // Key green before/after fit+pink neutralize — fit can reintroduce mid-green fringe
-      const c0 = keyGreenPlate(neutralizePinkNeon(keyHotPinkPlate(keyGreenPlate(crane))));
+      const c0 = keyGreenPlate(neutralizePinkNeon(keyHotPinkPlate(keyGreenPlate(
+        bakeLongEdge(crane, heroStampPx, { stripNeonEdge: true, preserveYellow: true })
+      ))));
       pack.scenery.crane = c0;
-      pack.scenery.craneSm = keyGreenPlate(neutralizePinkNeon(keyHotPinkPlate(keyGreenPlate(fitSceneryPreserveYellow(c0, 160, 180)))));
-      pack.scenery.craneMd = keyGreenPlate(neutralizePinkNeon(keyHotPinkPlate(keyGreenPlate(fitSceneryPreserveYellow(c0, 240, 260)))));
+      const lod = makeLodPair(c0, heroStampPx, { preserveYellow: true });
+      pack.scenery.craneSm = keyGreenPlate(neutralizePinkNeon(keyHotPinkPlate(keyGreenPlate(
+        lod.sm || fitSceneryPreserveYellow(c0, 160, 180)
+      ))));
+      pack.scenery.craneMd = keyGreenPlate(neutralizePinkNeon(keyHotPinkPlate(keyGreenPlate(
+        lod.md || fitSceneryPreserveYellow(c0, 240, 260)
+      ))));
+      pack.scenery.crane = pack.scenery.craneMd;
     }
     if (containers) {
-      const k0 = neutralizePinkNeon(keyHotPinkPlate(containers));
-      pack.scenery.containers = k0;
-      pack.scenery.containersSm = neutralizePinkNeon(keyHotPinkPlate(fitScenery(k0, 130, 96)));
-      pack.scenery.containersMd = neutralizePinkNeon(keyHotPinkPlate(fitScenery(k0, 200, 150)));
+      const k0 = neutralizePinkNeon(keyHotPinkPlate(bakeLongEdge(containers, maxStampPx, { stripNeonEdge: true })));
+      const lod = makeLodPair(k0, maxStampPx);
+      pack.scenery.containersSm = neutralizePinkNeon(keyHotPinkPlate(lod.sm || fitScenery(k0, 130, 96)));
+      pack.scenery.containersMd = neutralizePinkNeon(keyHotPinkPlate(lod.md || fitScenery(k0, 200, 150)));
+      pack.scenery.containers = pack.scenery.containersMd;
     }
+
     pack.trackHints = (manifest && manifest.trackHints) || {};
 
     const anyCar = Object.values(pack.cars).some(Boolean);
-    const anyScenery = !!(warehouse || grandstand || grandstandLarge || tower || crowd || crowdDense || tyrewall || props || palms || billboard || crane || containers);
+    const anyScenery = !!(warehouse || grandstand || grandstandLarge || tower || crowd || crowdDense || tyrewall || props || palms || billboard || crane || containers || cityblock || citystreet);
     pack.ready = !!(anyCar || anyScenery || skyline);
     _pack = pack;
     try {
@@ -924,7 +1017,18 @@ export function loadAssetPack() {
             palms: !!palms,
             billboard: !!billboard,
             crane: !!crane,
-            containers: !!containers
+            containers: !!containers,
+            cityblock: !!cityblock,
+            citystreet: !!citystreet,
+            cityblockMd: !!(pack.scenery.cityblockMd),
+            citystreetMd: !!(pack.scenery.citystreetMd)
+          },
+          stampSizes: {
+            cityblock: pack.scenery.cityblock && [pack.scenery.cityblock.width, pack.scenery.cityblock.height],
+            citystreet: pack.scenery.citystreet && [pack.scenery.citystreet.width, pack.scenery.citystreet.height],
+            warehouse: pack.scenery.warehouse && [pack.scenery.warehouse.width, pack.scenery.warehouse.height],
+            maxStampPx,
+            heroStampPx
           },
           trackHints: pack.trackHints,
           skyline: !!skyline,

@@ -1,4 +1,4 @@
-const CACHE = 'radcars-v34-lap-fix';
+const CACHE = 'radcars-v35-city-phase-a';
 const ASSETS = [
   './',
   './index.html',
@@ -47,6 +47,8 @@ const ASSETS = [
   './assets/generated/scenery/scenery-billboard.png',
   './assets/generated/scenery/scenery-crane.png',
   './assets/generated/scenery/scenery-containers.png',
+  './assets/generated/scenery/scenery-cityblock.png',
+  './assets/generated/scenery/scenery-citystreet.png',
   './assets/generated/tex-asphalt.png'
 ];
 

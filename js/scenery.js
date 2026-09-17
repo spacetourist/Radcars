@@ -627,7 +627,7 @@ function paintStreetlamp(ctx, tw, th, theme, variant) {
 }
 
 export function createScenerySprites(theme) {
-  const buildings = { warehouse: [], warehouseSm: [], tower: [], towerSm: [], shop: [], billboard: [], billboardMd: [], chimney: [], water: [], stand: [], standBlock: [], standLarge: [], crane: [], containers: [], _crowdDense: [], _crowdThin: [] };
+  const buildings = { warehouse: [], warehouseSm: [], tower: [], towerSm: [], shop: [], billboard: [], billboardMd: [], chimney: [], water: [], stand: [], standBlock: [], standLarge: [], crane: [], containers: [], cityblock: [], cityblockMd: [], citystreet: [], citystreetMd: [], _crowdDense: [], _crowdThin: [] };
   const characters = [];
   const props = { barrel: [], cone: [], light: [], fence: [], palm: [], lamp: [], tyrewall: [] };
 
@@ -795,6 +795,25 @@ function applyPackBuildingArt(buildings, characters, props) {
     if (sc.containers) variants.push(sc.containers);
     buildings.containers = variants;
   }
+  // Phase A city circuit — prefer Md landmarks
+  if (sc.cityblockMd || sc.cityblockSm || sc.cityblock) {
+    const variants = [];
+    if (sc.cityblockMd) variants.push(sc.cityblockMd);
+    if (sc.cityblockSm) variants.push(sc.cityblockSm);
+    if (sc.cityblock && variants.length < 2) variants.push(sc.cityblock);
+    buildings.cityblock = variants;
+    if (sc.cityblockMd) buildings.cityblockMd = [sc.cityblockMd];
+    else if (variants.length) buildings.cityblockMd = [variants[0]];
+  }
+  if (sc.citystreetMd || sc.citystreetSm || sc.citystreet) {
+    const variants = [];
+    if (sc.citystreetMd) variants.push(sc.citystreetMd);
+    if (sc.citystreetSm) variants.push(sc.citystreetSm);
+    if (sc.citystreet && variants.length < 2) variants.push(sc.citystreet);
+    buildings.citystreet = variants;
+    if (sc.citystreetMd) buildings.citystreetMd = [sc.citystreetMd];
+    else if (variants.length) buildings.citystreetMd = [variants[0]];
+  }
 }
 
 function fitPackSprite(source, maxW, maxH) {
@@ -883,6 +902,84 @@ function varyScale(rnd, lo, hi) {
   return lo + rnd() * (hi - lo);
 }
 
+/** Phase A: prefer cityblockMd / citystreetMd / billboardMd when cityCircuit. */
+function pickCityCircuitStamp(sprites, profile, rnd, opts = {}) {
+  const preferFar = !!opts.preferFar;
+  const allowWh = profile.warehouseBias >= 0.05 && rnd() < Math.min(0.18, profile.warehouseBias);
+  const cbMd = (sprites.buildings.cityblockMd && sprites.buildings.cityblockMd.length)
+    ? sprites.buildings.cityblockMd
+    : (sprites.buildings.cityblock || []);
+  const csMd = (sprites.buildings.citystreetMd && sprites.buildings.citystreetMd.length)
+    ? sprites.buildings.citystreetMd
+    : (sprites.buildings.citystreet || []);
+  const bbMd = (sprites.buildings.billboardMd && sprites.buildings.billboardMd.length)
+    ? sprites.buildings.billboardMd
+    : (sprites.buildings.billboard || []);
+  const whSm = (sprites.buildings.warehouseSm && sprites.buildings.warehouseSm.length)
+    ? sprites.buildings.warehouseSm
+    : (sprites.buildings.warehouse || []);
+  const towerSm = (sprites.buildings.towerSm && sprites.buildings.towerSm.length)
+    ? sprites.buildings.towerSm
+    : (sprites.buildings.tower || []);
+  const u = rnd();
+  const cbW = Math.max(0.15, profile.cityblockBias || 0.4);
+  const csW = Math.max(0.12, profile.citystreetBias || 0.3);
+  const bbW = Math.max(0.12, profile.billboardBias || 0.25);
+  const sum = cbW + csW + bbW;
+  const cbCut = cbW / sum;
+  const csCut = cbCut + csW / sum;
+  if (allowWh && whSm.length) {
+    return { img: pick(whSm, rnd), kind: 'warehouse', scale: varyScale(rnd, 0.7, 1.05) };
+  }
+  if (preferFar) {
+    // Far: fewer larger cityblock + tower accents
+    if (u < 0.55 && cbMd.length) return { img: pick(cbMd, rnd), kind: 'cityblock', scale: varyScale(rnd, 0.85, 1.2) };
+    if (u < 0.8 && csMd.length) return { img: pick(csMd, rnd), kind: 'citystreet', scale: varyScale(rnd, 0.8, 1.15) };
+    if (towerSm.length) return { img: pick(towerSm, rnd), kind: 'tower', scale: varyScale(rnd, 0.65, 1.1) };
+  }
+  if (u < cbCut && cbMd.length) {
+    return { img: pick(cbMd, rnd), kind: 'cityblock', scale: varyScale(rnd, 0.9, 1.28) };
+  }
+  if (u < csCut && csMd.length) {
+    return { img: pick(csMd, rnd), kind: 'citystreet', scale: varyScale(rnd, 0.88, 1.22) };
+  }
+  if (bbMd.length) {
+    return { img: pick(bbMd, rnd), kind: 'billboard', scale: varyScale(rnd, 0.88, 1.25) };
+  }
+  if (cbMd.length) return { img: pick(cbMd, rnd), kind: 'cityblock', scale: varyScale(rnd, 0.9, 1.2) };
+  if (csMd.length) return { img: pick(csMd, rnd), kind: 'citystreet', scale: varyScale(rnd, 0.88, 1.18) };
+  return null;
+}
+
+/** Keep largest stamps first; enforce spacing so caps favour landmarks over beads. */
+function enforceLayerCap(list, cap, minDist) {
+  if (!list || list.length <= cap) return list || [];
+  const scored = list.slice().sort((a, b) => {
+    const sa = (a.w || 0) * (a.h || 0);
+    const sb = (b.w || 0) * (b.h || 0);
+    return sb - sa;
+  });
+  const kept = [];
+  const d2 = (minDist || 140) ** 2;
+  for (const it of scored) {
+    if (kept.length >= cap) break;
+    let ok = true;
+    for (const k of kept) {
+      const dx = k.x - it.x, dy = k.y - it.y;
+      if (dx * dx + dy * dy < d2) { ok = false; break; }
+    }
+    if (ok) kept.push(it);
+  }
+  // If spacing rejected too many, fill remaining by size without spacing
+  if (kept.length < cap) {
+    for (const it of scored) {
+      if (kept.length >= cap) break;
+      if (!kept.includes(it)) kept.push(it);
+    }
+  }
+  return kept.sort((a, b) => a.sortY - b.sortY);
+}
+
 /**
  * Shared Neon Loop density rules (frozen v23 / rolled v24) + per-track stamp mix.
  * Lighting / bead cadence / caps are shared; stamp bias + identity colour are per-track.
@@ -893,6 +990,10 @@ export const SCENERY_DENSITY = {
   beadIn: 560,
   towerCap: 5,
   billboardCap: 5,
+  // Phase A visible stamp budgets (build + draw)
+  midCap: 18,
+  farCap: 10,
+  nearCap: 12,
   // Infield yard props (scaled later by profile)
   infieldYardBase: 22
 };
@@ -930,6 +1031,12 @@ export function getSceneryDensityProfile(track) {
     billboardBias: 0.12,
     pinchStandExtra: 0,
     urbanSkyline: false,     // Gridlock: warehouseSm + billboardMd + towerSm beads
+    cityCircuit: false,      // Neon/Gridlock: cityblock + citystreet + billboards
+    cityblockBias: 0,
+    citystreetBias: 0,
+    midCap: SCENERY_DENSITY.midCap,
+    farCap: SCENERY_DENSITY.farCap,
+    nearCap: SCENERY_DENSITY.nearCap,
     pinchStandsOnly: false,  // Razor: stands only at narrow pinch
     pinchRadius: 240,        // Razor: expanded stands-only zone around waists
     standsOnlyAtSF: false,   // Cargo: grandstands only at S/F
@@ -941,21 +1048,29 @@ export function getSceneryDensityProfile(track) {
     label: 'reference'
   };
   if (id === 'gridlock') {
-    // Urban street (v28): billboardMd + streetlight beads dominate race frame; warehouses rare
+    // Phase A city circuit: cityblock + citystreet + billboards; warehouses rare
     return {
       ...base,
-      billboardCap: 12,
-      billboardBias: 0.72,
+      beadOut: 560,
+      beadIn: 620,
+      billboardCap: 10,
+      billboardBias: 0.42,
       warehouseScale: [0.68, 1.05],
-      warehouseBias: 0.14,
+      warehouseBias: 0.08,
       standBias: 0.05,
-      infieldYardN: 14,
+      infieldYardN: 12,
       palmChance: 0.02,
-      lampChance: 0.62,
+      lampChance: 0.55,
       urbanSkyline: true,
+      cityCircuit: true,
+      cityblockBias: 0.48,
+      citystreetBias: 0.38,
       standsOnlyAtSF: true, // standLarge only at S/F
-      infieldGapMul: 1.4,
-      label: 'urban_street'
+      infieldGapMul: 1.45,
+      midCap: 18,
+      farCap: 10,
+      nearCap: 12,
+      label: 'city_circuit_gridlock'
     };
   }
   if (id === 'razor_hairpin') {
@@ -995,14 +1110,24 @@ export function getSceneryDensityProfile(track) {
       label: 'industrial_quay'
     };
   }
-  // neon_loop reference
+  // neon_loop — Phase A city circuit (warehouses rare; cityblock/citystreet/billboards)
   return {
     ...base,
-    infieldYardN: 28,
-    palmChance: 0.12,
-    standBias: 0.4,
-    warehouseBias: 0.55,
-    label: 'neon_loop_ref'
+    beadOut: 540,
+    beadIn: 600,
+    infieldYardN: 18,
+    palmChance: 0.08,
+    standBias: 0.22,
+    warehouseBias: 0.10,
+    billboardBias: 0.28,
+    billboardCap: 8,
+    cityCircuit: true,
+    cityblockBias: 0.46,
+    citystreetBias: 0.34,
+    midCap: 18,
+    farCap: 10,
+    nearCap: 12,
+    label: 'city_circuit_neon'
   };
 }
 
@@ -1193,11 +1318,12 @@ export function buildTrackScenery(track) {
     if (kind === 'billboard') {
       if (billboardCount >= BILLBOARD_CAP) return false;
     }
-    if (!stampOk(stampLog, img, x, y, kind === 'tower' ? 160 : (kind === 'containers' ? 150 : 110), 1)) return false;
-    // Extra spacing for towers/billboards/containers so corners don't cluster
-    if (kind === 'tower' || kind === 'billboard' || kind === 'containers') {
+    const cityKind = (kind === 'cityblock' || kind === 'citystreet');
+    if (!stampOk(stampLog, img, x, y, kind === 'tower' ? 160 : (kind === 'containers' ? 150 : (cityKind ? 150 : 110)), 1)) return false;
+    // Extra spacing for towers/billboards/containers/city so corners don't cluster
+    if (kind === 'tower' || kind === 'billboard' || kind === 'containers' || cityKind) {
       let nearSame = 0;
-      const r2 = (kind === 'tower' ? 220 : kind === 'containers' ? 260 : 180) ** 2;
+      const r2 = (kind === 'tower' ? 220 : kind === 'containers' ? 260 : cityKind ? 220 : 180) ** 2;
       for (const p of stampLog) {
         if (p.kind !== kind) continue;
         const dx = p.x - x, dy = p.y - y;
@@ -1236,6 +1362,10 @@ export function buildTrackScenery(track) {
       const atPinchFar = profile.pinchStandsOnly && nearPinch(x, y);
       if (atPinchFar) {
         img = pick(sprites.buildings.stand, rnd); scale = varyScale(rnd, 0.85, 1.2); kind = 'stand';
+      } else if (profile.cityCircuit) {
+        const pickC = pickCityCircuitStamp(sprites, profile, rnd, { preferFar: true });
+        if (pickC && pickC.img) { img = pickC.img; scale = pickC.scale; kind = pickC.kind; }
+        else { img = pick(towerSmList, rnd); scale = varyScale(rnd, 0.65, 1.1); kind = 'tower'; }
       } else if (profile.urbanSkyline) {
         // Gridlock far: light warehouseSm / towerSm — save billboard cap for mid race beads
         if (roll < 0.22 + profile.warehouseBias * 0.5) {
@@ -1324,6 +1454,10 @@ export function buildTrackScenery(track) {
           img = pick(sprites.buildings.containers, rnd);
           scale = varyScale(rnd, 1.1, 1.45);
           kind = 'containers';
+        } else if (profile.cityCircuit) {
+          const pickC = pickCityCircuitStamp(sprites, profile, rnd);
+          if (pickC && pickC.img) { img = pickC.img; scale = pickC.scale; kind = pickC.kind; }
+          else { img = pick(bbMdList, rnd); scale = varyScale(rnd, 0.85, 1.22); kind = 'billboard'; }
         } else if (profile.urbanSkyline) {
           img = pick(bbMdList, rnd);
           scale = varyScale(rnd, 0.85, 1.22);
@@ -1336,7 +1470,15 @@ export function buildTrackScenery(track) {
       } else if (nearest && nearest.kind === 'bead' && roll < 0.88) {
         // Mid-straight beads — identity mix (v25)
         const [wLo, wHi] = profile.warehouseScale;
-        if (profile.urbanSkyline) {
+        if (profile.cityCircuit) {
+          const pickC = pickCityCircuitStamp(sprites, profile, rnd);
+          if (pickC && pickC.img) { img = pickC.img; scale = pickC.scale; kind = pickC.kind; }
+          else if (allowStand && hasStandLarge && rnd() < profile.standBias) {
+            img = pick(sprites.buildings.standLarge, rnd); scale = varyScale(rnd, 0.72, 1.0); kind = 'stand';
+          } else {
+            img = pick(bbMdList, rnd); scale = varyScale(rnd, 0.9, 1.22); kind = 'billboard';
+          }
+        } else if (profile.urbanSkyline) {
           // Gridlock v28: billboardMd dominant; warehouseSm rare; towerSm accents
           const u = rnd();
           const whGate = Math.min(0.2, 0.05 + profile.warehouseBias * 0.4);
@@ -1382,7 +1524,12 @@ export function buildTrackScenery(track) {
         // Profile stamp mix — warehouse / stand / billboard bias (shared density, different identity)
         const [wLo, wHi] = profile.warehouseScale;
         const r2 = rnd();
-        // Gridlock: invert mix — billboards first, warehouses scarce
+        // Phase A city / Gridlock: city stamps first, warehouses scarce
+        if (profile.cityCircuit) {
+          const pickC = pickCityCircuitStamp(sprites, profile, rnd);
+          if (pickC && pickC.img) { img = pickC.img; scale = pickC.scale; kind = pickC.kind; }
+          else { img = pick(bbMdList, rnd); scale = varyScale(rnd, 0.85, 1.2); kind = 'billboard'; }
+        } else {
         const whCut = profile.urbanSkyline
           ? Math.min(0.16, profile.warehouseBias * 0.7)
           : profile.warehouseBias;
@@ -1421,6 +1568,7 @@ export function buildTrackScenery(track) {
           scale = varyScale(rnd, 0.7, 1.25);
           kind = profile.urbanSkyline ? 'billboard' : 'other';
         }
+        } // end !cityCircuit mix
       }
       if (!img) continue;
       tryAddStamp(mid, img, x, y, scale, 'mid', y + img.height * scale * 0.45, kind);
@@ -1446,10 +1594,15 @@ export function buildTrackScenery(track) {
           if (nearStartFinish(x, y, 360)) continue; // race beads, not S/F wall
           if (pointInPoly(x, y, track.outer)) continue;
           if (!tryPlace(track, x, y, 16)) continue;
-          const img = pick(bbMdList.length ? bbMdList : sprites.buildings.billboard, rnd);
+          let img, kind = 'billboard', sc = varyScale(rnd, 0.95, 1.3);
+          if (profile.cityCircuit) {
+            const pickC = pickCityCircuitStamp(sprites, profile, rnd);
+            if (pickC && pickC.img) { img = pickC.img; kind = pickC.kind; sc = pickC.scale; }
+          }
+          if (!img) img = pick(bbMdList.length ? bbMdList : sprites.buildings.billboard, rnd);
           if (!img) break;
-          if (tryAddStamp(mid, img, x, y, varyScale(rnd, 0.95, 1.3), 'mid',
-            y + img.height * 0.45, 'billboard')) {
+          if (tryAddStamp(mid, img, x, y, sc, 'mid',
+            y + img.height * 0.45, kind)) {
             placed = true;
             break;
           }
@@ -1518,7 +1671,11 @@ export function buildTrackScenery(track) {
       } else {
         // Outfield bead identity mix (v25)
         const [wLo, wHi] = profile.warehouseScale;
-        if (profile.urbanSkyline) {
+        if (profile.cityCircuit) {
+          const pickC = pickCityCircuitStamp(sprites, profile, rnd);
+          if (pickC && pickC.img) { img = pickC.img; scale = pickC.scale; kind = pickC.kind; }
+          else { img = pick(bbMdList, rnd); scale = varyScale(rnd, 0.85, 1.18); kind = 'billboard'; }
+        } else if (profile.urbanSkyline) {
           // Gridlock v28 race beads: billboardMd first, then towerSm; warehouses scarce
           const u = rnd();
           const whGate = Math.min(0.18, 0.04 + profile.warehouseBias * 0.35);
@@ -2062,6 +2219,11 @@ export function buildTrackScenery(track) {
       img = pick(hasStandBlock ? sprites.buildings.standBlock : sprites.buildings.stand, rnd);
       kind = 'stand';
     } else {
+      if (profile.cityCircuit) {
+        const pickC = pickCityCircuitStamp(sprites, profile, rnd, { preferFar: true });
+        if (pickC && pickC.img) { img = pickC.img; kind = pickC.kind; }
+        else { img = pick(sprites.buildings.billboard, rnd); kind = 'billboard'; }
+      } else {
       const whCut = profile.warehouseBias < 0.15 ? profile.warehouseBias * 0.5 : (0.45 + profile.warehouseBias * 0.3);
       const standCut = profile.standsOnlyAtSF ? whCut : (whCut + profile.standBias * 0.35);
       const bbCut = standCut + profile.billboardBias;
@@ -2072,6 +2234,7 @@ export function buildTrackScenery(track) {
       else if (roll < bbCut || profile.billboardBias >= 0.22) { img = pick(sprites.buildings.billboard, rnd); kind = 'billboard'; }
       else if (roll < 0.92) { img = pick(sprites.buildings.chimney, rnd); }
       else { img = pick(sprites.buildings.tower, rnd); kind = 'tower'; }
+      }
     }
     if (!img) continue;
     const scale = varyScale(rnd, 0.75, 1.3);
@@ -2089,21 +2252,37 @@ export function buildTrackScenery(track) {
   // Ground plate cached at modest resolution
   const ground = buildGroundPlate(track, theme);
 
+  // Phase A: enforce visible stamp budgets — prefer larger Md landmarks
+  const midCap = profile.midCap != null ? profile.midCap : SCENERY_DENSITY.midCap;
+  const farCap = profile.farCap != null ? profile.farCap : SCENERY_DENSITY.farCap;
+  const nearCap = profile.nearCap != null ? profile.nearCap : SCENERY_DENSITY.nearCap;
+  const farCapped = enforceLayerCap(far, farCap, 180);
+  const midCapped = enforceLayerCap(mid, midCap, 150);
+  const nearCapped = enforceLayerCap(near, nearCap, 120);
+  // Thinner near list for low-zoom draw path (cam.zoom < ~0.7)
+  const nearThin = enforceLayerCap(nearCapped, Math.max(4, Math.floor(nearCap * 0.45)), 160);
+
   const stampCounts = {
     tower: towerCount,
     billboard: billboardCount,
     crane: craneCount,
     containers: stampLog.filter((p) => p.kind === 'containers').length,
-    far: far.length, mid: mid.length, near: near.length
+    cityblock: stampLog.filter((p) => p.kind === 'cityblock').length,
+    citystreet: stampLog.filter((p) => p.kind === 'citystreet').length,
+    warehouse: stampLog.filter((p) => p.kind === 'warehouse').length,
+    far: farCapped.length, mid: midCapped.length, near: nearCapped.length,
+    farRaw: far.length, midRaw: mid.length, nearRaw: near.length,
+    caps: { mid: midCap, far: farCap, near: nearCap }
   };
   return {
     trackId: track.id,
     theme,
     profile,
     sprites,
-    far,
-    mid,
-    near,
+    far: farCapped,
+    mid: midCapped,
+    near: nearCapped,
+    nearThin,
     skyline,
     ground,
     startX,
@@ -2178,8 +2357,8 @@ function buildSkylineStrip(theme, track) {
 }
 
 function buildGroundPlate(track, theme) {
-  // Wide plate: infield + outfield + beyond stamp ring — kill black void (v18)
-  const margin = 560;
+  // Wide plate: infield + outfield + beyond stamp ring — kill black void (v18/v35)
+  const margin = 720;
   const sw = Math.ceil((track.width + margin * 2) / 2);
   const sh = Math.ceil((track.height + margin * 2) / 2);
   const { canvas, ctx } = makeCanvas(sw, sh);
@@ -2271,9 +2450,9 @@ function buildGroundPlate(track, theme) {
   );
   edge.addColorStop(0, 'rgba(0,0,0,1)');
   edge.addColorStop(0.55, 'rgba(0,0,0,1)');
-  edge.addColorStop(0.74, 'rgba(0,0,0,0.85)');
-  edge.addColorStop(0.88, 'rgba(0,0,0,0.48)');
-  edge.addColorStop(1, 'rgba(0,0,0,0.18)');
+  edge.addColorStop(0.78, 'rgba(0,0,0,0.92)');
+  edge.addColorStop(0.9, 'rgba(0,0,0,0.72)');
+  edge.addColorStop(1, 'rgba(0,0,0,0.42)');
   ctx.fillStyle = edge;
   ctx.fillRect(0, 0, sw, sh);
   ctx.restore();
@@ -2400,7 +2579,7 @@ export function drawGroundPlate(ctx, scenery, track, zoom = 1) {
   ctx.restore();
 }
 
-function drawLayer(ctx, items, cam, W, H, zoom, pad) {
+function drawLayer(ctx, items, cam, W, H, zoom, pad, visCap) {
   // Frustum cull in world space — extra pad when zoomed out (countdown grid)
   const zoomPad = zoom < 0.85 ? 220 : 0;
   const hw = (W * 0.5) / zoom + pad + zoomPad;
@@ -2408,8 +2587,11 @@ function drawLayer(ctx, items, cam, W, H, zoom, pad) {
   const minX = cam.x - hw, maxX = cam.x + hw;
   const minY = cam.y - hh, maxY = cam.y + hh;
   const farZoom = zoom < 0.75;
+  const cap = (visCap != null && visCap > 0) ? visCap : 999;
+  let drawn = 0;
   ctx.imageSmoothingEnabled = true;
   for (const it of items) {
+    if (drawn >= cap) break;
     // Far / overview: drop thin crowd strips (grandstand mass already in mid layer)
     if (farZoom && it.kind === 'crowd') continue;
     const left = it.x - it.w * 0.5;
@@ -2431,19 +2613,30 @@ function drawLayer(ctx, items, cam, W, H, zoom, pad) {
     ctx.ellipse(shX, shY, dw * 0.38, Math.max(3, dh * 0.06), 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.drawImage(it.img, left + (it.w - dw) * 0.5, top + (it.h - dh), dw, dh);
+    drawn++;
   }
 }
 
 export function drawSceneryFar(ctx, scenery, cam, W, H, zoom) {
-  drawLayer(ctx, scenery.far, cam, W, H, zoom, 160);
+  drawLayer(ctx, scenery.far, cam, W, H, zoom, 160, 10);
 }
 
 export function drawSceneryMid(ctx, scenery, cam, W, H, zoom) {
-  drawLayer(ctx, scenery.mid, cam, W, H, zoom, 120);
+  drawLayer(ctx, scenery.mid, cam, W, H, zoom, 120, 18);
 }
 
 export function drawSceneryNear(ctx, scenery, cam, W, H, zoom) {
-  drawLayer(ctx, scenery.near, cam, W, H, zoom, 80);
+  // Phase A: at low zoom drop most near stamps (use nearThin if present)
+  const z = zoom != null ? zoom : ((cam && cam.zoom) || 1);
+  let items = scenery.near;
+  let visCap = 12;
+  if (z < 0.7) {
+    items = scenery.nearThin || scenery.near;
+    visCap = 5;
+  } else if (z < 0.85) {
+    visCap = 8;
+  }
+  drawLayer(ctx, items, cam, W, H, zoom, 80, visCap);
 }
 
 /** Title / menu backdrop — neon skyline painting as canvas. */
