@@ -18,46 +18,42 @@ const page = await browser.newPage();
 await page.setViewport({ width: 1280, height: 720, deviceScaleFactor: 1 });
 await page.goto(BASE, { waitUntil: 'domcontentloaded', timeout: 30000 });
 await page.evaluate(async () => {
-  if (!('serviceWorker' in navigator)) return;
   for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister();
 }).catch(() => {});
 await page.reload({ waitUntil: 'domcontentloaded' });
 await sleep(900);
-await page.waitForSelector('.menu-btns [data-act="single"]', { timeout: 12000 });
 await page.click('.menu-btns [data-act="single"]');
-await page.waitForSelector('#tracks button.btn.primary', { timeout: 8000 });
-const buttons = await page.$$('#tracks button.btn.primary');
-await buttons[0].click();
-await sleep(1600);
+await page.waitForSelector('#tracks button.btn.primary');
+await (await page.$$('#tracks button.btn.primary'))[0].click();
+await sleep(1400);
 
-async function setSpeed(spd, holdMs) {
-  return page.evaluate(async (spd, holdMs) => {
+async function holdAtSpeed(spd, frames) {
+  return page.evaluate(async (spd, frames) => {
     const g = window.__RAD_GAME__;
-    const w = g && g.world;
-    if (!w || !w.player) return null;
+    const w = g.world;
     w.race.countdown = 0; w.race.live = true; w.race.goFlash = 0;
     const p = w.player;
-    // Place mid-straight-ish using current pos; set velocity along facing
-    p.vx = Math.cos(p.angle) * spd;
-    p.vy = Math.sin(p.angle) * spd;
-    // Force several camera updates by spinning time
-    const start = performance.now();
-    while (performance.now() - start < holdMs) {
-      // keep velocity locked so speed doesn't decay for the proof
+    // Mid-track sample on Neon Loop line
+    const line = w.track.line;
+    const i = (line.length * 0.35) | 0;
+    const a = line[i], b = line[(i + 1) % line.length];
+    p.x = a.x; p.y = a.y;
+    p.angle = Math.atan2(b.y - a.y, b.x - a.x);
+    let last = null;
+    for (let f = 0; f < frames; f++) {
       p.vx = Math.cos(p.angle) * spd;
       p.vy = Math.sin(p.angle) * spd;
       await new Promise((r) => requestAnimationFrame(r));
+      last = { spd: Math.hypot(p.vx, p.vy), zoom: w.cam.zoom };
     }
-    return { zoom: w.cam.zoom, spd, cam: { x: w.cam.x, y: w.cam.y }, px: p.x, py: p.y };
-  }, spd, holdMs);
+    return last;
+  }, spd, frames);
 }
 
-const slow = await setSpeed(0.4, 900);
-await page.screenshot({ path: join(OUT, '50-zoom-slow.png') });
-console.log('slow', JSON.stringify(slow));
-
-const fast = await setSpeed(3.8, 1100);
-await page.screenshot({ path: join(OUT, '50b-zoom-fast.png') });
-console.log('fast', JSON.stringify(fast));
-
+const fast = await holdAtSpeed(1.25, 75);
+await page.screenshot({ path: join(OUT, '51-zoom-fast.png') });
+console.log('fast', fast);
+const slow = await holdAtSpeed(0.15, 75);
+await page.screenshot({ path: join(OUT, '51b-zoom-slow.png') });
+console.log('slow', slow);
 await browser.close();

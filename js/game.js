@@ -9,15 +9,18 @@ import { sfx } from './audio.js';
 import { placePrize, persistSave } from './career.js';
 import { clamp } from './util.js';
 
-/** Camera: idle close on chassis; speed pulls out so upcoming track reads (v30). */
-const ZOOM_NEAR = 1.62;
-const ZOOM_FAR = 0.82;
-const ZOOM_GRID = 0.88; // countdown still shows grid
-const ZOOM_LERP_RACE = 0.07;
+/** Camera: idle close; real race speeds (~0.4–1.5) pull out hard (v32). */
+const ZOOM_NEAR = 1.68;
+const ZOOM_FAR = 0.72;
+const ZOOM_GRID = 0.88;
+const ZOOM_LERP_RACE = 0.14;
 const ZOOM_LERP_GRID = 0.08;
-/** Look-ahead along facing (world units) grows with speed so the frame leads the car. */
-const LOOKAHEAD_MIN = 28;
-const LOOKAHEAD_MAX = 160;
+/** Look-ahead along facing grows with speed so upcoming track fills the frame. */
+const LOOKAHEAD_MIN = 18;
+const LOOKAHEAD_MAX = 220;
+/** Actual in-race |v| peaks ~1.2–1.5 on stock engine — not the soft top-speed constant. */
+const SPD_ZOOM_LO = 0.2;
+const SPD_ZOOM_HI = 1.15;
 
 export function createGame(canvas, input) {
   const renderer = createRenderer(canvas);
@@ -253,22 +256,22 @@ export function createGame(canvas, input) {
       return;
     }
 
-    // Speed → zoom out + look ahead so upcoming track stays in frame
+    // Speed → zoom out + look ahead (mapped to real |v|, not soft top-speed)
     const spd = Math.hypot(p.vx, p.vy);
-    // Typical race ~1.5–4.5; start pulling out early, full far by ~3.4
-    const tSpd = clamp((spd - 0.35) / 3.05, 0, 1);
-    const eased = tSpd * tSpd * (3 - 2 * tSpd); // smoothstep
+    const tSpd = clamp((spd - SPD_ZOOM_LO) / (SPD_ZOOM_HI - SPD_ZOOM_LO), 0, 1);
+    // Ease-in so mid pace already opens the frame
+    const eased = Math.sqrt(tSpd);
     let targetZoom = ZOOM_NEAR + (ZOOM_FAR - ZOOM_NEAR) * eased;
     if (p.nitroTimer > 0) {
-      targetZoom = Math.max(ZOOM_FAR, targetZoom - 0.06);
+      targetZoom = Math.max(ZOOM_FAR * 0.92, targetZoom - 0.08);
     }
-    targetZoom = clamp(targetZoom, ZOOM_FAR, ZOOM_NEAR);
+    targetZoom = clamp(targetZoom, ZOOM_FAR * 0.92, ZOOM_NEAR);
 
     const look = LOOKAHEAD_MIN + (LOOKAHEAD_MAX - LOOKAHEAD_MIN) * eased;
     const tx = p.x + Math.cos(p.angle) * look;
     const ty = p.y + Math.sin(p.angle) * look;
-    world.cam.x += (tx - world.cam.x) * 0.14;
-    world.cam.y += (ty - world.cam.y) * 0.14;
+    world.cam.x += (tx - world.cam.x) * 0.16;
+    world.cam.y += (ty - world.cam.y) * 0.16;
     world.cam.zoom += (targetZoom - world.cam.zoom) * ZOOM_LERP_RACE;
   }
 
