@@ -1,0 +1,212 @@
+[
+  {
+    "id": "neon_loop",
+    "meta": {
+      "trackId": "neon_loop",
+      "warehouseBias": 0,
+      "cityfabricBias": 0.88,
+      "cityCircuit": true,
+      "stampCounts": {
+        "tower": 0,
+        "billboard": 0,
+        "crane": 0,
+        "containers": 0,
+        "cityblock": 0,
+        "citystreet": 0,
+        "cityfabric": 574,
+        "cityAccents": 0,
+        "warehouse": 0,
+        "warehouseAfterScrub": 0,
+        "cityblockMdPool": 3,
+        "citystreetMdPool": 3,
+        "far": 288,
+        "mid": 295,
+        "near": 19,
+        "farRaw": 288,
+        "midRaw": 295,
+        "nearRaw": 252,
+        "caps": {
+          "mid": 40,
+          "far": 16,
+          "near": 18,
+          "fabricUncapped": true,
+          "cityAccentCap": 10
+        }
+      },
+      "warehouseAfterScrub": 0,
+      "kinds": {
+        "cityfabric": 574,
+        "other": 27,
+        "stand": 1
+      },
+      "srcKeys": {
+        "cityfabric-row": 188,
+        "cityfabric-row-b": 195,
+        "cityfabric-row-c": 191
+      },
+      "cloneHits400": 2034,
+      "pixi": "pixi-contiguous-v4",
+      "packName": "realistic-v5.1-rooftop-soft",
+      "urbanRooftop": true,
+      "urbanRooftopB": true,
+      "groundMode": "urbanRooftop",
+      "farLock": {
+        "padWu": 1930,
+        "halfDiagWu": 1529.796645890485,
+        "tileScaleBefore": 0.55,
+        "tileScaleAfter": 0.14,
+        "groundMode": "urbanRooftop",
+        "dualLayer": true,
+        "dualAlpha": 0.45,
+        "dualUvFrac": {
+          "x": 0.37,
+          "y": 0.41
+        },
+        "dualOffPx": {
+          "x": 189.44,
+          "y": 209.92
+        },
+        "pack": "realistic-v5.1-rooftop-soft",
+        "trackW": 2900,
+        "trackH": 2100,
+        "tileW": 6760,
+        "tileH": 5960,
+        "follow": true,
+        "sprW": 6760,
+        "sprH": 5960,
+        "sprX": -1930,
+        "sprY": -1930,
+        "texW": 512,
+        "texH": 512,
+        "children": 3
+      }
+    }
+  },
+  {
+    "fps": {
+      "ok": true,
+      "frames": 121,
+      "elapsed": 2.016199999988079,
+      "fps": 60.01388751151445,
+      "zoom": 0.48,
+      "pixiReady": true,
+      "farLock": {
+        "padWu": 1930,
+        "halfDiagWu": 1529.796645890485,
+        "tileScaleBefore": 0.55,
+        "tileScaleAfter": 0.14,
+        "groundMode": "urbanRooftop",
+        "dualLayer": true,
+        "dualAlpha": 0.45,
+        "dualUvFrac": {
+          "x": 0.37,
+          "y": 0.41
+        },
+        "dualOffPx": {
+          "x": 189.44,
+          "y": 209.92
+        },
+        "pack": "realistic-v5.1-rooftop-soft",
+        "trackW": 2900,
+        "trackH": 2100,
+        "tileW": 6760,
+        "tileH": 5960,
+        "follow": true,
+        "sprW": 6760,
+        "sprH": 5960,
+        "sprX": -1930,
+        "sprY": -1930,
+        "texW": 512,
+        "texH": 512,
+        "children": 3
+      },
+      "canvas": "pixi"
+    },
+    "fpsLine": "Pixi Neon Loop ZOOM_FAR(~0.48) mid-straight: ~60.0 FPS over 2.02s (121 frames). Rooftop soft v5.1 padWu=1930 tileScale 0.14 dualLayer alpha=0.45 uvFrac=0.37,0.41."
+  },
+  {
+    "id": "gridlock",
+    "meta": {
+      "trackId": "gridlock",
+      "warehouseBias": 0,
+      "cityfabricBias": 0.88,
+      "cityCircuit": true,
+      "stampCounts": {
+        "tower": 0,
+        "billboard": 0,
+        "crane": 0,
+        "containers": 0,
+        "cityblock": 2,
+        "citystreet": 0,
+        "cityfabric": 467,
+        "cityAccents": 2,
+        "warehouse": 4,
+        "warehouseAfterScrub": 0,
+        "cityblockMdPool": 3,
+        "citystreetMdPool": 3,
+        "far": 198,
+        "mid": 272,
+        "near": 19,
+        "farRaw": 198,
+        "midRaw": 276,
+        "nearRaw": 258,
+        "caps": {
+          "mid": 40,
+          "far": 16,
+          "near": 18,
+          "fabricUncapped": true,
+          "cityAccentCap": 10
+        }
+      },
+      "warehouseAfterScrub": 0,
+      "kinds": {
+        "cityfabric": 467,
+        "cityblock": 2,
+        "other": 20
+      },
+      "srcKeys": {
+        "cityfabric-row-b": 154,
+        "cityfabric-row-c": 160,
+        "cityfabric-row": 153,
+        "cityblock-b": 1,
+        "cityblock-c": 1
+      },
+      "cloneHits400": 2215,
+      "pixi": "pixi-contiguous-v4",
+      "packName": "realistic-v5.1-rooftop-soft",
+      "urbanRooftop": true,
+      "urbanRooftopB": true,
+      "groundMode": "urbanRooftop",
+      "farLock": {
+        "padWu": 1930,
+        "halfDiagWu": 1529.796645890485,
+        "tileScaleBefore": 0.55,
+        "tileScaleAfter": 0.14,
+        "groundMode": "urbanRooftop",
+        "dualLayer": true,
+        "dualAlpha": 0.45,
+        "dualUvFrac": {
+          "x": 0.37,
+          "y": 0.41
+        },
+        "dualOffPx": {
+          "x": 189.44,
+          "y": 209.92
+        },
+        "pack": "realistic-v5.1-rooftop-soft",
+        "trackW": 2380,
+        "trackH": 1540,
+        "tileW": 6527,
+        "tileH": 5400,
+        "follow": true,
+        "sprW": 6527,
+        "sprH": 5400,
+        "sprX": -2073.5,
+        "sprY": -1930,
+        "texW": 512,
+        "texH": 512,
+        "children": 3
+      }
+    }
+  }
+]

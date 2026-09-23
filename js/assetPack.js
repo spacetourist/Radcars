@@ -800,7 +800,8 @@ export function loadAssetPack() {
       asphalt: null,
       asphaltPatternOk: false,
       urbanLot: null,
-      urbanRooftop: null
+      urbanRooftop: null,
+      urbanRooftopB: null
     };
 
     let manifest = null;
@@ -925,12 +926,32 @@ export function loadAssetPack() {
 
     const urbanLotRel = (manifest && manifest.textures && manifest.textures[1]) || 'tex-urban-lot-tile.png';
     const texList = (manifest && Array.isArray(manifest.textures)) ? manifest.textures : [];
-    const urbanRooftopRel = texList.find((t) => /rooftop|urban-rooftop/i.test(String(t))) || 'tex-urban-rooftop-fill.png';
-    const [skyline, asphalt, urbanLot, urbanRooftop] = await Promise.all([
+    // v5.1 soft rooftop: primary is edge-crossfaded fill (on-disk replace); never procedural as primary
+    const urbanRooftopRel = texList.includes('tex-urban-rooftop-fill.png')
+      ? 'tex-urban-rooftop-fill.png'
+      : (texList.find((t) => /tex-urban-rooftop-fill(?!-v5-procedural)/i.test(String(t))) || 'tex-urban-rooftop-fill.png');
+    const urbanRooftopBRel = texList.includes('tex-urban-rooftop-fill-v51b.png')
+      ? 'tex-urban-rooftop-fill-v51b.png'
+      : 'tex-urban-rooftop-fill-v51b.png';
+    const ROOFTOP_BUST = 'v51soft';
+    async function tryPlainBust(rel, bust) {
+      const q = bust ? ('?v=' + encodeURIComponent(bust) + '&t=' + Date.now()) : '';
+      try {
+        const img = await loadImage(PACK_BASE + rel + q);
+        const { canvas, ctx } = makeCanvas(img.width, img.height);
+        ctx.drawImage(img, 0, 0);
+        return canvas;
+      } catch (e) {
+        console.warn('[assetPack] plain bust miss', rel, e.message);
+        return null;
+      }
+    }
+    const [skyline, asphalt, urbanLot, urbanRooftop, urbanRooftopB] = await Promise.all([
       tryPlain(bgRel),
       tryPlain(asphaltRel),
       tryPlain(urbanLotRel),
-      tryPlain(urbanRooftopRel)
+      tryPlainBust(urbanRooftopRel, ROOFTOP_BUST),
+      tryPlainBust(urbanRooftopBRel, ROOFTOP_BUST)
     ]);
     // pack.skyline = full-bleed screen-space backdrop ONLY — never stamped / never in pack.scenery
     pack.skyline = skyline;
@@ -938,6 +959,9 @@ export function loadAssetPack() {
     pack.asphalt = asphalt;
     pack.urbanLot = urbanLot;
     pack.urbanRooftop = urbanRooftop;
+    pack.urbanRooftopB = urbanRooftopB;
+    pack.urbanRooftopRel = urbanRooftopRel;
+    pack.urbanRooftopBRel = urbanRooftopBRel;
     // Explicit: strip any accidental bg keys from scenery (chroma/fitScenery must never touch bg)
     for (const k of Object.keys(pack.scenery)) {
       if (/^(neon-skyline|skyline-horizon|arena-scene|skyline)$/i.test(k) || /REF/i.test(k)) {
@@ -1242,6 +1266,7 @@ export function loadAssetPack() {
             cityfabricRow: !!cityfabricRow,
             urbanLot: !!urbanLot,
             urbanRooftop: !!urbanRooftop,
+            urbanRooftopB: !!urbanRooftopB,
             cityblockMd: !!(pack.scenery.cityblockMd),
             citystreetMd: !!(pack.scenery.citystreetMd),
             cityblockVariants: (pack.scenery.cityblockMdVariants || []).length,
@@ -1257,6 +1282,7 @@ export function loadAssetPack() {
             cityfabricRow: pack.scenery['cityfabric-row'] && [pack.scenery['cityfabric-row'].width, pack.scenery['cityfabric-row'].height],
             urbanLot: pack.urbanLot && [pack.urbanLot.width, pack.urbanLot.height],
             urbanRooftop: pack.urbanRooftop && [pack.urbanRooftop.width, pack.urbanRooftop.height],
+            urbanRooftopB: pack.urbanRooftopB && [pack.urbanRooftopB.width, pack.urbanRooftopB.height],
             warehouse: pack.scenery.warehouse && [pack.scenery.warehouse.width, pack.scenery.warehouse.height],
             maxStampPx,
             heroStampPx

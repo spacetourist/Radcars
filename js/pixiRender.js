@@ -400,6 +400,7 @@ export async function createPixiRenderer(opts) {
     const asphalt = pack && pack.ready && pack.asphalt ? pack.asphalt : null;
     const urbanLot = pack && pack.ready && pack.urbanLot ? pack.urbanLot : null;
     const urbanRooftop = pack && pack.ready && pack.urbanRooftop ? pack.urbanRooftop : null;
+    const urbanRooftopB = pack && pack.ready && pack.urbanRooftopB ? pack.urbanRooftopB : null;
     const cityCircuit = !!(scenery && scenery.profile && scenery.profile.cityCircuit);
     const needRebuild = !groundSprite || groundTrackId !== tid;
 
@@ -418,7 +419,7 @@ export async function createPixiRenderer(opts) {
           const cssW = (typeof cssWidth === 'number' && cssWidth > 0) ? cssWidth : 1280;
           const cssH = (typeof cssHeight === 'number' && cssHeight > 0) ? cssHeight : 720;
           const halfDiagWu = (0.5 * Math.hypot(cssW, cssH)) / 0.48;
-          const padWu = Math.max(1200, Math.ceil(halfDiagWu + 400)); // ≥ halfDiag + look-ahead
+          const padWu = Math.max(1200, Math.ceil(halfDiagWu + 400)); // ≥ halfDiag + look-ahead (~1930 @ 1280x720)
           // Cover full track AABB + pad, OR at least 2.5× viewport so follow never gaps
           const twTrack = track.width || 2900;
           const thTrack = track.height || 2100;
@@ -429,8 +430,11 @@ export async function createPixiRenderer(opts) {
           const ox = -((tw - twTrack) * 0.5);
           const oy = -((th - thTrack) * 0.5);
           const ROOFTOP_TILE_SCALE_BEFORE = 0.55;
-          const ROOFTOP_TILE_SCALE = 0.12;
+          // v5.1: keep small tiles (0.12–0.18) — do NOT raise back toward 0.55
+          const ROOFTOP_TILE_SCALE = 0.14;
           const lotScale = 0.85;
+          const DUAL_UV_FRAC = { x: 0.37, y: 0.41 };
+          const DUAL_ALPHA = 0.45;
           if (urbanRooftop && urbanLot) {
             const lotTex = textureFrom(urbanLot);
             if (lotTex) {
@@ -449,8 +453,32 @@ export async function createPixiRenderer(opts) {
           tile.tileScale.set(ts, ts);
           // Rooftop must read as city carpet at FAR — keep bright, high alpha
           tile.tint = urbanRooftop ? 0xe8dcc8 : 0xb0a898; // slight warm lift so FAR carpet ≠ void-black
+          tile.alpha = 1;
           groundLayer.addChild(tile);
           groundSprite = tile;
+          let dualOn = false;
+          let dualOffX = 0;
+          let dualOffY = 0;
+          // Anti-grid: secondary soft rooftop variant, offset UV, ~45% alpha
+          if (urbanRooftop && urbanRooftopB) {
+            const texB = textureFrom(urbanRooftopB);
+            if (texB) {
+              try { texB.source.style.addressMode = 'repeat'; } catch (_) {}
+              const tileB = new TilingSprite({ texture: texB, width: tw, height: th });
+              tileB.x = ox; tileB.y = oy;
+              tileB.tileScale.set(ts, ts);
+              tileB.tint = 0xe8dcc8;
+              tileB.alpha = DUAL_ALPHA;
+              dualOffX = DUAL_UV_FRAC.x * (texB.width || tex.width || 512);
+              dualOffY = DUAL_UV_FRAC.y * (texB.height || tex.height || 512);
+              tileB._dualOffX = dualOffX;
+              tileB._dualOffY = dualOffY;
+              tileB.tilePosition.x = dualOffX;
+              tileB.tilePosition.y = dualOffY;
+              groundLayer.addChild(tileB);
+              dualOn = true;
+            }
+          }
           groundMode = urbanRooftop ? 'urbanRooftop' : 'urbanLot';
           groundFollow = true;
           groundPadWu = padWu;
@@ -464,6 +492,11 @@ export async function createPixiRenderer(opts) {
                 tileScaleBefore: urbanRooftop ? ROOFTOP_TILE_SCALE_BEFORE : lotScale,
                 tileScaleAfter: ts,
                 groundMode,
+                dualLayer: dualOn,
+                dualAlpha: dualOn ? DUAL_ALPHA : 0,
+                dualUvFrac: dualOn ? DUAL_UV_FRAC : null,
+                dualOffPx: dualOn ? { x: dualOffX, y: dualOffY } : null,
+                pack: (pack && pack.name) || null,
                 trackW: twTrack,
                 trackH: thTrack,
                 tileW: tw,
@@ -547,8 +580,10 @@ export async function createPixiRenderer(opts) {
       ch.y = oy;
       // Scroll UVs so texture feels world-stable while sprite follows cam
       if (ch.tilePosition) {
-        ch.tilePosition.x = -ox;
-        ch.tilePosition.y = -oy;
+        const offX = ch._dualOffX || 0;
+        const offY = ch._dualOffY || 0;
+        ch.tilePosition.x = -ox + offX;
+        ch.tilePosition.y = -oy + offY;
       }
     }
   }

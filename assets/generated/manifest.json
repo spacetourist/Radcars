@@ -1,5 +1,5 @@
 {
-  "pack": "realistic-v5-city-carpet",
+  "pack": "realistic-v5.1-rooftop-soft",
   "chromaDefault": "#FF00FF",
   "notes": "v5 CITY CARPET: kill countable stamp islands. Soft-alpha cityfabric-row/{b,c} rings (25-40% overlap) + tex-urban-rooftop-fill TilingSprite carpet for infield/outfield. cityblock/street trio = sparse accents only. Exempt fabric from mid/near/far caps on Neon/Gridlock. Pixi primary. Soft edges baked (~28-32px alpha falloff); Developer may still soft-mask if needed.",
   "carsByColor": {
@@ -41,7 +41,10 @@
   "textures": [
     "tex-asphalt.png",
     "tex-urban-lot-tile.png",
-    "tex-urban-rooftop-fill.png"
+    "tex-urban-rooftop-fill.png",
+    "tex-urban-rooftop-fill-v51.png",
+    "tex-urban-rooftop-fill-v51b.png",
+    "tex-urban-rooftop-fill-v5-procedural.png"
   ],
   "bgRoles": {
     "bg/bg-skyline-horizon.png": "screenSpaceBackdropOnly",
@@ -103,11 +106,16 @@
     "mode": "cityCarpet",
     "forbid": "countableRectangularStampIslands",
     "groundTile": "tex-urban-rooftop-fill.png",
-    "groundTileFallback": "tex-urban-lot-tile.png",
+    "groundTileFallback": "tex-urban-rooftop-fill-v5-procedural.png",
     "softEdges": "fabric plates bake ~28-32px alpha falloff; if hard rects remain use 30%+ overlap or Developer soft-mask",
     "neon_loop": "CARPET infield+outfield with rooftop-fill TilingSprite (or dense overlapping fabric grid); NOT bare lot alone. Continuous cityfabric rings on BOTH walls by wall-length/plate-width with 25-40% overlap. Kill mid/near/far caps for cityfabric (or exempt fabric entirely). cityblock/street trio = sparse accents only.",
     "gridlock": "same as neon_loop; street-grid feel; no warehouse",
     "trackRibbon": "asphalt between kerbs (not yellow line on void)",
-    "success": "at ZOOM_FAR cannot count isolated rectangular stamps; reads as one continuous night city carpet"
+    "success": "at ZOOM_FAR cannot count isolated rectangular stamps; reads as one continuous night city carpet",
+    "groundTileVariants": [
+      "tex-urban-rooftop-fill-v51.png",
+      "tex-urban-rooftop-fill-v51b.png"
+    ],
+    "v51": "Softer denser photoreal rooftop fill; edge-crossfaded seamless. Prefer dual-layer: primary + v51b offset ~40-50% alpha. Keep tileScale ~0.12-0.18. FAR lock needs zero countable tile rects."
   }
 }

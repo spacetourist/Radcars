@@ -1,4 +1,4 @@
-const CACHE = 'radcars-v40-far-lock';
+const CACHE = 'radcars-v41-rooftop-soft';
 const ASSETS = [
   './',
   './index.html',
@@ -60,7 +60,9 @@ const ASSETS = [
   './assets/generated/scenery/scenery-cityfabric-row-c.png',
   './assets/generated/tex-asphalt.png',
   './assets/generated/tex-urban-lot-tile.png',
-  './assets/generated/tex-urban-rooftop-fill.png'
+  './assets/generated/tex-urban-rooftop-fill.png',
+  './assets/generated/tex-urban-rooftop-fill-v51.png',
+  './assets/generated/tex-urban-rooftop-fill-v51b.png'
 ];
 
 self.addEventListener('install', (e) => {
