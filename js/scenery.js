@@ -1051,13 +1051,15 @@ function pickCityCircuitStamp(sprites, profile, rnd, opts = {}) {
   function wrap(img, kind, lo, hi) {
     if (!img) return null;
     const v = cityStampVariety(rnd, kind);
-    // Fabric plates: gentler rot so abutting rows stay readable as a ring
-    const rot = (kind === 'cityfabric') ? ((rnd() < 0.12) ? Math.PI : (rnd() - 0.5) * 0.08) : v.rot;
+    // Fabric: always flipX chance + small rot jitter (FAR anti-band); rare 180
+    const rot = (kind === 'cityfabric')
+      ? ((rnd() < 0.10) ? Math.PI : (rnd() - 0.5) * 0.14)
+      : v.rot;
     return {
       img,
       kind,
       scale: varyScale(rnd, lo, hi) * (kind === 'cityfabric' ? (1 + (rnd() - 0.5) * 0.12) : v.jitter),
-      flipX: v.flipX,
+      flipX: kind === 'cityfabric' ? (rnd() < 0.5) : v.flipX,
       rot
     };
   }
@@ -1410,10 +1412,17 @@ export function buildTrackScenery(track) {
     const sampleImg = cfPool[0];
     // plateWorldWidth uses typical fabric scale (~1.3)
     const plateWorldWidth = Math.max(160, (sampleImg.width || 320) * 1.3);
-    const step = plateWorldWidth * (0.65 + rnd() * 0.05); // 0.65–0.70 → 30–35%+ overlap
-    function walk(polyEdges, inward, layerList, layerName) {
+    // Continuous wall-length rings: step ≈ plateW × 0.65–0.75 (25–40% overlap)
+    const step = plateWorldWidth * (0.65 + rnd() * 0.10);
+    // FAR lock: multi-ring radial stagger + flipX / rot jitter kills clone banding
+    function walk(polyEdges, inward, layerList, layerName, ringIdx) {
+      const phase = (ringIdx * 0.37 + (inward ? 0.19 : 0)) * step;
+      const radialBase = inward
+        ? (40 + ringIdx * 52)
+        : (46 + ringIdx * 58);
       let acc = 0;
-      let nextAt = step * 0.15;
+      let nextAt = step * 0.12 + phase;
+      let plateI = ringIdx % Math.max(1, cfPool.length);
       for (const e of polyEdges) {
         const end = acc + e.len;
         while (nextAt <= end + 1e-6) {
@@ -1422,9 +1431,12 @@ export function buildTrackScenery(track) {
           const by = e.ay + (e.by - e.ay) * t;
           const nx = inward ? -e.nx : e.nx;
           const ny = inward ? -e.ny : e.ny;
-          const dist = inward ? (44 + rnd() * 32) : (48 + rnd() * 40);
-          const x = bx + nx * dist;
-          const y = by + ny * dist;
+          // Radial stagger between rings (+ small along-wall jitter)
+          const dist = radialBase + rnd() * 28 + (rnd() - 0.5) * 10;
+          const along = (rnd() - 0.5) * step * 0.08;
+          const tx = -(ny), ty = nx; // tangent
+          const x = bx + nx * dist + tx * along;
+          const y = by + ny * dist + ty * along;
           nextAt += step;
           if (inward) {
             if (!pointInPoly(x, y, track.inner)) continue;
@@ -1434,15 +1446,29 @@ export function buildTrackScenery(track) {
           }
           const pickC = pickCityCircuitStamp(sprites, profile, rnd, { preferFabric: true });
           if (!pickC || !pickC.img) continue;
+          // Prefer rotating a/b/c along the ring to break same-src bands
+          let img = pickC.img;
+          if (cfPool.length > 1) {
+            img = cfPool[plateI % cfPool.length] || img;
+            plateI++;
+          }
           const scale = pickC.scale || varyScale(rnd, 1.15, 1.5);
-          const opts = (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null;
-          tryAddStamp(layerList, pickC.img, x, y, scale, layerName, y, 'cityfabric', opts);
+          // Always randomise flipX; small rot jitter (or rare 180)
+          const flipX = rnd() < 0.5;
+          let rot = (rnd() - 0.5) * 0.14; // ~±4°
+          if (rnd() < 0.10) rot = Math.PI;
+          const opts = { flipX, rot };
+          tryAddStamp(layerList, img, x, y, scale, layerName, y, 'cityfabric', opts);
         }
         acc = end;
       }
     }
-    walk(edges, false, mid, 'mid');
-    walk(innerEdges, true, mid, 'mid');
+    // Outer rings (0..2) + inner rings (0..1), phase-staggered — 3rd outer kills FAR stamp-cliff
+    walk(edges, false, mid, 'mid', 0);
+    walk(edges, false, mid, 'mid', 1);
+    walk(edges, false, far, 'far', 2);
+    walk(innerEdges, true, mid, 'mid', 0);
+    walk(innerEdges, true, mid, 'mid', 1);
     // Sparse accents only (~8–12 total) — not the density engine
     const accentStep = step * 3.2;
     function walkAccent(polyEdges, inward) {
@@ -1476,7 +1502,7 @@ export function buildTrackScenery(track) {
     walkAccent(innerEdges, true);
   }
 
-  /** Dense overlapping fabric carpet for infield + outfield (until rooftop fill lands). */
+  /** Sparse outfield fabric carpet — extends readable city past ring cliff (FAR lock). */
   function placeCityFabricCarpet() {
     if (!profile.cityCircuit) return;
     const cfPool = (sprites.buildings.cityfabricMd && sprites.buildings.cityfabricMd.length)
@@ -1486,9 +1512,15 @@ export function buildTrackScenery(track) {
     const sampleImg = cfPool[0];
     const pw = Math.max(140, (sampleImg.width || 320) * 1.2);
     const ph = Math.max(100, (sampleImg.height || 200) * 1.05);
-    const stepX = pw * 0.55;
-    const stepY = ph * 0.55;
-    const margin = Math.max(track.width || 2900, track.height || 2100) * 0.12;
+    // Rooftop owns dense fill — sparse step kills clone banding but removes hard stamp-cliff
+    let rooftopOn = false;
+    try {
+      const packRt = getAssetPack();
+      rooftopOn = !!(packRt && packRt.ready && packRt.urbanRooftop);
+    } catch (_) {}
+    const stepX = pw * (rooftopOn ? 1.05 : 0.55);
+    const stepY = ph * (rooftopOn ? 1.05 : 0.55);
+    const margin = Math.max(track.width || 2900, track.height || 2100) * (rooftopOn ? 0.55 : 0.12);
     const x0 = -margin, y0 = -margin;
     const x1 = (track.width || 2900) + margin;
     const y1 = (track.height || 2100) + margin;
@@ -1501,17 +1533,25 @@ export function buildTrackScenery(track) {
         const inOuter = pointInPoly(x, y, track.outer);
         // Carpet infield (inside inner) + outfield (outside outer). Skip asphalt band.
         if (!inInner && inOuter) continue;
+        // With rooftop fill: skip dense infield (rooftop owns it); only extend OUTFIELD past rings
+        if (rooftopOn && inInner) continue;
         const pickC = pickCityCircuitStamp(sprites, profile, rnd, { preferFabric: true });
         if (!pickC || !pickC.img) continue;
         const scale = (pickC.scale || 1.2) * (0.92 + rnd() * 0.2);
-        const opts = (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null;
+        const flipX = rnd() < 0.5;
+        let rot = (rnd() - 0.5) * 0.16;
+        if (rnd() < 0.10) rot = Math.PI;
+        const opts = { flipX, rot };
+        // Prefer rotating a/b/c
+        let img = pickC.img;
+        if (cfPool.length > 1) img = cfPool[(row + ((x / stepX) | 0)) % cfPool.length] || img;
         // Far layer for deep outfield; mid for infield + near-track outfield
         const deepOut = !inInner && !inOuter && (
           x < -40 || y < -40 || x > track.width + 40 || y > track.height + 40
         );
         const layerList = deepOut ? far : mid;
         const layerName = deepOut ? 'far' : 'mid';
-        tryAddStamp(layerList, pickC.img, x, y, scale, layerName, y, 'cityfabric', opts);
+        tryAddStamp(layerList, img, x, y, scale, layerName, y, 'cityfabric', opts);
       }
     }
   }
@@ -2848,8 +2888,8 @@ function buildSkylineStrip(theme, track) {
 }
 
 function buildGroundPlate(track, theme) {
-  // Wide plate: infield + outfield + beyond stamp ring — kill black void (v18/v35)
-  const margin = 720;
+  // Wide plate: infield + outfield + beyond stamp ring — FAR lock pad ≥ ~1000wu
+  const margin = 1100;
   const sw = Math.ceil((track.width + margin * 2) / 2);
   const sh = Math.ceil((track.height + margin * 2) / 2);
   const { canvas, ctx } = makeCanvas(sw, sh);
@@ -2883,19 +2923,21 @@ function buildGroundPlate(track, theme) {
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(sw, y); ctx.stroke();
   }
 
-  // Continuous asphalt / lot / street fabric under scenery (A.1 — kill black void)
+  // Continuous asphalt / rooftop / lot fabric under scenery (A.1 / FAR lock)
   try {
     const pack = getAssetPack();
-    if (pack && pack.ready && pack.asphalt) {
-      const tw = 128, th = 72;
+    const groundTex = (pack && pack.ready && (pack.urbanRooftop || pack.asphalt)) || null;
+    if (groundTex) {
+      const useRoof = !!(pack.urbanRooftop && groundTex === pack.urbanRooftop);
+      const tw = useRoof ? 96 : 128, th = useRoof ? 96 : 72;
       const tile = document.createElement('canvas');
       tile.width = tw; tile.height = th;
       const tctx = tile.getContext('2d');
       tctx.imageSmoothingEnabled = true;
-      tctx.drawImage(pack.asphalt, 0, 0, tw, th);
+      tctx.drawImage(groundTex, 0, 0, tw, th);
       tctx.globalCompositeOperation = 'source-atop';
-      // Warm lot tint — readable ground, not mud-black
-      tctx.fillStyle = 'rgba(28, 24, 18, 0.28)';
+      // Warm lot tint — lighter when rooftop fill is the readable surface
+      tctx.fillStyle = useRoof ? 'rgba(20, 18, 14, 0.12)' : 'rgba(28, 24, 18, 0.28)';
       tctx.fillRect(0, 0, tw, th);
       const pat = ctx.createPattern(tile, 'repeat');
       if (pat) {
@@ -2908,7 +2950,7 @@ function buildGroundPlate(track, theme) {
       const tile2 = document.createElement('canvas');
       tile2.width = tw; tile2.height = th;
       const t2 = tile2.getContext('2d');
-      t2.drawImage(pack.asphalt, -tw * 0.15, -th * 0.1, tw, th);
+      t2.drawImage(groundTex, -tw * 0.15, -th * 0.1, tw, th);
       t2.globalCompositeOperation = 'source-atop';
       t2.fillStyle = 'rgba(22, 20, 16, 0.35)';
       t2.fillRect(0, 0, tw, th);

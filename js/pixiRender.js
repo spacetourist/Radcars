@@ -380,7 +380,11 @@ export async function createPixiRenderer(opts) {
 
   let groundSprite = null;
   let groundTrackId = null;
-  let groundMode = null; // 'tile' | 'plate' | 'gfx'
+  let groundMode = null;
+  let groundFollow = false; // camera-follow TilingSprite (FAR lock)
+  let groundPadWu = 0;
+  let groundTileW = 0;
+  let groundTileH = 0; // 'tile' | 'plate' | 'gfx'
 
   function ensureGround(track, scenery, zoom) {
     const tid = track && track.id;
@@ -403,38 +407,78 @@ export async function createPixiRenderer(opts) {
       clearContainer(groundLayer);
       groundSprite = null;
       groundMode = null;
-      // City circuit ground: rooftop fill (v5) preferred; else lot under fabric carpet
+      groundFollow = false;
+      // City circuit ground: rooftop fill (v5) preferred; else lot under fabric carpet.
+      // FAR lock: camera-follow TilingSprite sized to ≥ viewport + pad so edges never void.
       if (cityCircuit && (urbanRooftop || urbanLot)) {
         const src = urbanRooftop || urbanLot;
         const tex = textureFrom(src);
         if (tex) {
           try { tex.source.style.addressMode = 'repeat'; } catch (_) {}
-          const margin = Math.max(track.width || 2900, track.height || 2100) * 0.1;
-          const tw = (track.width || 2900) * 1.2 + margin * 2;
-          const th = (track.height || 2100) * 1.2 + margin * 2;
-          // Lot under rooftop when both present (rooftop is readable surface)
+          const cssW = (typeof cssWidth === 'number' && cssWidth > 0) ? cssWidth : 1280;
+          const cssH = (typeof cssHeight === 'number' && cssHeight > 0) ? cssHeight : 720;
+          const halfDiagWu = (0.5 * Math.hypot(cssW, cssH)) / 0.48;
+          const padWu = Math.max(1200, Math.ceil(halfDiagWu + 400)); // ≥ halfDiag + look-ahead
+          // Cover full track AABB + pad, OR at least 2.5× viewport so follow never gaps
+          const twTrack = track.width || 2900;
+          const thTrack = track.height || 2100;
+          const viewCoverW = Math.ceil((cssW / 0.48) + padWu * 2);
+          const viewCoverH = Math.ceil((cssH / 0.48) + padWu * 2);
+          const tw = Math.max(twTrack + padWu * 2, viewCoverW);
+          const th = Math.max(thTrack + padWu * 2, viewCoverH);
+          const ox = -((tw - twTrack) * 0.5);
+          const oy = -((th - thTrack) * 0.5);
+          const ROOFTOP_TILE_SCALE_BEFORE = 0.55;
+          const ROOFTOP_TILE_SCALE = 0.12;
+          const lotScale = 0.85;
           if (urbanRooftop && urbanLot) {
             const lotTex = textureFrom(urbanLot);
             if (lotTex) {
               try { lotTex.source.style.addressMode = 'repeat'; } catch (_) {}
               const lot = new TilingSprite({ texture: lotTex, width: tw, height: th });
-              lot.x = -((tw - (track.width || 2900)) * 0.5);
-              lot.y = -((th - (track.height || 2100)) * 0.5);
-              lot.tileScale.set(0.85, 0.85);
+              lot.x = ox; lot.y = oy;
+              lot.tileScale.set(lotScale, lotScale);
               lot.tint = 0x6a6558;
               lot.alpha = 0.55;
               groundLayer.addChild(lot);
             }
           }
           const tile = new TilingSprite({ texture: tex, width: tw, height: th });
-          tile.x = -((tw - (track.width || 2900)) * 0.5);
-          tile.y = -((th - (track.height || 2100)) * 0.5);
-          tile.tileScale.set(urbanRooftop ? 0.55 : 0.85, urbanRooftop ? 0.55 : 0.85);
-          // Rooftop must be the readable surface (full tint); lot alone stays muted fallback
-          tile.tint = urbanRooftop ? 0xffffff : 0xb0a898;
+          tile.x = ox; tile.y = oy;
+          const ts = urbanRooftop ? ROOFTOP_TILE_SCALE : lotScale;
+          tile.tileScale.set(ts, ts);
+          // Rooftop must read as city carpet at FAR — keep bright, high alpha
+          tile.tint = urbanRooftop ? 0xe8dcc8 : 0xb0a898; // slight warm lift so FAR carpet ≠ void-black
           groundLayer.addChild(tile);
           groundSprite = tile;
           groundMode = urbanRooftop ? 'urbanRooftop' : 'urbanLot';
+          groundFollow = true;
+          groundPadWu = padWu;
+          groundTileW = tw;
+          groundTileH = th;
+          try {
+            if (typeof window !== 'undefined') {
+              window.__RAD_FAR_LOCK__ = {
+                padWu,
+                halfDiagWu,
+                tileScaleBefore: urbanRooftop ? ROOFTOP_TILE_SCALE_BEFORE : lotScale,
+                tileScaleAfter: ts,
+                groundMode,
+                trackW: twTrack,
+                trackH: thTrack,
+                tileW: tw,
+                tileH: th,
+                follow: true,
+                sprW: tile.width,
+                sprH: tile.height,
+                sprX: tile.x,
+                sprY: tile.y,
+                texW: tex.width,
+                texH: tex.height,
+                children: groundLayer.children.length
+              };
+            }
+          } catch (_) {}
         }
       }
       // Prefer one baked plate sprite (already continuous fabric)
@@ -454,12 +498,14 @@ export async function createPixiRenderer(opts) {
           groundMode = 'plate';
         }
       }
-      // Else one asphalt TilingSprite
+      // Else one asphalt TilingSprite (FAR pad matches rooftop path)
       if (!groundSprite && asphalt) {
         const tex = textureFrom(asphalt);
         if (tex) {
           try { tex.source.style.addressMode = 'repeat'; } catch (_) {}
-          const margin = 720;
+          const cssW = (typeof cssWidth === 'number' && cssWidth > 0) ? cssWidth : 1280;
+          const cssH = (typeof cssHeight === 'number' && cssHeight > 0) ? cssHeight : 720;
+          const margin = Math.max(1000, Math.ceil((0.5 * Math.hypot(cssW, cssH)) / 0.48));
           const tw = (track.width || 2900) + margin * 2;
           const th = (track.height || 2100) + margin * 2;
           const tile = new TilingSprite({ texture: tex, width: tw, height: th });
@@ -483,7 +529,28 @@ export async function createPixiRenderer(opts) {
       groundTrackId = tid;
       try { if (typeof window !== 'undefined') window.__RAD_GROUND_MODE__ = groundMode; } catch (_) {}
     }
-    if (groundSprite) groundSprite.alpha = fade;
+    if (groundSprite) {
+      // Rooftop carpet must stay readable at FAR (don't let fade crush it into void)
+      groundSprite.alpha = (groundMode === 'urbanRooftop') ? Math.max(0.88, fade) : fade;
+    }
+  }
+
+  function updateGroundFollow(cam, track) {
+    if (!groundFollow || !groundSprite || !cam || !track) return;
+    const twTrack = track.width || 2900;
+    const thTrack = track.height || 2100;
+    // Keep tile centered on camera so FAR pan never walks off the carpet
+    const ox = cam.x - groundTileW * 0.5;
+    const oy = cam.y - groundTileH * 0.5;
+    for (const ch of groundLayer.children) {
+      ch.x = ox;
+      ch.y = oy;
+      // Scroll UVs so texture feels world-stable while sprite follows cam
+      if (ch.tilePosition) {
+        ch.tilePosition.x = -ox;
+        ch.tilePosition.y = -oy;
+      }
+    }
   }
 
   function syncScenery(track, cam, zoom) {
@@ -684,6 +751,7 @@ export async function createPixiRenderer(opts) {
     const zoom = cam.zoom || 1;
     ensureTrack(track);
     const scenery = syncScenery(track, cam, zoom);
+    updateGroundFollow(cam, track);
     drawSky(scenery, cam, track);
     applyCamera(cam);
     syncCars(cars || [], zoom);

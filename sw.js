@@ -1,4 +1,4 @@
-const CACHE = 'radcars-v39-city-carpet';
+const CACHE = 'radcars-v40-far-lock';
 const ASSETS = [
   './',
   './index.html',
