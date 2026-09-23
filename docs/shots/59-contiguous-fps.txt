@@ -1,0 +1,1 @@
+Pixi Neon Loop ZOOM_FAR(~0.48) mid-straight: ~60.2 FPS over 2.01s (121 frames, cam locked / frozen pose). Contiguous city v4.

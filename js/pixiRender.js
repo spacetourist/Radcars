@@ -97,11 +97,21 @@ function bakeTrackCanvas(track, scale = 0.5) {
   ctx.fillStyle = ag;
   ctx.fill();
 
-  ctx.strokeStyle = 'rgba(4, 3, 2, 0.55)';
-  ctx.lineWidth = 48;
+  // Racing groove — dark rubber band + worn light lane (not gold batwing deco alone)
+  ctx.strokeStyle = 'rgba(4, 3, 2, 0.58)';
+  ctx.lineWidth = 52;
   strokeLoop(ctx, track.line);
-  ctx.strokeStyle = 'rgba(250, 235, 200, 0.35)';
-  ctx.lineWidth = 18;
+  ctx.strokeStyle = 'rgba(8, 6, 4, 0.42)';
+  ctx.lineWidth = 38;
+  strokeLoop(ctx, track.line);
+  ctx.strokeStyle = 'rgba(250, 235, 200, 0.42)';
+  ctx.lineWidth = 22;
+  strokeLoop(ctx, track.line);
+  ctx.strokeStyle = 'rgba(255, 248, 228, 0.28)';
+  ctx.lineWidth = 11;
+  strokeLoop(ctx, track.line);
+  ctx.strokeStyle = 'rgba(255, 250, 235, 0.14)';
+  ctx.lineWidth = 5;
   strokeLoop(ctx, track.line);
 
   ctx.globalCompositeOperation = 'destination-out';
@@ -110,6 +120,47 @@ function bakeTrackCanvas(track, scale = 0.5) {
   ctx.fillStyle = '#000';
   ctx.fill();
   ctx.globalCompositeOperation = 'source-over';
+
+  // Block kerbs on inner apexes (red/white) — restores ribbon readability
+  {
+    const poly = track.inner;
+    if (poly && poly.length >= 4) {
+      const n = poly.length;
+      for (let i = 0; i < n; i++) {
+        const a = poly[(i - 1 + n) % n];
+        const b = poly[i];
+        const c = poly[(i + 1) % n];
+        const a0 = Math.atan2(b.y - a.y, b.x - a.x);
+        const a1 = Math.atan2(c.y - b.y, c.x - b.x);
+        let d = a1 - a0;
+        while (d > Math.PI) d -= Math.PI * 2;
+        while (d < -Math.PI) d += Math.PI * 2;
+        const turn = Math.abs(d);
+        if (turn < 0.045) continue;
+        const edgeLen = Math.hypot(c.x - b.x, c.y - b.y) || 1;
+        const blocks = Math.max(2, Math.min(12, Math.floor(edgeLen / 12)));
+        const ang = Math.atan2(c.y - b.y, c.x - b.x);
+        let ox = Math.cos(ang + Math.PI / 2);
+        let oy = Math.sin(ang + Math.PI / 2);
+        const cx = track.width * 0.5, cy = track.height * 0.5;
+        const mx = (b.x + c.x) * 0.5, my = (b.y + c.y) * 0.5;
+        if ((mx - cx) * ox + (my - cy) * oy < 0) { ox = -ox; oy = -oy; }
+        for (let k = 0; k < blocks; k++) {
+          const t = (k + 0.5) / blocks;
+          const x = b.x + (c.x - b.x) * t + ox * 5;
+          const y = b.y + (c.y - b.y) * t + oy * 5;
+          ctx.save();
+          ctx.translate(x, y);
+          ctx.rotate(ang);
+          ctx.fillStyle = (k % 2 === 0) ? '#f6f6f6' : '#c8102e';
+          ctx.fillRect(-7.5, -4.6, 15, 9.2);
+          ctx.fillStyle = 'rgba(0,0,0,0.28)';
+          ctx.fillRect(-7.5, 3.2, 15, 1.6);
+          ctx.restore();
+        }
+      }
+    }
+  }
 
   ctx.strokeStyle = 'rgba(18, 16, 14, 0.95)';
   ctx.lineWidth = 10;
@@ -195,6 +246,7 @@ export async function createPixiRenderer(opts) {
   const fxLayer = new Container();
   const hudLayer = new Container();
 
+  carsLayer.sortableChildren = true;
   worldRoot.addChild(groundLayer, farLayer, midLayer, trackLayer, nearLayer, carsLayer, fxLayer);
   app.stage.addChild(skyLayer, worldRoot, hudLayer);
 
@@ -333,14 +385,34 @@ export async function createPixiRenderer(opts) {
     // Single tinted/tiled ground sprite (never N drawImages)
     const pack = getAssetPack();
     const asphalt = pack && pack.ready && pack.asphalt ? pack.asphalt : null;
+    const urbanLot = pack && pack.ready && pack.urbanLot ? pack.urbanLot : null;
+    const cityCircuit = !!(scenery && scenery.profile && scenery.profile.cityCircuit);
     const needRebuild = !groundSprite || groundTrackId !== tid;
 
     if (needRebuild) {
       clearContainer(groundLayer);
       groundSprite = null;
       groundMode = null;
+      // City circuit: ONE urban-lot TilingSprite under entire track AABB × ~1.2
+      if (cityCircuit && urbanLot) {
+        const tex = textureFrom(urbanLot);
+        if (tex) {
+          try { tex.source.style.addressMode = 'repeat'; } catch (_) {}
+          const margin = Math.max(track.width || 2900, track.height || 2100) * 0.1;
+          const tw = (track.width || 2900) * 1.2 + margin * 2;
+          const th = (track.height || 2100) * 1.2 + margin * 2;
+          const tile = new TilingSprite({ texture: tex, width: tw, height: th });
+          tile.x = -((tw - (track.width || 2900)) * 0.5);
+          tile.y = -((th - (track.height || 2100)) * 0.5);
+          tile.tileScale.set(0.85, 0.85);
+          tile.tint = 0xd0c8b8;
+          groundLayer.addChild(tile);
+          groundSprite = tile;
+          groundMode = 'urbanLot';
+        }
+      }
       // Prefer one baked plate sprite (already continuous fabric)
-      if (scenery.ground) {
+      if (!groundSprite && scenery.ground) {
         const g = scenery.ground;
         const margin = g._margin || 200;
         const scale = g._scale || 2;
@@ -526,6 +598,7 @@ export async function createPixiRenderer(opts) {
       }
       spr.x = c.x;
       spr.y = c.y;
+      spr.zIndex = c.y | 0; // y-sort for grid readability
       spr.width = drawW;
       spr.height = drawH;
       spr.alpha = c.dead ? 0.4 : 1;
@@ -600,7 +673,7 @@ export async function createPixiRenderer(opts) {
   }
 
   try {
-    window.__RAD_PIXI__ = { app, draw, resize, version: 'pixi-spike-v2-batch' };
+    window.__RAD_PIXI__ = { app, draw, resize, version: 'pixi-contiguous-v4' };
   } catch (_) {}
 
   return { draw, resize, drawCountdown, destroy, app, canvas: view };

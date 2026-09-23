@@ -1,0 +1,211 @@
+[
+  {
+    "id": "neon_loop",
+    "meta": {
+      "trackId": "neon_loop",
+      "warehouseBias": 0,
+      "cityfabricBias": 0.58,
+      "cityCircuit": true,
+      "stampCounts": {
+        "tower": 0,
+        "billboard": 0,
+        "crane": 0,
+        "containers": 0,
+        "cityblock": 33,
+        "citystreet": 29,
+        "cityfabric": 21,
+        "warehouse": 0,
+        "warehouseAfterScrub": 0,
+        "cityblockMdPool": 3,
+        "citystreetMdPool": 3,
+        "far": 7,
+        "mid": 40,
+        "near": 18,
+        "farRaw": 7,
+        "midRaw": 58,
+        "nearRaw": 288,
+        "caps": {
+          "mid": 40,
+          "far": 16,
+          "near": 18
+        }
+      },
+      "warehouseAfterScrub": 0,
+      "kinds": {
+        "cityfabric": 20,
+        "cityblock": 27,
+        "other": 9,
+        "citystreet": 8,
+        "stand": 1
+      },
+      "srcKeys": {
+        "cityfabric-row": 20,
+        "cityblock-b": 5,
+        "cityblock-c": 13,
+        "cityblock": 9,
+        "citystreet": 3,
+        "citystreet-c": 3,
+        "citystreet-b": 2
+      },
+      "cloneHits400": 2,
+      "pixi": "pixi-contiguous-v4",
+      "stampSizes": {
+        "cityblock": [
+          512,
+          197
+        ],
+        "citystreet": [
+          384,
+          152
+        ],
+        "cityblockB": [
+          338,
+          288
+        ],
+        "citystreetB": [
+          370,
+          282
+        ],
+        "cityblockC": [
+          448,
+          285
+        ],
+        "citystreetC": [
+          384,
+          235
+        ],
+        "cityfabricRow": [
+          384,
+          216
+        ],
+        "urbanLot": [
+          512,
+          512
+        ],
+        "warehouse": [
+          384,
+          245
+        ],
+        "maxStampPx": 384,
+        "heroStampPx": 512
+      },
+      "trackWidth": {
+        "min": 539.3039909254402,
+        "max": 539.9999295142993,
+        "avg": 539.8729180925272,
+        "ratio": 1.0012904384179782,
+        "note": "outer/inner roughly parallel (constant-ish width)"
+      }
+    }
+  },
+  {
+    "fps": {
+      "ok": true,
+      "frames": 121,
+      "elapsed": 2.01070000000298,
+      "fps": 60.17804744607383,
+      "zoom": 0.48,
+      "pixiReady": true,
+      "canvas": "pixi"
+    },
+    "fpsLine": "Pixi Neon Loop ZOOM_FAR(~0.48) mid-straight: ~60.2 FPS over 2.01s (121 frames, cam locked / frozen pose). Contiguous city v4."
+  },
+  {
+    "id": "gridlock",
+    "meta": {
+      "trackId": "gridlock",
+      "warehouseBias": 0,
+      "cityfabricBias": 0.58,
+      "cityCircuit": true,
+      "stampCounts": {
+        "tower": 0,
+        "billboard": 0,
+        "crane": 0,
+        "containers": 0,
+        "cityblock": 20,
+        "citystreet": 21,
+        "cityfabric": 14,
+        "warehouse": 5,
+        "warehouseAfterScrub": 0,
+        "cityblockMdPool": 3,
+        "citystreetMdPool": 3,
+        "far": 0,
+        "mid": 36,
+        "near": 18,
+        "farRaw": 0,
+        "midRaw": 50,
+        "nearRaw": 261,
+        "caps": {
+          "mid": 40,
+          "far": 16,
+          "near": 18
+        }
+      },
+      "warehouseAfterScrub": 0,
+      "kinds": {
+        "cityfabric": 14,
+        "cityblock": 17,
+        "citystreet": 14,
+        "other": 9
+      },
+      "srcKeys": {
+        "cityfabric-row": 14,
+        "cityblock-c": 9,
+        "citystreet": 5,
+        "citystreet-c": 6,
+        "cityblock": 4,
+        "cityblock-b": 4,
+        "citystreet-b": 3
+      },
+      "cloneHits400": 3,
+      "pixi": "pixi-contiguous-v4",
+      "stampSizes": {
+        "cityblock": [
+          512,
+          197
+        ],
+        "citystreet": [
+          384,
+          152
+        ],
+        "cityblockB": [
+          338,
+          288
+        ],
+        "citystreetB": [
+          370,
+          282
+        ],
+        "cityblockC": [
+          448,
+          285
+        ],
+        "citystreetC": [
+          384,
+          235
+        ],
+        "cityfabricRow": [
+          384,
+          216
+        ],
+        "urbanLot": [
+          512,
+          512
+        ],
+        "warehouse": [
+          384,
+          245
+        ],
+        "maxStampPx": 384,
+        "heroStampPx": 512
+      },
+      "trackWidth": {
+        "min": 347.2989419239805,
+        "max": 350,
+        "avg": 349.8381034878671,
+        "ratio": 1.0077773288368115,
+        "note": "outer/inner roughly parallel (constant-ish width)"
+      }
+    }
+  }
+]

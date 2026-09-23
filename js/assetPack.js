@@ -648,6 +648,69 @@ function bakeLongEdge(source, maxLong, opts = {}) {
 }
 
 /** Md = full bake; Sm ≈ 50% of bake long-edge. */
+
+/** Fill interior alpha holes under billboard scaffolds with opaque night-dark.
+ *  Keeps outer fringe transparent; only seals fully-enclosed gaps inside opaque bbox.
+ */
+function sealBillboardScaffoldHoles(canvas) {
+  if (!canvas || !canvas.width) return canvas;
+  const w = canvas.width, h = canvas.height;
+  const ctx = canvas.getContext('2d');
+  const img = ctx.getImageData(0, 0, w, h);
+  const d = img.data;
+  // Opaque bbox
+  let minX = w, minY = h, maxX = 0, maxY = 0;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (d[(y * w + x) * 4 + 3] > 24) {
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  if (maxX <= minX || maxY <= minY) return canvas;
+  // Mark exterior transparent via flood from edges (inside bbox pad)
+  const seen = new Uint8Array(w * h);
+  const qx = new Int32Array(w * h);
+  const qy = new Int32Array(w * h);
+  let qh = 0, qt = 0;
+  function push(x, y) {
+    const i = y * w + x;
+    if (seen[i]) return;
+    if (d[i * 4 + 3] > 24) return; // opaque wall
+    seen[i] = 1;
+    qx[qt] = x; qy[qt] = y; qt++;
+  }
+  for (let x = 0; x < w; x++) { push(x, 0); push(x, h - 1); }
+  for (let y = 0; y < h; y++) { push(0, y); push(w - 1, y); }
+  while (qh < qt) {
+    const x = qx[qh], y = qy[qh]; qh++;
+    if (x > 0) push(x - 1, y);
+    if (x + 1 < w) push(x + 1, y);
+    if (y > 0) push(x, y - 1);
+    if (y + 1 < h) push(x, y + 1);
+  }
+  // Transparent + not exterior → interior hole → seal dark
+  let sealed = 0;
+  for (let y = minY; y <= maxY; y++) {
+    for (let x = minX; x <= maxX; x++) {
+      const i = y * w + x;
+      const a = d[i * 4 + 3];
+      if (a > 24) continue;
+      if (seen[i]) continue;
+      d[i * 4] = 14;
+      d[i * 4 + 1] = 12;
+      d[i * 4 + 2] = 18;
+      d[i * 4 + 3] = 255;
+      sealed++;
+    }
+  }
+  if (sealed) ctx.putImageData(img, 0, 0);
+  return canvas;
+}
+
 function makeLodPair(source, maxLong, opts = {}) {
   if (!source || !source.width) return { md: null, sm: null, hero: null };
   const md = bakeLongEdge(source, maxLong, { stripNeonEdge: true, ...opts });
@@ -710,7 +773,8 @@ export function loadAssetPack() {
       scenery: {},
       skyline: null,
       asphalt: null,
-      asphaltPatternOk: false
+      asphaltPatternOk: false,
+      urbanLot: null
     };
 
     let manifest = null;
@@ -833,14 +897,17 @@ export function loadAssetPack() {
       if (canvas) pack.scenery[key] = canvas;
     }
 
-    const [skyline, asphalt] = await Promise.all([
+    const urbanLotRel = (manifest && manifest.textures && manifest.textures[1]) || 'tex-urban-lot-tile.png';
+    const [skyline, asphalt, urbanLot] = await Promise.all([
       tryPlain(bgRel),
-      tryPlain(asphaltRel)
+      tryPlain(asphaltRel),
+      tryPlain(urbanLotRel)
     ]);
     // pack.skyline = full-bleed screen-space backdrop ONLY — never stamped / never in pack.scenery
     pack.skyline = skyline;
     pack.skylineRel = bgRel;
     pack.asphalt = asphalt;
+    pack.urbanLot = urbanLot;
     // Explicit: strip any accidental bg keys from scenery (chroma/fitScenery must never touch bg)
     for (const k of Object.keys(pack.scenery)) {
       if (/^(neon-skyline|skyline-horizon|arena-scene|skyline)$/i.test(k) || /REF/i.test(k)) {
@@ -941,16 +1008,21 @@ export function loadAssetPack() {
       pack.scenery.palmMd = fitScenery(pl, 56, 96);
     }
     if (billboard) {
-      const bb = warmCyanToSodium(bakeLongEdge(billboard, maxStampPx, { stripNeonEdge: true }));
+      const bb0 = warmCyanToSodium(bakeLongEdge(billboard, maxStampPx, { stripNeonEdge: true }));
+      // Seal interior transparent holes (scaffold gaps) with night-dark so street/neon
+      // stamps behind cannot show through — ship-blocker for Pixi painter/batch order.
+      const bb = sealBillboardScaffoldHoles(bb0);
       const lod = makeLodPair(bb, maxStampPx);
       pack.scenery.billboardSm = lod.sm || warmCyanToSodium(fitScenery(bb, 110, 84));
       pack.scenery.billboardMd = lod.md || warmCyanToSodium(fitScenery(bb, 168, 120));
       pack.scenery.billboard = pack.scenery.billboardMd;
     }
 
-    // Phase A.1 city circuit landmarks — base + -b unique plates; Sm/Md (hero ≤512 / ≤384)
+    // Phase A.1 city circuit landmarks — base + -b + -c unique plates; Sm/Md (hero ≤512 / ≤384)
     const cityblockB = pack.scenery['cityblock-b'] || pack.scenery.cityblockB;
     const citystreetB = pack.scenery['citystreet-b'] || pack.scenery.citystreetB;
+    const cityblockC = pack.scenery['cityblock-c'] || pack.scenery.cityblockC;
+    const citystreetC = pack.scenery['citystreet-c'] || pack.scenery.citystreetC;
     function tagSrcKey(canvas, key) {
       if (canvas) canvas._srcKey = key;
       return canvas;
@@ -968,10 +1040,12 @@ export function loadAssetPack() {
     }
     const cbA = cityblock ? bakeCityFamily(cityblock, heroStampPx, 'cityblock') : null;
     const cbB = cityblockB ? bakeCityFamily(cityblockB, heroStampPx, 'cityblock-b') : null;
+    const cbC = cityblockC ? bakeCityFamily(cityblockC, heroStampPx, 'cityblock-c') : null;
     const csA = citystreet ? bakeCityFamily(citystreet, maxStampPx, 'citystreet') : null;
     const csB = citystreetB ? bakeCityFamily(citystreetB, maxStampPx, 'citystreet-b') : null;
-    // Flat keys (compat) + variant arrays so pick() gets unique plates, not only LOD of one source
-    if (cbA || cbB) {
+    const csC = citystreetC ? bakeCityFamily(citystreetC, maxStampPx, 'citystreet-c') : null;
+    // Flat keys (compat) + variant arrays so pick() gets unique plates across the full trio
+    if (cbA || cbB || cbC) {
       const mds = [];
       const sms = [];
       if (cbA) { mds.push(cbA.md); sms.push(cbA.sm); pack.scenery.cityblockMd = cbA.md; pack.scenery.cityblockSm = cbA.sm; }
@@ -984,12 +1058,21 @@ export function loadAssetPack() {
         pack.scenery.cityblockBMd = cbB.md;
         pack.scenery.cityblockBSm = cbB.sm;
       }
+      if (cbC) {
+        mds.push(cbC.md); sms.push(cbC.sm);
+        pack.scenery['cityblock-c'] = cbC.md;
+        pack.scenery.cityblockC = cbC.md;
+        pack.scenery['cityblock-c-md'] = cbC.md;
+        pack.scenery['cityblock-c-sm'] = cbC.sm;
+        pack.scenery.cityblockCMd = cbC.md;
+        pack.scenery.cityblockCSm = cbC.sm;
+      }
       pack.scenery.cityblock = mds[0];
       pack.scenery.cityblockMdVariants = mds;
       pack.scenery.cityblockSmVariants = sms;
       pack.scenery.cityblockVariants = mds;
     }
-    if (csA || csB) {
+    if (csA || csB || csC) {
       const mds = [];
       const sms = [];
       if (csA) { mds.push(csA.md); sms.push(csA.sm); pack.scenery.citystreetMd = csA.md; pack.scenery.citystreetSm = csA.sm; }
@@ -1002,11 +1085,38 @@ export function loadAssetPack() {
         pack.scenery.citystreetBMd = csB.md;
         pack.scenery.citystreetBSm = csB.sm;
       }
+      if (csC) {
+        mds.push(csC.md); sms.push(csC.sm);
+        pack.scenery['citystreet-c'] = csC.md;
+        pack.scenery.citystreetC = csC.md;
+        pack.scenery['citystreet-c-md'] = csC.md;
+        pack.scenery['citystreet-c-sm'] = csC.sm;
+        pack.scenery.citystreetCMd = csC.md;
+        pack.scenery.citystreetCSm = csC.sm;
+      }
       pack.scenery.citystreet = mds[0];
       pack.scenery.citystreetMdVariants = mds;
       pack.scenery.citystreetSmVariants = sms;
       pack.scenery.citystreetVariants = mds;
     }
+    // Contiguous city fabric row — edge-to-edge plates for Neon/Gridlock rings
+    const cityfabricRow = pack.scenery['cityfabric-row'] || pack.scenery.cityfabricRow || pack.scenery.cityfabric;
+    const cf = cityfabricRow ? bakeCityFamily(cityfabricRow, heroStampPx, 'cityfabric-row') : null;
+    if (cf) {
+      pack.scenery['cityfabric-row'] = cf.md;
+      pack.scenery.cityfabricRow = cf.md;
+      pack.scenery.cityfabric = cf.md;
+      pack.scenery['cityfabric-row-md'] = cf.md;
+      pack.scenery['cityfabric-row-sm'] = cf.sm;
+      pack.scenery.cityfabricMd = cf.md;
+      pack.scenery.cityfabricSm = cf.sm;
+      pack.scenery.cityfabricRowMd = cf.md;
+      pack.scenery.cityfabricRowSm = cf.sm;
+      pack.scenery.cityfabricMdVariants = [cf.md];
+      pack.scenery.cityfabricSmVariants = [cf.sm];
+      pack.scenery.cityfabricVariants = [cf.md];
+    }
+
 
     // v2.6 Cargo quay — green-keyed crane; larger Md; neutralize residual rose → yellow sodium
     const crane = pack.scenery.crane;
@@ -1036,7 +1146,7 @@ export function loadAssetPack() {
     pack.trackHints = (manifest && manifest.trackHints) || {};
 
     const anyCar = Object.values(pack.cars).some(Boolean);
-    const anyScenery = !!(warehouse || grandstand || grandstandLarge || tower || crowd || crowdDense || tyrewall || props || palms || billboard || crane || containers || cityblock || citystreet || cityblockB || citystreetB);
+    const anyScenery = !!(warehouse || grandstand || grandstandLarge || tower || crowd || crowdDense || tyrewall || props || palms || billboard || crane || containers || cityblock || citystreet || cityblockB || citystreetB || cityblockC || citystreetC || cityfabricRow);
     pack.ready = !!(anyCar || anyScenery || skyline);
     _pack = pack;
     try {
@@ -1066,6 +1176,10 @@ export function loadAssetPack() {
             citystreet: !!citystreet,
             cityblockB: !!cityblockB,
             citystreetB: !!citystreetB,
+            cityblockC: !!cityblockC,
+            citystreetC: !!citystreetC,
+            cityfabricRow: !!cityfabricRow,
+            urbanLot: !!urbanLot,
             cityblockMd: !!(pack.scenery.cityblockMd),
             citystreetMd: !!(pack.scenery.citystreetMd),
             cityblockVariants: (pack.scenery.cityblockMdVariants || []).length,
@@ -1076,6 +1190,10 @@ export function loadAssetPack() {
             citystreet: pack.scenery.citystreet && [pack.scenery.citystreet.width, pack.scenery.citystreet.height],
             cityblockB: pack.scenery['cityblock-b'] && [pack.scenery['cityblock-b'].width, pack.scenery['cityblock-b'].height],
             citystreetB: pack.scenery['citystreet-b'] && [pack.scenery['citystreet-b'].width, pack.scenery['citystreet-b'].height],
+            cityblockC: pack.scenery['cityblock-c'] && [pack.scenery['cityblock-c'].width, pack.scenery['cityblock-c'].height],
+            citystreetC: pack.scenery['citystreet-c'] && [pack.scenery['citystreet-c'].width, pack.scenery['citystreet-c'].height],
+            cityfabricRow: pack.scenery['cityfabric-row'] && [pack.scenery['cityfabric-row'].width, pack.scenery['cityfabric-row'].height],
+            urbanLot: pack.urbanLot && [pack.urbanLot.width, pack.urbanLot.height],
             warehouse: pack.scenery.warehouse && [pack.scenery.warehouse.width, pack.scenery.warehouse.height],
             maxStampPx,
             heroStampPx

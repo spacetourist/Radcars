@@ -803,13 +803,16 @@ function applyPackBuildingArt(buildings, characters, props) {
     else {
       if (sc.cityblockMd) cbMdPool.push(sc.cityblockMd);
       if (sc.cityblockBMd || sc['cityblock-b-md']) cbMdPool.push(sc.cityblockBMd || sc['cityblock-b-md']);
+      if (sc.cityblockCMd || sc['cityblock-c-md']) cbMdPool.push(sc.cityblockCMd || sc['cityblock-c-md']);
       if (sc['cityblock-b'] && !cbMdPool.includes(sc['cityblock-b'])) cbMdPool.push(sc['cityblock-b']);
+      if (sc['cityblock-c'] && !cbMdPool.includes(sc['cityblock-c'])) cbMdPool.push(sc['cityblock-c']);
       if (sc.cityblock && !cbMdPool.includes(sc.cityblock)) cbMdPool.push(sc.cityblock);
     }
     if (sc.cityblockSmVariants && sc.cityblockSmVariants.length) cbSmPool.push(...sc.cityblockSmVariants);
     else {
       if (sc.cityblockSm) cbSmPool.push(sc.cityblockSm);
       if (sc.cityblockBSm || sc['cityblock-b-sm']) cbSmPool.push(sc.cityblockBSm || sc['cityblock-b-sm']);
+      if (sc.cityblockCSm || sc['cityblock-c-sm']) cbSmPool.push(sc.cityblockCSm || sc['cityblock-c-sm']);
     }
     if (cbMdPool.length || cbSmPool.length) {
       buildings.cityblock = cbMdPool.length ? cbMdPool.slice() : cbSmPool.slice();
@@ -824,18 +827,43 @@ function applyPackBuildingArt(buildings, characters, props) {
     else {
       if (sc.citystreetMd) csMdPool.push(sc.citystreetMd);
       if (sc.citystreetBMd || sc['citystreet-b-md']) csMdPool.push(sc.citystreetBMd || sc['citystreet-b-md']);
+      if (sc.citystreetCMd || sc['citystreet-c-md']) csMdPool.push(sc.citystreetCMd || sc['citystreet-c-md']);
       if (sc['citystreet-b'] && !csMdPool.includes(sc['citystreet-b'])) csMdPool.push(sc['citystreet-b']);
+      if (sc['citystreet-c'] && !csMdPool.includes(sc['citystreet-c'])) csMdPool.push(sc['citystreet-c']);
       if (sc.citystreet && !csMdPool.includes(sc.citystreet)) csMdPool.push(sc.citystreet);
     }
     if (sc.citystreetSmVariants && sc.citystreetSmVariants.length) csSmPool.push(...sc.citystreetSmVariants);
     else {
       if (sc.citystreetSm) csSmPool.push(sc.citystreetSm);
       if (sc.citystreetBSm || sc['citystreet-b-sm']) csSmPool.push(sc.citystreetBSm || sc['citystreet-b-sm']);
+      if (sc.citystreetCSm || sc['citystreet-c-sm']) csSmPool.push(sc.citystreetCSm || sc['citystreet-c-sm']);
     }
     if (csMdPool.length || csSmPool.length) {
       buildings.citystreet = csMdPool.length ? csMdPool.slice() : csSmPool.slice();
       buildings.citystreetMd = csMdPool.length ? csMdPool.slice() : buildings.citystreet.slice();
       buildings.citystreetSm = csSmPool.length ? csSmPool.slice() : buildings.citystreetMd.slice();
+    }
+  }
+  // Contiguous city fabric plates (Neon/Gridlock ring)
+  {
+    const cfMdPool = [];
+    const cfSmPool = [];
+    if (sc.cityfabricMdVariants && sc.cityfabricMdVariants.length) cfMdPool.push(...sc.cityfabricMdVariants);
+    else {
+      if (sc.cityfabricMd) cfMdPool.push(sc.cityfabricMd);
+      if (sc.cityfabricRowMd || sc['cityfabric-row-md']) cfMdPool.push(sc.cityfabricRowMd || sc['cityfabric-row-md']);
+      if (sc['cityfabric-row'] && !cfMdPool.includes(sc['cityfabric-row'])) cfMdPool.push(sc['cityfabric-row']);
+      if (sc.cityfabric && !cfMdPool.includes(sc.cityfabric)) cfMdPool.push(sc.cityfabric);
+    }
+    if (sc.cityfabricSmVariants && sc.cityfabricSmVariants.length) cfSmPool.push(...sc.cityfabricSmVariants);
+    else {
+      if (sc.cityfabricSm) cfSmPool.push(sc.cityfabricSm);
+      if (sc.cityfabricRowSm || sc['cityfabric-row-sm']) cfSmPool.push(sc.cityfabricRowSm || sc['cityfabric-row-sm']);
+    }
+    if (cfMdPool.length || cfSmPool.length) {
+      buildings.cityfabric = cfMdPool.length ? cfMdPool.slice() : cfSmPool.slice();
+      buildings.cityfabricMd = cfMdPool.length ? cfMdPool.slice() : buildings.cityfabric.slice();
+      buildings.cityfabricSm = cfSmPool.length ? cfSmPool.slice() : buildings.cityfabricMd.slice();
     }
   }
 }
@@ -935,13 +963,39 @@ function plateSrcKey(img) {
   return img._srcKey || img.__srcKey || null;
 }
 
-/** Alternate plate for city family within ~400wu (A.1.1 hard rule). */
+/** All alternate plates in a city family trio (base / -b / -c). */
+function cityFamilyKeys(key) {
+  if (!key) return [];
+  if (key === 'cityblock' || key === 'cityblock-b' || key === 'cityblock-c') {
+    return ['cityblock', 'cityblock-b', 'cityblock-c'];
+  }
+  if (key === 'citystreet' || key === 'citystreet-b' || key === 'citystreet-c') {
+    return ['citystreet', 'citystreet-b', 'citystreet-c'];
+  }
+  return [];
+}
+
+/** Prefer next plate in trio for A.1.1 anti-clone within ~400wu. */
 function cityAlternateKey(key) {
-  if (key === 'cityblock') return 'cityblock-b';
-  if (key === 'cityblock-b') return 'cityblock';
-  if (key === 'citystreet') return 'citystreet-b';
-  if (key === 'citystreet-b') return 'citystreet';
-  return null;
+  const fam = cityFamilyKeys(key);
+  if (fam.length < 2) return null;
+  const i = fam.indexOf(key);
+  if (i < 0) return fam[0];
+  return fam[(i + 1) % fam.length];
+}
+
+/** Remaining trio keys excluding `key` (prefer -c when fleeing base↔-b lookalikes). */
+function cityAlternateKeys(key) {
+  const fam = cityFamilyKeys(key);
+  if (!fam.length) return [];
+  const rest = fam.filter((k) => k !== key);
+  // Prefer -c first when leaving base or -b (stronger visual separation)
+  rest.sort((a, b) => {
+    const ac = a.endsWith('-c') ? 0 : 1;
+    const bc = b.endsWith('-c') ? 0 : 1;
+    return ac - bc;
+  });
+  return rest;
 }
 
 function varyScale(rnd, lo, hi) {
@@ -963,7 +1017,14 @@ function cityStampVariety(rnd, kind) {
 
 function pickCityCircuitStamp(sprites, profile, rnd, opts = {}) {
   const preferFar = !!opts.preferFar;
+  const preferFabric = !!opts.preferFabric;
   // warehouseBias → 0: never emit warehouse for cityCircuit profiles
+  const cfMd = (sprites.buildings.cityfabricMd && sprites.buildings.cityfabricMd.length)
+    ? sprites.buildings.cityfabricMd
+    : (sprites.buildings.cityfabric || []);
+  const cfSm = (sprites.buildings.cityfabricSm && sprites.buildings.cityfabricSm.length)
+    ? sprites.buildings.cityfabricSm
+    : cfMd;
   const cbSm = (sprites.buildings.cityblockSm && sprites.buildings.cityblockSm.length)
     ? sprites.buildings.cityblockSm
     : null;
@@ -977,31 +1038,41 @@ function pickCityCircuitStamp(sprites, profile, rnd, opts = {}) {
     ? sprites.buildings.billboardMd
     : (sprites.buildings.billboard || []);
   const u = rnd();
-  const cbW = Math.max(0.15, profile.cityblockBias || 0.4);
-  const csW = Math.max(0.12, profile.citystreetBias || 0.3);
-  const bbW = Math.max(0.12, profile.billboardBias || 0.25);
-  const sum = cbW + csW + bbW;
-  const cbCut = cbW / sum;
+  const cfW = Math.max(0, profile.cityfabricBias || 0);
+  const cbW = Math.max(0.08, profile.cityblockBias || 0.2);
+  const csW = Math.max(0.08, profile.citystreetBias || 0.18);
+  const bbW = Math.max(0.06, profile.billboardBias || 0.15);
+  const sum = cfW + cbW + csW + bbW;
+  const cfCut = cfW / sum;
+  const cbCut = cfCut + cbW / sum;
   const csCut = cbCut + csW / sum;
 
   function wrap(img, kind, lo, hi) {
     if (!img) return null;
     const v = cityStampVariety(rnd, kind);
+    // Fabric plates: gentler rot so abutting rows stay readable as a ring
+    const rot = (kind === 'cityfabric') ? ((rnd() < 0.12) ? Math.PI : (rnd() - 0.5) * 0.08) : v.rot;
     return {
       img,
       kind,
-      scale: varyScale(rnd, lo, hi) * v.jitter,
+      scale: varyScale(rnd, lo, hi) * (kind === 'cityfabric' ? (1 + (rnd() - 0.5) * 0.12) : v.jitter),
       flipX: v.flipX,
-      rot: v.rot
+      rot
     };
   }
 
+  if (preferFabric && cfMd.length) {
+    return wrap(pick(cfMd, rnd), 'cityfabric', 1.15, 1.55);
+  }
   if (preferFar) {
-    // Far: darker / smaller cityblockSm only (no warehouse, no tower)
+    if (cfSm.length && rnd() < 0.72) return wrap(pick(cfSm, rnd), 'cityfabric', 0.85, 1.15);
     const farPool = cbSm && cbSm.length ? cbSm : cbMd;
     if (farPool.length) return wrap(pick(farPool, rnd), 'cityblock', 0.72, 1.05);
     if (csMd.length) return wrap(pick(csMd, rnd), 'citystreet', 0.7, 0.98);
     return null;
+  }
+  if (u < cfCut && cfMd.length) {
+    return wrap(pick(cfMd, rnd), 'cityfabric', 1.1, 1.5);
   }
   if (u < cbCut && cbMd.length) {
     return wrap(pick(cbMd, rnd), 'cityblock', 0.9, 1.28);
@@ -1012,6 +1083,7 @@ function pickCityCircuitStamp(sprites, profile, rnd, opts = {}) {
   if (bbMd.length) {
     return wrap(pick(bbMd, rnd), 'billboard', 0.88, 1.25);
   }
+  if (cfMd.length) return wrap(pick(cfMd, rnd), 'cityfabric', 1.1, 1.45);
   if (cbMd.length) return wrap(pick(cbMd, rnd), 'cityblock', 0.9, 1.2);
   if (csMd.length) return wrap(pick(csMd, rnd), 'citystreet', 0.88, 1.18);
   return null;
@@ -1098,6 +1170,7 @@ export function getSceneryDensityProfile(track) {
     pinchStandExtra: 0,
     urbanSkyline: false,     // Gridlock: warehouseSm + billboardMd + towerSm beads
     cityCircuit: false,      // Neon/Gridlock: cityblock + citystreet + billboards
+    cityfabricBias: 0,
     cityblockBias: 0,
     citystreetBias: 0,
     midCap: SCENERY_DENSITY.midCap,
@@ -1117,25 +1190,26 @@ export function getSceneryDensityProfile(track) {
     // A.1 city circuit: cityblock + citystreet + billboards only; warehouseBias 0
     return {
       ...base,
-      beadOut: 560,
-      beadIn: 620,
-      billboardCap: 10,
-      billboardBias: 0.42,
+      beadOut: 220,
+      beadIn: 240,
+      billboardCap: 8,
+      billboardBias: 0.14,
       warehouseScale: [0.68, 1.05],
       warehouseBias: 0,
       standBias: 0.05,
-      infieldYardN: 12,
+      infieldYardN: 8,
       palmChance: 0.02,
-      lampChance: 0.55,
+      lampChance: 0.4,
       urbanSkyline: true,
       cityCircuit: true,
-      cityblockBias: 0.48,
-      citystreetBias: 0.38,
+      cityfabricBias: 0.58,
+      cityblockBias: 0.2,
+      citystreetBias: 0.16,
       standsOnlyAtSF: true, // standLarge only at S/F
       infieldGapMul: 1.45,
-      midCap: 18,
-      farCap: 10,
-      nearCap: 12,
+      midCap: 40,
+      farCap: 16,
+      nearCap: 18,
       label: 'city_circuit_gridlock'
     };
   }
@@ -1179,20 +1253,21 @@ export function getSceneryDensityProfile(track) {
   // neon_loop — A.1 city circuit (no warehouses; cityblock/citystreet/billboards)
   return {
     ...base,
-    beadOut: 540,
-    beadIn: 600,
-    infieldYardN: 18,
-    palmChance: 0.08,
-    standBias: 0.22,
+    beadOut: 210,
+    beadIn: 230,
+    infieldYardN: 10,
+    palmChance: 0.06,
+    standBias: 0.12,
     warehouseBias: 0,
-    billboardBias: 0.28,
-    billboardCap: 8,
+    billboardBias: 0.14,
+    billboardCap: 7,
     cityCircuit: true,
-    cityblockBias: 0.46,
-    citystreetBias: 0.34,
-    midCap: 18,
-    farCap: 10,
-    nearCap: 12,
+    cityfabricBias: 0.58,
+    cityblockBias: 0.2,
+    citystreetBias: 0.16,
+    midCap: 40,
+    farCap: 16,
+    nearCap: 18,
     label: 'city_circuit_neon'
   };
 }
@@ -1313,6 +1388,81 @@ export function buildTrackScenery(track) {
   }
   for (const b of beadAnchors) landmarks.push(b);
 
+  // Contiguous city fabric ring (Neon/Gridlock): abutting plates along outer+inner walls.
+  // Replaces sparse 480–560wu bead islands — 15–25% AABB overlap via tryAddStamp cityRad.
+  function placeCityFabricRing() {
+    if (!profile.cityCircuit) return;
+    const cfPool = (sprites.buildings.cityfabricMd && sprites.buildings.cityfabricMd.length)
+      ? sprites.buildings.cityfabricMd
+      : (sprites.buildings.cityfabric || []);
+    if (!cfPool.length) return;
+    const sampleImg = cfPool[0];
+    const approxW = Math.max(160, (sampleImg.width || 320) * 1.25);
+    const step = approxW * 0.78; // ~22% overlap along wall
+    function walk(polyEdges, inward, side) {
+      let acc = 0;
+      let nextAt = step * 0.25;
+      for (const e of polyEdges) {
+        const end = acc + e.len;
+        while (nextAt <= end + 1e-6) {
+          const t = e.len > 0 ? (nextAt - acc) / e.len : 0.5;
+          const bx = e.ax + (e.bx - e.ax) * t;
+          const by = e.ay + (e.by - e.ay) * t;
+          const nx = inward ? -e.nx : e.nx;
+          const ny = inward ? -e.ny : e.ny;
+          const dist = inward ? (48 + rnd() * 28) : (52 + rnd() * 36);
+          const x = bx + nx * dist;
+          const y = by + ny * dist;
+          nextAt += step;
+          if (inward) {
+            if (!pointInPoly(x, y, track.inner)) continue;
+            if (isOnAsphalt(track, x, y)) continue;
+          } else {
+            if (isOnAsphalt(track, x, y)) continue;
+          }
+          const pickC = pickCityCircuitStamp(sprites, profile, rnd, { preferFabric: true });
+          if (!pickC || !pickC.img) continue;
+          const scale = pickC.scale || varyScale(rnd, 1.15, 1.5);
+          const opts = (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null;
+          tryAddStamp(mid, pickC.img, x, y, scale, 'mid', y, pickC.kind || 'cityfabric', opts);
+        }
+        acc = end;
+      }
+    }
+    walk(edges, false, 'out');
+    walk(innerEdges, true, 'in');
+    // Accent weave: occasional cityblock/street on the same ring
+    const accentStep = step * 2.4;
+    function walkAccent(polyEdges, inward) {
+      let acc = 0;
+      let nextAt = accentStep * 0.5;
+      for (const e of polyEdges) {
+        const end = acc + e.len;
+        while (nextAt <= end + 1e-6) {
+          const t = e.len > 0 ? (nextAt - acc) / e.len : 0.5;
+          const bx = e.ax + (e.bx - e.ax) * t;
+          const by = e.ay + (e.by - e.ay) * t;
+          const nx = inward ? -e.nx : e.nx;
+          const ny = inward ? -e.ny : e.ny;
+          const dist = inward ? (70 + rnd() * 40) : (80 + rnd() * 50);
+          const x = bx + nx * dist;
+          const y = by + ny * dist;
+          nextAt += accentStep;
+          if (isOnAsphalt(track, x, y)) continue;
+          if (inward && !pointInPoly(x, y, track.inner)) continue;
+          const pickC = pickCityCircuitStamp(sprites, profile, rnd, {});
+          if (!pickC || !pickC.img || pickC.kind === 'cityfabric') continue;
+          const opts = (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null;
+          tryAddStamp(mid, pickC.img, x, y, pickC.scale || varyScale(rnd, 0.9, 1.25), 'mid', y, pickC.kind, opts);
+        }
+        acc = end;
+      }
+    }
+    walkAccent(edges, false);
+    walkAccent(innerEdges, true);
+  }
+  // placeCityFabricRing() deferred until tryAddStamp/stampOpts exist
+
   function landmarkBoost(x, y) {
     let best = 0;
     let nearest = null;
@@ -1393,65 +1543,131 @@ export function buildTrackScenery(track) {
 
   function tryAddStamp(list, img, x, y, scale, layer, sortY, kind, opts) {
     if (!img) return false;
+    // Prefer explicit opts; else consume pending stampOpts from city pick
+    let o = opts || stampOpts || null;
+    if (!opts && stampOpts) stampOpts = null;
     if (kind === 'tower') {
       if (towerCount >= TOWER_CAP) return false;
     }
     if (kind === 'billboard') {
       if (billboardCount >= BILLBOARD_CAP) return false;
     }
-    const cityKind = (kind === 'cityblock' || kind === 'citystreet');
-    // A.1.1 hard rule: no identical plate (same source key) within ~400 world units —
-    // force alternate cityblock↔cityblock-b / citystreet↔citystreet-b when placing.
+    const cityKind = (kind === 'cityblock' || kind === 'citystreet' || kind === 'cityfabric');
+    const cityTrio = (kind === 'cityblock' || kind === 'citystreet');
+    const sc = scale || 1;
+    const halfW = (img.width * sc) * 0.5;
+    const stampH = img.height * sc;
+
+    // Don't draw city street/block under billboard frames (scaffold bleed ship-blocker)
     if (cityKind) {
-      let key = plateSrcKey(img);
-      if (key) {
-        const antiR2 = 400 * 400;
-        let conflict = false;
-        for (const p of stampLog) {
-          if (p.kind !== kind) continue;
-          const pk = p.srcKey || plateSrcKey(p.img);
-          if (pk !== key) continue;
-          const dx = p.x - x, dy = p.y - y;
-          if (dx * dx + dy * dy < antiR2) { conflict = true; break; }
-        }
-        if (conflict) {
-          const altKey = cityAlternateKey(key);
-          const altImg = altKey ? cityAltByKey[altKey] : null;
-          if (!altImg || altImg === img) return false;
-          // Verify alternate also free of same-key neighbours
-          let altConflict = false;
-          for (const p of stampLog) {
-            if (p.kind !== kind) continue;
-            const pk = p.srcKey || plateSrcKey(p.img);
-            if (pk !== altKey) continue;
-            const dx = p.x - x, dy = p.y - y;
-            if (dx * dx + dy * dy < antiR2) { altConflict = true; break; }
-          }
-          if (altConflict) return false;
-          img = altImg;
-          key = altKey;
+      for (const p of stampLog) {
+        if (p.kind !== 'billboard') continue;
+        const bw = (p.w != null ? p.w : ((p.img && p.img.width) || 120)) * 0.5;
+        const bh = p.h != null ? p.h : ((p.img && p.img.height) || 100);
+        // AABB overlap with billboard footprint (pad slightly)
+        if (Math.abs(p.x - x) < bw + halfW * 0.55 && Math.abs(p.y - y) < (bh + stampH) * 0.55) {
+          return false;
         }
       }
     }
-    if (!stampOk(stampLog, img, x, y, kind === 'tower' ? 160 : (kind === 'containers' ? 150 : (cityKind ? 150 : 110)), 1)) return false;
-    // Extra spacing for towers/billboards/containers/city so corners don't cluster
+    // Soft: also keep billboards from landing on dense street fabric
+    if (kind === 'billboard') {
+      for (const p of stampLog) {
+        if (p.kind !== 'citystreet' && p.kind !== 'cityblock' && p.kind !== 'cityfabric') continue;
+        const pw = (p.w != null ? p.w : ((p.img && p.img.width) || 120)) * 0.5;
+        const ph = p.h != null ? p.h : ((p.img && p.img.height) || 100);
+        if (Math.abs(p.x - x) < pw + halfW * 0.5 && Math.abs(p.y - y) < (ph + stampH) * 0.5) {
+          return false;
+        }
+      }
+    }
+
+    // A.1.1 hard rule: no identical plate (same source key OR same canvas) within ~400wu —
+    // alternate across full trio base / -b / -c (prefer -c when base↔-b conflict).
+    // cityfabric exempt — abutting ring requires same plate within 400wu.
+    if (cityTrio) {
+      let key = plateSrcKey(img);
+      const antiR2 = 400 * 400;
+      function keyConflict(testKey, testImg) {
+        for (const p of stampLog) {
+          if (p.kind !== kind) continue;
+          const pk = p.srcKey || plateSrcKey(p.img);
+          const sameKey = testKey && pk && pk === testKey;
+          const sameImg = testImg && p.img === testImg;
+          if (!sameKey && !sameImg) continue;
+          const dx = p.x - x, dy = p.y - y;
+          if (dx * dx + dy * dy < antiR2) return true;
+        }
+        return false;
+      }
+      if (keyConflict(key, img)) {
+        const alts = cityAlternateKeys(key);
+        let swapped = false;
+        for (const altKey of alts) {
+          const altImg = cityAltByKey[altKey];
+          if (!altImg || altImg === img) continue;
+          if (keyConflict(altKey, altImg)) continue;
+          img = altImg;
+          key = altKey;
+          swapped = true;
+          break;
+        }
+        if (!swapped) return false;
+      }
+      // If base↔-b still adjacent within 400wu, force stronger separation via -c or reject
+      if (key === 'cityblock' || key === 'cityblock-b' || key === 'citystreet' || key === 'citystreet-b') {
+        const sibling = key.endsWith('-b') ? key.slice(0, -2) : (key + '-b');
+        const nearSibling = stampLog.some((p) => {
+          if (p.kind !== kind) return false;
+          const pk = p.srcKey || plateSrcKey(p.img);
+          if (pk !== sibling) return false;
+          const dx = p.x - x, dy = p.y - y;
+          return dx * dx + dy * dy < antiR2;
+        });
+        if (nearSibling) {
+          const cKey = key.startsWith('cityblock') ? 'cityblock-c' : 'citystreet-c';
+          const cImg = cityAltByKey[cKey];
+          if (cImg && !keyConflict(cKey, cImg)) {
+            img = cImg;
+            key = cKey;
+          } else {
+            // Fall back: push farther — reject if another same-family within 400
+            return false;
+          }
+        }
+      }
+    }
+    // City fabric: allow ~10–20% overlap (abutting mid stamps). Other kinds keep sparseness.
+    // cityfabric: allow ~15–25% AABB overlap (abutting plates). blocks/streets similar.
+    const cityRad = cityKind
+      ? Math.max(64, Math.min(halfW, stampH) * (kind === 'cityfabric' ? 0.72 : 0.82))
+      : 110;
+    if (!stampOk(stampLog, img, x, y, kind === 'tower' ? 160 : (kind === 'containers' ? 150 : (cityKind ? cityRad : 110)), 1)) return false;
     if (kind === 'tower' || kind === 'billboard' || kind === 'containers' || cityKind) {
       let nearSame = 0;
-      const r2 = (kind === 'tower' ? 220 : kind === 'containers' ? 260 : cityKind ? 220 : 180) ** 2;
+      // City: allow one neighbour in overlap band; towers/billboards stay sparse
+      const r2 = (kind === 'tower' ? 220 : kind === 'containers' ? 260 : cityKind ? (cityRad * 0.92) ** 2 : 180 ** 2);
+      const maxNear = kind === 'cityfabric' ? 3 : (cityKind ? 2 : 1);
       for (const p of stampLog) {
         if (p.kind !== kind) continue;
         const dx = p.x - x, dy = p.y - y;
         if (dx * dx + dy * dy < r2) nearSame++;
-        if (nearSame >= 1) return false;
+        if (nearSame >= maxNear) return false;
       }
     }
-    addItem(list, img, x, y, scale, layer, sortY, kind || null, opts || null);
-    stampLog.push({ img, x, y, kind: kind || 'other', srcKey: plateSrcKey(img) });
+    addItem(list, img, x, y, scale, layer, sortY, kind || null, o);
+    stampLog.push({
+      img, x, y, kind: kind || 'other', srcKey: plateSrcKey(img),
+      w: img.width * sc, h: img.height * sc
+    });
     if (kind === 'tower') towerCount++;
     if (kind === 'billboard') billboardCount++;
     return true;
   }
   let stampOpts = null;
+
+  // City fabric ring needs tryAddStamp + stampOpts (opts passed explicitly)
+  placeCityFabricRing();
   function applyCityPick(pickC) {
     if (!pickC || !pickC.img) return null;
     return {
@@ -1521,8 +1737,8 @@ export function buildTrackScenery(track) {
 
   // Mid buildings — warehouse + grandstand mass; tower/billboard hard-capped (v19)
   for (const e of edges) {
-    const dens = 0.7 + straightness(e) * 0.3;
-    const steps = Math.max(2, Math.floor((e.len / stepMid) * dens));
+    const dens = (profile.cityCircuit ? 1.15 : 0.7) + straightness(e) * (profile.cityCircuit ? 0.45 : 0.3);
+    const steps = Math.max(2, Math.floor((e.len / (profile.cityCircuit ? stepMid * 0.72 : stepMid)) * dens));
     for (let s = 0; s < steps; s++) {
       const t = (s + rnd() * 0.6) / steps;
       const bx = e.ax + (e.bx - e.ax) * t;
@@ -2442,9 +2658,10 @@ export function buildTrackScenery(track) {
   const midCap = profile.midCap != null ? profile.midCap : SCENERY_DENSITY.midCap;
   const farCap = profile.farCap != null ? profile.farCap : SCENERY_DENSITY.farCap;
   const nearCap = profile.nearCap != null ? profile.nearCap : SCENERY_DENSITY.nearCap;
-  const farCapped = enforceLayerCap(far, farCap, 180);
-  const midCapped = enforceLayerCap(mid, midCap, 150);
-  const nearCapped = enforceLayerCap(near, nearCap, 120);
+  const midKeepDist = profile.cityCircuit ? 72 : 150; // city: abut / 15–25% overlap
+  const farCapped = enforceLayerCap(far, farCap, profile.cityCircuit ? 140 : 180);
+  const midCapped = enforceLayerCap(mid, midCap, midKeepDist);
+  const nearCapped = enforceLayerCap(near, nearCap, profile.cityCircuit ? 90 : 120);
   // Thinner near list for low-zoom draw path (cam.zoom < ~0.7)
   const nearThin = enforceLayerCap(nearCapped, Math.max(4, Math.floor(nearCap * 0.45)), 160);
 
@@ -2460,6 +2677,7 @@ export function buildTrackScenery(track) {
     nearFinal = dropWh(nearFinal);
     nearThinFinal = dropWh(nearThinFinal);
   }
+
   const stampCounts = {
     tower: towerCount,
     billboard: billboardCount,
@@ -2467,6 +2685,7 @@ export function buildTrackScenery(track) {
     containers: stampLog.filter((p) => p.kind === 'containers').length,
     cityblock: stampLog.filter((p) => p.kind === 'cityblock').length,
     citystreet: stampLog.filter((p) => p.kind === 'citystreet').length,
+    cityfabric: stampLog.filter((p) => p.kind === 'cityfabric').length,
     warehouse: stampLog.filter((p) => p.kind === 'warehouse').length,
     warehouseAfterScrub: profile.cityCircuit
       ? [...farFinal, ...midFinal, ...nearFinal].filter((it) => it.kind === 'warehouse').length

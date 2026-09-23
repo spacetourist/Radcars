@@ -25,6 +25,79 @@ function ovalPoints(cx, cy, rx, ry, n = 48) {
   return pts;
 }
 
+/**
+ * Build outer/inner walls as a constant-width ribbon around a centreline.
+ * Normals point "left" of travel; +halfW = outer, -halfW = inner for CCW centreline.
+ */
+
+/** Closed rounded-rect centreline (straight samples + corner arcs). */
+function roundedRectCenterline(cx, cy, rw, rh, radius, edgeN = 18, arcN = 10) {
+  const r = Math.min(radius, rw * 0.45, rh * 0.45);
+  const left = cx - rw, right = cx + rw, top = cy - rh, bot = cy + rh;
+  const pts = [];
+  // Top edge L→R
+  for (let i = 0; i < edgeN; i++) {
+    const t = i / edgeN;
+    pts.push({ x: left + r + (right - left - 2 * r) * t, y: top });
+  }
+  // Top-right arc
+  for (let i = 0; i < arcN; i++) {
+    const a = -Math.PI / 2 + (Math.PI / 2) * (i / arcN);
+    pts.push({ x: right - r + Math.cos(a) * r, y: top + r + Math.sin(a) * r });
+  }
+  // Right edge T→B
+  for (let i = 0; i < edgeN; i++) {
+    const t = i / edgeN;
+    pts.push({ x: right, y: top + r + (bot - top - 2 * r) * t });
+  }
+  // Bottom-right arc
+  for (let i = 0; i < arcN; i++) {
+    const a = 0 + (Math.PI / 2) * (i / arcN);
+    pts.push({ x: right - r + Math.cos(a) * r, y: bot - r + Math.sin(a) * r });
+  }
+  // Bottom edge R→L
+  for (let i = 0; i < edgeN; i++) {
+    const t = i / edgeN;
+    pts.push({ x: right - r - (right - left - 2 * r) * t, y: bot });
+  }
+  // Bottom-left arc
+  for (let i = 0; i < arcN; i++) {
+    const a = Math.PI / 2 + (Math.PI / 2) * (i / arcN);
+    pts.push({ x: left + r + Math.cos(a) * r, y: bot - r + Math.sin(a) * r });
+  }
+  // Left edge B→T
+  for (let i = 0; i < edgeN; i++) {
+    const t = i / edgeN;
+    pts.push({ x: left, y: bot - r - (bot - top - 2 * r) * t });
+  }
+  // Top-left arc
+  for (let i = 0; i < arcN; i++) {
+    const a = Math.PI + (Math.PI / 2) * (i / arcN);
+    pts.push({ x: left + r + Math.cos(a) * r, y: top + r + Math.sin(a) * r });
+  }
+  return pts;
+}
+
+function offsetRibbon(centerline, halfW) {
+  const n = centerline.length;
+  const outer = [];
+  const inner = [];
+  for (let i = 0; i < n; i++) {
+    const prev = centerline[(i - 1 + n) % n];
+    const cur = centerline[i];
+    const next = centerline[(i + 1) % n];
+    let tx = next.x - prev.x;
+    let ty = next.y - prev.y;
+    const tlen = Math.hypot(tx, ty) || 1;
+    tx /= tlen; ty /= tlen;
+    // Left normal (CCW centreline → outward for typical oval)
+    const nx = -ty, ny = tx;
+    outer.push({ x: cur.x + nx * halfW, y: cur.y + ny * halfW });
+    inner.push({ x: cur.x - nx * halfW, y: cur.y - ny * halfW });
+  }
+  return { outer, inner };
+}
+
 /** Smooth bump in [0,1] peaking at center of [lo, hi] on a circular angle domain. */
 function angleBump(a, lo, hi) {
   let aa = a;
@@ -36,97 +109,62 @@ function angleBump(a, lo, hi) {
 }
 
 /**
- * Vintage racecourse oval: variable width, pit recess, kink, chicane, landmarks.
- * Keeps oval DNA; start on top straight facing +X (clockwise on canvas).
+ * Neon Loop — oval DNA with parallel walls (constant track width).
+ * Features are centreline offsets so outer/inner stay roughly parallel.
+ * Start on top straight facing +X (clockwise on canvas).
  */
 function buildNeonLoopGeometry() {
-  // ~2× linear size vs original 1600×1000 oval — long Neon Loop circuit
   const cx = 1400, cy = 1100;
   const n = 144;
-  const baseOuterRx = 1300, baseOuterRy = 780;
-  const baseInnerRx = 760, baseInnerRy = 370;
-  const baseLineRx = 1030, baseLineRy = 575;
+  const halfW = 270; // constant ribbon half-width → ~540wu lane
+  const baseRx = 1030, baseRy = 575;
 
-  const outer = [];
-  const inner = [];
-  const line = [];
-
+  const centerline = [];
   for (let i = 0; i < n; i++) {
     const a = (i / n) * Math.PI * 2;
-    // ±15% lane width: wider straights (top/bottom), tighter left/right apexes
-    const widthMul = 1 - 0.18 * Math.cos(2 * a);
-    const oMul = 1 + (widthMul - 1) * 0.55;
-    const iMul = 1 - (widthMul - 1) * 0.85;
-    let orx = baseOuterRx * oMul;
-    let ory = baseOuterRy * oMul;
-    let irx = baseInnerRx * iMul;
-    let iry = baseInnerRy * iMul;
-    let lrx = (orx + irx) * 0.5;
-    let lry = (ory + iry) * 0.5;
+    let rx = baseRx;
+    let ry = baseRy;
+    // Mild radial breathing on the centreline only (walls stay parallel)
+    const breath = 1 + 0.03 * Math.cos(2 * a);
+    rx *= breath;
+    ry *= breath;
 
-    // --- Pit recess (outer wall notch) on start/finish straight (top, a≈3π/2) ---
-    const pit = angleBump(a, Math.PI * 1.38, Math.PI * 1.62);
-    if (pit > 0) {
-      orx += 130 * pit;
-      ory += 175 * pit;
-      lrx += 26 * pit;
-      lry += 36 * pit;
-    }
+    let x = cx + Math.cos(a) * rx;
+    let y = cy + Math.sin(a) * ry;
 
-    // --- Slight kink before main (top) straight — NW approach ---
+    // Tangential frame for lateral shove (features move BOTH walls together)
+    const tx = -Math.sin(a), ty = Math.cos(a);
+    const nx = Math.cos(a), ny = Math.sin(a);
+
+    // Soft kink before main (top) straight — NW approach
     const kink = angleBump(a, Math.PI * 1.12, Math.PI * 1.36);
     if (kink > 0) {
-      const nx = Math.cos(a);
-      const ny = Math.sin(a);
-      const tx = -ny, ty = nx;
-      const shove = 78 * kink;
-      const ox = tx * shove * 0.9;
-      const oy = ty * shove * 0.9;
-      orx += 11 * kink;
-      irx += 7 * kink;
-      lrx += 14 * kink;
-      outer.push({ _a: a, _orx: orx, _ory: ory, _lx: ox, _ly: oy });
-      inner.push({ _a: a, _irx: irx, _iry: iry, _lx: ox * 0.55, _ly: oy * 0.55 });
-      line.push({ _a: a, _lrx: lrx, _lry: lry, _lx: ox * 0.75, _ly: oy * 0.75 });
-      continue;
+      const shove = 70 * kink;
+      x += tx * shove;
+      y += ty * shove;
     }
 
-    // --- Chicane opposite start (bottom, a≈π/2): inner/outer pinch + S-offset ---
+    // Soft S-chicane opposite start (bottom) — lateral weave, NOT a pinch
     const chi1 = angleBump(a, Math.PI * 0.32, Math.PI * 0.52);
     const chi2 = angleBump(a, Math.PI * 0.52, Math.PI * 0.72);
     if (chi1 > 0 || chi2 > 0) {
-      const pinch = Math.max(chi1, chi2);
-      orx -= 160 * pinch;
-      ory -= 190 * pinch;
-      irx += 112 * pinch;
-      iry += 140 * pinch;
-      lrx = (orx + irx) * 0.5;
-      lry = (ory + iry) * 0.5;
-      const side = (chi1 - chi2) * 126;
-      const tx = -Math.sin(a), ty = Math.cos(a);
-      outer.push({ _a: a, _orx: orx, _ory: ory, _lx: tx * side * 0.7, _ly: ty * side * 0.7 });
-      inner.push({ _a: a, _irx: irx, _iry: iry, _lx: tx * side * 0.9, _ly: ty * side * 0.9 });
-      line.push({ _a: a, _lrx: lrx, _lry: lry, _lx: tx * side, _ly: ty * side });
-      continue;
+      const side = (chi1 - chi2) * 95;
+      x += tx * side;
+      y += ty * side;
     }
 
-    outer.push({ _a: a, _orx: orx, _ory: ory, _lx: 0, _ly: 0 });
-    inner.push({ _a: a, _irx: irx, _iry: iry, _lx: 0, _ly: 0 });
-    line.push({ _a: a, _lrx: lrx, _lry: lry, _lx: 0, _ly: 0 });
+    // Pit recess: shove centreline outward on S/F straight so bay reads without flaring width
+    const pit = angleBump(a, Math.PI * 1.38, Math.PI * 1.62);
+    if (pit > 0) {
+      x += nx * 55 * pit;
+      y += ny * 70 * pit;
+    }
+
+    centerline.push({ x, y, _a: a });
   }
 
-  const outerPts = outer.map((p) => ({
-    x: cx + Math.cos(p._a) * p._orx + (p._lx || 0),
-    y: cy + Math.sin(p._a) * p._ory + (p._ly || 0)
-  }));
-  const innerPts = inner.map((p) => ({
-    x: cx + Math.cos(p._a) * p._irx + (p._lx || 0),
-    y: cy + Math.sin(p._a) * p._iry + (p._ly || 0)
-  }));
-  const linePts = line.map((p) => ({
-    x: cx + Math.cos(p._a) * p._lrx + (p._lx || 0),
-    y: cy + Math.sin(p._a) * p._lry + (p._ly || 0)
-  }));
+  const { outer: outerPts, inner: innerPts } = offsetRibbon(centerline, halfW);
+  const linePts = centerline.map((p) => ({ x: p.x, y: p.y }));
 
   // Start on TOP of ellipse — long flat stretch — facing +X (right).
   const startIndex = Math.round((3 / 4) * linePts.length) % linePts.length;
@@ -139,7 +177,6 @@ function buildNeonLoopGeometry() {
   for (let i = 0; i < 8; i++) {
     const row = Math.floor(i / 2);
     const col = (i % 2 === 0) ? -1 : 1;
-    // Longer start straight: grid stretched back so chequer + gantry read clearly
     const back = row * 56 + (i % 2) * 22;
     const lat = col * 32;
     spawns.push({
@@ -149,7 +186,6 @@ function buildNeonLoopGeometry() {
     });
   }
 
-  // Dense checkpoint gates for reliable lap detection on the long ribbon
   const cpCount = 18;
   const checkpoints = [];
   for (let i = 0; i < cpCount; i++) {
@@ -172,8 +208,8 @@ function buildNeonLoopGeometry() {
   const landmarks = [
     { id: 'start_finish', ...atAngle(Math.PI * 1.5), kind: 'start' },
     { id: 'pit', ...atAngle(pitA), kind: 'pit',
-      x: cx + Math.cos(pitA) * (baseOuterRx + 36),
-      y: cy + Math.sin(pitA) * (baseOuterRy + 64) },
+      x: cx + Math.cos(pitA) * (baseRx + halfW + 36),
+      y: cy + Math.sin(pitA) * (baseRy + halfW + 64) },
     { id: 'kink', ...atAngle(kinkA), kind: 'kink' },
     { id: 'chicane', ...atAngle(chicaneA), kind: 'chicane' },
     { id: 'corner_east', ...atAngle(0), kind: 'corner' },
@@ -259,35 +295,36 @@ export const TRACKS = [
     height: 1540,
     lapsDefault: 3,
     ...(() => {
-      // Rounded-rect city ring (~1.4×) — pit bay north, hairpin SE
-      const S = 1.4;
-      const outerCorners = scalePts([
-        { x: 110, y: 100 }, { x: 420, y: 72 }, { x: 820, y: 58 }, { x: 980, y: 28 },
-        { x: 1120, y: 28 }, { x: 1280, y: 68 }, { x: 1520, y: 95 },
-        { x: 1605, y: 260 }, { x: 1625, y: 520 }, { x: 1605, y: 780 },
-        { x: 1540, y: 980 }, { x: 1380, y: 1045 }, { x: 1180, y: 1060 },
-        { x: 850, y: 1045 }, { x: 420, y: 1025 }, { x: 120, y: 990 },
-        { x: 65, y: 760 }, { x: 60, y: 520 }, { x: 75, y: 280 }
-      ], S);
-      const innerCorners = scalePts([
-        { x: 350, y: 300 }, { x: 820, y: 280 }, { x: 1280, y: 295 },
-        { x: 1355, y: 390 }, { x: 1375, y: 540 }, { x: 1350, y: 700 },
-        { x: 1280, y: 820 }, { x: 1180, y: 860 }, { x: 980, y: 855 },
-        { x: 850, y: 835 }, { x: 400, y: 820 }, { x: 335, y: 690 },
-        { x: 320, y: 540 }, { x: 335, y: 400 }
-      ], S);
-      const outer = densifyLoop(outerCorners, 10);
-      const inner = densifyLoop(innerCorners, 10);
-      const lineCorners = scalePts([
-        { x: 220, y: 185 }, { x: 520, y: 155 }, { x: 900, y: 140 },
-        { x: 1050, y: 125 }, { x: 1300, y: 160 }, { x: 1480, y: 200 },
-        { x: 1515, y: 400 }, { x: 1520, y: 560 }, { x: 1490, y: 760 },
-        { x: 1420, y: 930 }, { x: 1280, y: 970 }, { x: 1100, y: 955 },
-        { x: 850, y: 940 }, { x: 450, y: 925 }, { x: 210, y: 890 },
-        { x: 180, y: 680 }, { x: 175, y: 520 }, { x: 190, y: 340 }
-      ], S);
-      const dense = densifyLoop(lineCorners, 12);
-      const startIndex = 14;
+      // City ring with PARALLEL walls: rounded-rect centreline + constant half-width
+      const cx = 1190, cy = 770;
+      const halfW = 175;
+      const dense = roundedRectCenterline(cx, cy, 920, 560, 210, 22, 14);
+      // Mild pit bay: shove N straight centreline outward (parallel walls preserved)
+      for (const p of dense) {
+        if (p.y < cy - 520 && p.x > cx - 220 && p.x < cx + 220) {
+          const u = 1 - Math.abs(p.x - cx) / 220;
+          p.y -= 48 * Math.max(0, u);
+        }
+      }
+      // Mild SE hairpin: pull centreline inward at SE (still parallel ribbon)
+      for (const p of dense) {
+        const dx = p.x - (cx + 620), dy = p.y - (cy + 380);
+        const d = Math.hypot(dx, dy);
+        if (d < 280) {
+          const u = 1 - d / 280;
+          p.x -= dx * 0.12 * u;
+          p.y -= dy * 0.12 * u;
+        }
+      }
+      const { outer, inner } = offsetRibbon(dense, halfW);
+      // Start on north straight facing +X
+      let startIndex = 0;
+      let best = Infinity;
+      for (let i = 0; i < dense.length; i++) {
+        const p = dense[i];
+        const score = Math.abs(p.y - (cy - 560)) + Math.abs(p.x - cx);
+        if (score < best) { best = score; startIndex = i; }
+      }
       const spawns = [];
       const p0 = dense[startIndex];
       const p1 = dense[(startIndex + 1) % dense.length];
@@ -316,11 +353,11 @@ export const TRACKS = [
       const hairIdx = Math.round(dense.length * 0.55) % dense.length;
       const landmarks = [
         { id: 'start_finish', x: p0.x, y: p0.y, index: startIndex, kind: 'start' },
-        { id: 'pit', x: 1050 * S, y: 20 * S, kind: 'pit', index: startIndex },
+        { id: 'pit', x: cx, y: cy - 560 - halfW - 30, kind: 'pit', index: startIndex },
         { id: 'hairpin', x: dense[hairIdx].x, y: dense[hairIdx].y, kind: 'chicane', index: hairIdx },
-        { id: 'corner_ne', x: 1480 * S, y: 200 * S, kind: 'corner', index: Math.round(dense.length * 0.2) },
-        { id: 'corner_sw', x: 210 * S, y: 890 * S, kind: 'corner', index: Math.round(dense.length * 0.75) },
-        { id: 'corner_nw', x: 190 * S, y: 340 * S, kind: 'corner', index: Math.round(dense.length * 0.9) }
+        { id: 'corner_ne', x: cx + 920, y: cy - 400, kind: 'corner', index: Math.round(dense.length * 0.2) },
+        { id: 'corner_sw', x: cx - 900, y: cy + 500, kind: 'corner', index: Math.round(dense.length * 0.75) },
+        { id: 'corner_nw', x: cx - 900, y: cy - 400, kind: 'corner', index: Math.round(dense.length * 0.9) }
       ];
       return { outer, inner, line: dense, spawns, checkpoints, startIndex, landmarks, cpHitRadius: 260 };
     })()
