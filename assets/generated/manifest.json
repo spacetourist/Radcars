@@ -1,7 +1,7 @@
 {
-  "pack": "realistic-v4-contiguous-city",
+  "pack": "realistic-v5-city-carpet",
   "chromaDefault": "#FF00FF",
-  "notes": "v4 CONTIGUOUS CITY: stop stamp beads. Tile tex-urban-lot under world; ring abutting cityfabric-row + cityblock/street trio. No void at ZOOM_FAR. Pixi primary.",
+  "notes": "v5 CITY CARPET: kill countable stamp islands. Soft-alpha cityfabric-row/{b,c} rings (25-40% overlap) + tex-urban-rooftop-fill TilingSprite carpet for infield/outfield. cityblock/street trio = sparse accents only. Exempt fabric from mid/near/far caps on Neon/Gridlock. Pixi primary. Soft edges baked (~28-32px alpha falloff); Developer may still soft-mask if needed.",
   "carsByColor": {
     "#00e8ff": "cars/car-cyan.png",
     "#ff2b6a": "cars/car-pink.png",
@@ -31,14 +31,17 @@
     "scenery/scenery-citystreet-b.png",
     "scenery/scenery-cityblock-c.png",
     "scenery/scenery-citystreet-c.png",
-    "scenery/scenery-cityfabric-row.png"
+    "scenery/scenery-cityfabric-row.png",
+    "scenery/scenery-cityfabric-row-b.png",
+    "scenery/scenery-cityfabric-row-c.png"
   ],
   "bg": [
     "bg/bg-skyline-horizon.png"
   ],
   "textures": [
     "tex-asphalt.png",
-    "tex-urban-lot-tile.png"
+    "tex-urban-lot-tile.png",
+    "tex-urban-rooftop-fill.png"
   ],
   "bgRoles": {
     "bg/bg-skyline-horizon.png": "screenSpaceBackdropOnly",
@@ -51,6 +54,7 @@
       "warehouse"
     ],
     "gridlock": [
+      "cityfabric",
       "cityblock",
       "citystreet",
       "billboard"
@@ -60,6 +64,7 @@
       "standLarge"
     ],
     "neon_loop": [
+      "cityfabric",
       "cityblock",
       "citystreet",
       "billboard"
@@ -70,7 +75,12 @@
     "bakeAtLoad": true,
     "skipNearLayerWhenZoomBelow": 0.7,
     "skylineDrawOnce": true,
-    "groundTileOnce": true
+    "groundTileOnce": true,
+    "cityfabricExemptFromCaps": true,
+    "cityfabricOverlapPct": [
+      25,
+      40
+    ]
   },
   "sceneryVariants": {
     "cityblock": [
@@ -84,15 +94,20 @@
       "citystreet-c"
     ],
     "cityfabric": [
-      "cityfabric-row"
+      "cityfabric-row",
+      "cityfabric-row-b",
+      "cityfabric-row-c"
     ]
   },
   "levelDesignHints": {
-    "mode": "contiguousFabric",
-    "forbid": "perimeterBeadIslands",
-    "groundTile": "tex-urban-lot-tile.png",
-    "neon_loop": "fill infield+outfield solid; abut cityfabric along outer/inner; overlap 15-25%; zero void at ZOOM_FAR",
-    "gridlock": "same; street grid feel; no warehouse",
-    "success": "cannot count isolated rectangular stamps; reads as one continuous night city"
+    "mode": "cityCarpet",
+    "forbid": "countableRectangularStampIslands",
+    "groundTile": "tex-urban-rooftop-fill.png",
+    "groundTileFallback": "tex-urban-lot-tile.png",
+    "softEdges": "fabric plates bake ~28-32px alpha falloff; if hard rects remain use 30%+ overlap or Developer soft-mask",
+    "neon_loop": "CARPET infield+outfield with rooftop-fill TilingSprite (or dense overlapping fabric grid); NOT bare lot alone. Continuous cityfabric rings on BOTH walls by wall-length/plate-width with 25-40% overlap. Kill mid/near/far caps for cityfabric (or exempt fabric entirely). cityblock/street trio = sparse accents only.",
+    "gridlock": "same as neon_loop; street-grid feel; no warehouse",
+    "trackRibbon": "asphalt between kerbs (not yellow line on void)",
+    "success": "at ZOOM_FAR cannot count isolated rectangular stamps; reads as one continuous night city carpet"
   }
 }

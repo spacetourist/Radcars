@@ -1,4 +1,4 @@
-const CACHE = 'radcars-v38-contiguous-city';
+const CACHE = 'radcars-v39-city-carpet';
 const ASSETS = [
   './',
   './index.html',
@@ -56,8 +56,11 @@ const ASSETS = [
   './assets/generated/scenery/scenery-cityblock-c.png',
   './assets/generated/scenery/scenery-citystreet-c.png',
   './assets/generated/scenery/scenery-cityfabric-row.png',
+  './assets/generated/scenery/scenery-cityfabric-row-b.png',
+  './assets/generated/scenery/scenery-cityfabric-row-c.png',
   './assets/generated/tex-asphalt.png',
-  './assets/generated/tex-urban-lot-tile.png'
+  './assets/generated/tex-urban-lot-tile.png',
+  './assets/generated/tex-urban-rooftop-fill.png'
 ];
 
 self.addEventListener('install', (e) => {

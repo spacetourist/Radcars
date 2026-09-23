@@ -1039,9 +1039,10 @@ function pickCityCircuitStamp(sprites, profile, rnd, opts = {}) {
     : (sprites.buildings.billboard || []);
   const u = rnd();
   const cfW = Math.max(0, profile.cityfabricBias || 0);
-  const cbW = Math.max(0.08, profile.cityblockBias || 0.2);
-  const csW = Math.max(0.08, profile.citystreetBias || 0.18);
-  const bbW = Math.max(0.06, profile.billboardBias || 0.15);
+  // Accents are sparse — allow near-zero weights (no floor that re-inflates cityblock/street)
+  const cbW = Math.max(0, profile.cityblockBias || 0);
+  const csW = Math.max(0, profile.citystreetBias || 0);
+  const bbW = Math.max(0, profile.billboardBias || 0);
   const sum = cfW + cbW + csW + bbW;
   const cfCut = cfW / sum;
   const cbCut = cfCut + cbW / sum;
@@ -1080,7 +1081,7 @@ function pickCityCircuitStamp(sprites, profile, rnd, opts = {}) {
   if (u < csCut && csMd.length) {
     return wrap(pick(csMd, rnd), 'citystreet', 0.88, 1.22);
   }
-  if (bbMd.length) {
+  if (bbW > 0.001 && bbMd.length) {
     return wrap(pick(bbMd, rnd), 'billboard', 0.88, 1.25);
   }
   if (cfMd.length) return wrap(pick(cfMd, rnd), 'cityfabric', 1.1, 1.45);
@@ -1202,14 +1203,18 @@ export function getSceneryDensityProfile(track) {
       lampChance: 0.4,
       urbanSkyline: true,
       cityCircuit: true,
-      cityfabricBias: 0.58,
-      cityblockBias: 0.2,
-      citystreetBias: 0.16,
+      cityfabricBias: 0.88,
+      cityblockBias: 0.06,
+      citystreetBias: 0.05,
+      billboardBias: 0,
+      billboardCap: 0,
       standsOnlyAtSF: true, // standLarge only at S/F
       infieldGapMul: 1.45,
       midCap: 40,
       farCap: 16,
       nearCap: 18,
+      cityAccentCap: 10,
+      infieldYardN: 4,
       label: 'city_circuit_gridlock'
     };
   }
@@ -1262,12 +1267,16 @@ export function getSceneryDensityProfile(track) {
     billboardBias: 0.14,
     billboardCap: 7,
     cityCircuit: true,
-    cityfabricBias: 0.58,
-    cityblockBias: 0.2,
-    citystreetBias: 0.16,
+    cityfabricBias: 0.88,
+    cityblockBias: 0.06,
+    citystreetBias: 0.05,
+    billboardBias: 0,
+    billboardCap: 0,
     midCap: 40,
     farCap: 16,
     nearCap: 18,
+    cityAccentCap: 10,
+    infieldYardN: 4,
     label: 'city_circuit_neon'
   };
 }
@@ -1388,8 +1397,10 @@ export function buildTrackScenery(track) {
   }
   for (const b of beadAnchors) landmarks.push(b);
 
-  // Contiguous city fabric ring (Neon/Gridlock): abutting plates along outer+inner walls.
-  // Replaces sparse 480–560wu bead islands — 15–25% AABB overlap via tryAddStamp cityRad.
+  // Contiguous city fabric (Neon/Gridlock): continuous wall rings + infield/outfield carpet.
+  // step ≈ plateWorldWidth × 0.65–0.75 (25–40% overlap). Fabric never intentional gaps.
+  let cityAccentCount = 0;
+  const CITY_ACCENT_CAP = (profile.cityAccentCap != null ? profile.cityAccentCap : 10);
   function placeCityFabricRing() {
     if (!profile.cityCircuit) return;
     const cfPool = (sprites.buildings.cityfabricMd && sprites.buildings.cityfabricMd.length)
@@ -1397,11 +1408,12 @@ export function buildTrackScenery(track) {
       : (sprites.buildings.cityfabric || []);
     if (!cfPool.length) return;
     const sampleImg = cfPool[0];
-    const approxW = Math.max(160, (sampleImg.width || 320) * 1.25);
-    const step = approxW * 0.78; // ~22% overlap along wall
-    function walk(polyEdges, inward, side) {
+    // plateWorldWidth uses typical fabric scale (~1.3)
+    const plateWorldWidth = Math.max(160, (sampleImg.width || 320) * 1.3);
+    const step = plateWorldWidth * (0.65 + rnd() * 0.05); // 0.65–0.70 → 30–35%+ overlap
+    function walk(polyEdges, inward, layerList, layerName) {
       let acc = 0;
-      let nextAt = step * 0.25;
+      let nextAt = step * 0.15;
       for (const e of polyEdges) {
         const end = acc + e.len;
         while (nextAt <= end + 1e-6) {
@@ -1410,7 +1422,7 @@ export function buildTrackScenery(track) {
           const by = e.ay + (e.by - e.ay) * t;
           const nx = inward ? -e.nx : e.nx;
           const ny = inward ? -e.ny : e.ny;
-          const dist = inward ? (48 + rnd() * 28) : (52 + rnd() * 36);
+          const dist = inward ? (44 + rnd() * 32) : (48 + rnd() * 40);
           const x = bx + nx * dist;
           const y = by + ny * dist;
           nextAt += step;
@@ -1424,18 +1436,18 @@ export function buildTrackScenery(track) {
           if (!pickC || !pickC.img) continue;
           const scale = pickC.scale || varyScale(rnd, 1.15, 1.5);
           const opts = (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null;
-          tryAddStamp(mid, pickC.img, x, y, scale, 'mid', y, pickC.kind || 'cityfabric', opts);
+          tryAddStamp(layerList, pickC.img, x, y, scale, layerName, y, 'cityfabric', opts);
         }
         acc = end;
       }
     }
-    walk(edges, false, 'out');
-    walk(innerEdges, true, 'in');
-    // Accent weave: occasional cityblock/street on the same ring
-    const accentStep = step * 2.4;
+    walk(edges, false, mid, 'mid');
+    walk(innerEdges, true, mid, 'mid');
+    // Sparse accents only (~8–12 total) — not the density engine
+    const accentStep = step * 3.2;
     function walkAccent(polyEdges, inward) {
       let acc = 0;
-      let nextAt = accentStep * 0.5;
+      let nextAt = accentStep * 0.55;
       for (const e of polyEdges) {
         const end = acc + e.len;
         while (nextAt <= end + 1e-6) {
@@ -1448,12 +1460,14 @@ export function buildTrackScenery(track) {
           const x = bx + nx * dist;
           const y = by + ny * dist;
           nextAt += accentStep;
+          if (cityAccentCount >= CITY_ACCENT_CAP) return;
           if (isOnAsphalt(track, x, y)) continue;
           if (inward && !pointInPoly(x, y, track.inner)) continue;
           const pickC = pickCityCircuitStamp(sprites, profile, rnd, {});
-          if (!pickC || !pickC.img || pickC.kind === 'cityfabric') continue;
+          if (!pickC || !pickC.img) continue;
+          if (pickC.kind !== 'cityblock' && pickC.kind !== 'citystreet') continue;
           const opts = (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null;
-          tryAddStamp(mid, pickC.img, x, y, pickC.scale || varyScale(rnd, 0.9, 1.25), 'mid', y, pickC.kind, opts);
+          tryAddStamp(mid, pickC.img, x, y, pickC.scale || varyScale(rnd, 0.9, 1.2), 'mid', y, pickC.kind, opts);
         }
         acc = end;
       }
@@ -1461,7 +1475,47 @@ export function buildTrackScenery(track) {
     walkAccent(edges, false);
     walkAccent(innerEdges, true);
   }
-  // placeCityFabricRing() deferred until tryAddStamp/stampOpts exist
+
+  /** Dense overlapping fabric carpet for infield + outfield (until rooftop fill lands). */
+  function placeCityFabricCarpet() {
+    if (!profile.cityCircuit) return;
+    const cfPool = (sprites.buildings.cityfabricMd && sprites.buildings.cityfabricMd.length)
+      ? sprites.buildings.cityfabricMd
+      : (sprites.buildings.cityfabric || []);
+    if (!cfPool.length) return;
+    const sampleImg = cfPool[0];
+    const pw = Math.max(140, (sampleImg.width || 320) * 1.2);
+    const ph = Math.max(100, (sampleImg.height || 200) * 1.05);
+    const stepX = pw * 0.55;
+    const stepY = ph * 0.55;
+    const margin = Math.max(track.width || 2900, track.height || 2100) * 0.12;
+    const x0 = -margin, y0 = -margin;
+    const x1 = (track.width || 2900) + margin;
+    const y1 = (track.height || 2100) + margin;
+    let row = 0;
+    for (let y = y0; y < y1; y += stepY, row++) {
+      const xOff = (row % 2) * stepX * 0.5;
+      for (let x = x0 + xOff; x < x1; x += stepX) {
+        if (isOnAsphalt(track, x, y)) continue;
+        const inInner = pointInPoly(x, y, track.inner);
+        const inOuter = pointInPoly(x, y, track.outer);
+        // Carpet infield (inside inner) + outfield (outside outer). Skip asphalt band.
+        if (!inInner && inOuter) continue;
+        const pickC = pickCityCircuitStamp(sprites, profile, rnd, { preferFabric: true });
+        if (!pickC || !pickC.img) continue;
+        const scale = (pickC.scale || 1.2) * (0.92 + rnd() * 0.2);
+        const opts = (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null;
+        // Far layer for deep outfield; mid for infield + near-track outfield
+        const deepOut = !inInner && !inOuter && (
+          x < -40 || y < -40 || x > track.width + 40 || y > track.height + 40
+        );
+        const layerList = deepOut ? far : mid;
+        const layerName = deepOut ? 'far' : 'mid';
+        tryAddStamp(layerList, pickC.img, x, y, scale, layerName, y, 'cityfabric', opts);
+      }
+    }
+  }
+  // placeCityFabricRing/Carpet deferred until tryAddStamp/stampOpts exist
 
   function landmarkBoost(x, y) {
     let best = 0;
@@ -1637,23 +1691,26 @@ export function buildTrackScenery(track) {
         }
       }
     }
-    // City fabric: allow ~10–20% overlap (abutting mid stamps). Other kinds keep sparseness.
-    // cityfabric: allow ~15–25% AABB overlap (abutting plates). blocks/streets similar.
+    // cityfabric: allow 25–40% AABB overlap (continuous rings/carpet). Accents stay sparser.
     const cityRad = cityKind
-      ? Math.max(64, Math.min(halfW, stampH) * (kind === 'cityfabric' ? 0.72 : 0.82))
+      ? Math.max(48, Math.min(halfW, stampH) * (kind === 'cityfabric' ? 0.48 : 0.88))
       : 110;
-    if (!stampOk(stampLog, img, x, y, kind === 'tower' ? 160 : (kind === 'containers' ? 150 : (cityKind ? cityRad : 110)), 1)) return false;
+    const sameImgMax = kind === 'cityfabric' ? 4 : 1;
+    if (!stampOk(stampLog, img, x, y, kind === 'tower' ? 160 : (kind === 'containers' ? 150 : (cityKind ? cityRad : 110)), sameImgMax)) return false;
     if (kind === 'tower' || kind === 'billboard' || kind === 'containers' || cityKind) {
       let nearSame = 0;
-      // City: allow one neighbour in overlap band; towers/billboards stay sparse
-      const r2 = (kind === 'tower' ? 220 : kind === 'containers' ? 260 : cityKind ? (cityRad * 0.92) ** 2 : 180 ** 2);
-      const maxNear = kind === 'cityfabric' ? 3 : (cityKind ? 2 : 1);
+      const r2 = (kind === 'tower' ? 220 : kind === 'containers' ? 260 : cityKind ? (cityRad * 0.85) ** 2 : 180 ** 2);
+      const maxNear = kind === 'cityfabric' ? 8 : (cityKind ? 2 : 1);
       for (const p of stampLog) {
         if (p.kind !== kind) continue;
         const dx = p.x - x, dy = p.y - y;
         if (dx * dx + dy * dy < r2) nearSame++;
         if (nearSame >= maxNear) return false;
       }
+    }
+    // Hard accent budget for cityblock/citystreet on city circuits
+    if (profile.cityCircuit && (kind === 'cityblock' || kind === 'citystreet')) {
+      if (typeof cityAccentCount === 'number' && cityAccentCount >= CITY_ACCENT_CAP) return false;
     }
     addItem(list, img, x, y, scale, layer, sortY, kind || null, o);
     stampLog.push({
@@ -1662,12 +1719,16 @@ export function buildTrackScenery(track) {
     });
     if (kind === 'tower') towerCount++;
     if (kind === 'billboard') billboardCount++;
+    if (profile.cityCircuit && (kind === 'cityblock' || kind === 'citystreet')) {
+      if (typeof cityAccentCount === 'number') cityAccentCount++;
+    }
     return true;
   }
   let stampOpts = null;
 
-  // City fabric ring needs tryAddStamp + stampOpts (opts passed explicitly)
+  // City fabric ring + carpet need tryAddStamp + stampOpts (opts passed explicitly)
   placeCityFabricRing();
+  placeCityFabricCarpet();
   function applyCityPick(pickC) {
     if (!pickC || !pickC.img) return null;
     return {
@@ -1704,9 +1765,9 @@ export function buildTrackScenery(track) {
       if (atPinchFar) {
         img = pick(sprites.buildings.stand, rnd); scale = varyScale(rnd, 0.85, 1.2); kind = 'stand';
       } else if (profile.cityCircuit) {
-        const pickC = pickCityCircuitStamp(sprites, profile, rnd, { preferFar: true });
-        if (pickC && pickC.img) { img = pickC.img; scale = pickC.scale; kind = pickC.kind; stampOpts = (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null; }
-        else { img = pick(towerSmList, rnd); scale = varyScale(rnd, 0.65, 1.1); kind = 'tower'; }
+        const pickC = pickCityCircuitStamp(sprites, profile, rnd, { preferFabric: true, preferFar: true });
+        if (pickC && pickC.img) { img = pickC.img; scale = pickC.scale; kind = 'cityfabric'; stampOpts = (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null; }
+        else { continue; }
       } else if (profile.urbanSkyline) {
         // Gridlock far: light warehouseSm / towerSm — save billboard cap for mid race beads
         if (roll < 0.22 + profile.warehouseBias * 0.5) {
@@ -1737,8 +1798,8 @@ export function buildTrackScenery(track) {
 
   // Mid buildings — warehouse + grandstand mass; tower/billboard hard-capped (v19)
   for (const e of edges) {
-    const dens = (profile.cityCircuit ? 1.15 : 0.7) + straightness(e) * (profile.cityCircuit ? 0.45 : 0.3);
-    const steps = Math.max(2, Math.floor((e.len / (profile.cityCircuit ? stepMid * 0.72 : stepMid)) * dens));
+    const dens = (profile.cityCircuit ? 0.55 : 0.7) + straightness(e) * (profile.cityCircuit ? 0.2 : 0.3);
+    const steps = Math.max(2, Math.floor((e.len / (profile.cityCircuit ? stepMid * 1.15 : stepMid)) * dens));
     for (let s = 0; s < steps; s++) {
       const t = (s + rnd() * 0.6) / steps;
       const bx = e.ax + (e.bx - e.ax) * t;
@@ -1788,9 +1849,9 @@ export function buildTrackScenery(track) {
           kind = 'stand';
         }
       } else if (nearStart && profile.cityCircuit && roll < 0.55) {
-        const pickC = pickCityCircuitStamp(sprites, profile, rnd);
+        const pickC = pickCityCircuitStamp(sprites, profile, rnd, { preferFabric: true });
         if (pickC && pickC.img) {
-          img = pickC.img; scale = pickC.scale; kind = pickC.kind;
+          img = pickC.img; scale = pickC.scale; kind = 'cityfabric';
           stampOpts = (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null;
         }
       } else if (boost > 0.45 && nearest && (nearest.kind === 'pit' || nearest.kind === 'corner') && roll < 0.5) {
@@ -1803,9 +1864,9 @@ export function buildTrackScenery(track) {
           scale = varyScale(rnd, 1.1, 1.45);
           kind = 'containers';
         } else if (profile.cityCircuit) {
-          const pickC = pickCityCircuitStamp(sprites, profile, rnd);
-          if (pickC && pickC.img) { img = pickC.img; scale = pickC.scale; kind = pickC.kind; stampOpts = (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null; }
-          else { img = pick(bbMdList, rnd); scale = varyScale(rnd, 0.85, 1.22); kind = 'billboard'; }
+          const pickC = pickCityCircuitStamp(sprites, profile, rnd, { preferFabric: true });
+          if (pickC && pickC.img) { img = pickC.img; scale = pickC.scale; kind = 'cityfabric'; stampOpts = (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null; }
+          else { continue; }
         } else if (profile.urbanSkyline) {
           img = pick(bbMdList, rnd);
           scale = varyScale(rnd, 0.85, 1.22);
@@ -1819,13 +1880,9 @@ export function buildTrackScenery(track) {
         // Mid-straight beads — identity mix (v25)
         const [wLo, wHi] = profile.warehouseScale;
         if (profile.cityCircuit) {
-          const pickC = pickCityCircuitStamp(sprites, profile, rnd);
-          if (pickC && pickC.img) { img = pickC.img; scale = pickC.scale; kind = pickC.kind; stampOpts = (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null; }
-          else if (allowStand && hasStandLarge && rnd() < profile.standBias) {
-            img = pick(sprites.buildings.standLarge, rnd); scale = varyScale(rnd, 0.72, 1.0); kind = 'stand';
-          } else {
-            img = pick(bbMdList, rnd); scale = varyScale(rnd, 0.9, 1.22); kind = 'billboard';
-          }
+          const pickC = pickCityCircuitStamp(sprites, profile, rnd, { preferFabric: true });
+          if (pickC && pickC.img) { img = pickC.img; scale = pickC.scale; kind = 'cityfabric'; stampOpts = (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null; }
+          else { continue; }
         } else if (profile.urbanSkyline) {
           // Gridlock v28: billboardMd dominant; warehouseSm rare; towerSm accents
           const u = rnd();
@@ -1874,9 +1931,9 @@ export function buildTrackScenery(track) {
         const r2 = rnd();
         // Phase A city / Gridlock: city stamps first, warehouses scarce
         if (profile.cityCircuit) {
-          const pickC = pickCityCircuitStamp(sprites, profile, rnd);
-          if (pickC && pickC.img) { img = pickC.img; scale = pickC.scale; kind = pickC.kind; stampOpts = (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null; }
-          else { img = pick(bbMdList, rnd); scale = varyScale(rnd, 0.85, 1.2); kind = 'billboard'; }
+          const pickC = pickCityCircuitStamp(sprites, profile, rnd, { preferFabric: true });
+          if (pickC && pickC.img) { img = pickC.img; scale = pickC.scale; kind = 'cityfabric'; stampOpts = (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null; }
+          else { continue; }
         } else {
         const whCut = profile.urbanSkyline
           ? Math.min(0.16, profile.warehouseBias * 0.7)
@@ -1924,6 +1981,7 @@ export function buildTrackScenery(track) {
   }
 
   // Gridlock urban: warm billboards along outer arc — denser to use billboardCap 9 (v25)
+  // City carpet pass: billboardBias 0 → leave off
   if (profile.billboardBias >= 0.22) {
     let acc = 0;
     const spacing = profile.billboardBias >= 0.55 ? 200 : (profile.billboardBias >= 0.35 ? 280 : 420);
@@ -1944,8 +2002,8 @@ export function buildTrackScenery(track) {
           if (!tryPlace(track, x, y, 16)) continue;
           let img, kind = 'billboard', sc = varyScale(rnd, 0.95, 1.3);
           if (profile.cityCircuit) {
-            const pickC = pickCityCircuitStamp(sprites, profile, rnd);
-            if (pickC && pickC.img) { img = pickC.img; kind = pickC.kind; sc = pickC.scale; stampOpts = (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null; }
+            // Billboards left off for city carpet pass
+            continue;
           }
           if (!img) img = pick(bbMdList.length ? bbMdList : sprites.buildings.billboard, rnd);
           if (!img) break;
@@ -1963,8 +2021,9 @@ export function buildTrackScenery(track) {
 
   // Explicit mid-straight bead clusters (v23 both-sides / v25 identity):
   // outfield = profile mix; infield = warehouseSm/stand only + harder gaps
+  // City circuit: SKIP — fabric ring + carpet replace bead islands (accents capped separately)
   const whSmList = whSmListEarly;
-  for (const bead of beadAnchors) {
+  for (const bead of (profile.cityCircuit ? [] : beadAnchors)) {
     const isIn = bead.side === 'in';
     const atPinch = profile.pinchStandsOnly && nearPinch(bead.x, bead.y);
     const atSF = nearStartFinish(bead.x, bead.y, 300);
@@ -2111,13 +2170,8 @@ export function buildTrackScenery(track) {
         let img, scale, kind;
         // A.1 cityCircuit infield: city stamps only (no warehouse / stand wall)
         if (profile.cityCircuit) {
-          const pickC = pickCityCircuitStamp(sprites, profile, rnd);
-          if (pickC && pickC.img) {
-            img = pickC.img; scale = pickC.scale; kind = pickC.kind;
-            stampOpts = (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null;
-          } else {
-            img = pick(bbMdList, rnd); scale = varyScale(rnd, 0.8, 1.1); kind = 'billboard';
-          }
+          // Carpet already fills infield — skip duplicate ribbon accents
+          continue;
         } else if (atPinch || (profile.pinchStandsOnly && profile.warehouseBias < 0.12 && roll < 0.72)) {
           img = pick(sprites.buildings.stand, rnd);
           scale = varyScale(rnd, 0.8, 1.05);
@@ -2192,15 +2246,16 @@ export function buildTrackScenery(track) {
       let sfKind = 'stand';
       let sfOpts = null;
       if (profile.cityCircuit) {
-        const pickC = pickCityCircuitStamp(sprites, profile, rnd);
+        // One accent at S/F if budget remains; else fabric
+        const pickC = pickCityCircuitStamp(sprites, profile, rnd, cityAccentCount < CITY_ACCENT_CAP ? {} : { preferFabric: true });
         if (pickC && pickC.img) {
           imgLarge = pickC.img;
-          sfKind = pickC.kind || 'cityblock';
+          sfKind = pickC.kind || 'cityfabric';
           sfOpts = (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null;
         } else {
-          imgLarge = pick(sprites.buildings.cityblockMd || sprites.buildings.cityblock, rnd)
-            || pick(sprites.buildings.standBlock, rnd);
-          sfKind = 'cityblock';
+          imgLarge = pick(sprites.buildings.cityfabricMd || sprites.buildings.cityfabric, rnd)
+            || pick(sprites.buildings.cityblockMd || sprites.buildings.cityblock, rnd);
+          sfKind = 'cityfabric';
         }
       } else if (profile.standBias < 0.25) {
         imgLarge = pick(sprites.buildings.warehouse, rnd)
@@ -2584,13 +2639,10 @@ export function buildTrackScenery(track) {
       } else if (!profile.cityCircuit && roll < 0.64 + (profile.infieldDark ? 0.08 : profile.warehouseBias * 0.4)) {
         img = pick(whSmListEarly, rnd); scale = varyScale(rnd, wLo * 0.85, wHi * 0.9);
       } else if (profile.cityCircuit && roll < 0.78) {
-        const pickC = pickCityCircuitStamp(sprites, profile, rnd);
-        if (pickC && pickC.img) {
-          img = pickC.img; scale = pickC.scale * 0.85;
-          stampOpts = (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null;
-        } else { img = pick(sprites.props.barrel, rnd); scale = varyScale(rnd, 0.7, 1.1); }
+        // Soft props only — fabric carpet owns the infield mass
+        img = pick(sprites.props.barrel, rnd); scale = varyScale(rnd, 0.7, 1.1);
       } else { img = pick(sprites.props.barrel, rnd); scale = varyScale(rnd, 0.7, 1.1); }
-      const infieldCityKey = profile.cityCircuit ? plateSrcKey(img) : null;
+      const infieldCityKey = null; // city accents not from yard
       if (infieldCityKey) {
         const k = infieldCityKey.startsWith('citystreet') ? 'citystreet' : 'cityblock';
         tryAddStamp(near, img, x, y, scale, 'near', y, k, stampOpts);
@@ -2622,9 +2674,9 @@ export function buildTrackScenery(track) {
       kind = 'stand';
     } else {
       if (profile.cityCircuit) {
-        const pickC = pickCityCircuitStamp(sprites, profile, rnd, { preferFar: true });
-        if (pickC && pickC.img) { img = pickC.img; kind = pickC.kind; stampOpts = (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null; }
-        else { img = pick(sprites.buildings.billboard, rnd); kind = 'billboard'; }
+        const pickC = pickCityCircuitStamp(sprites, profile, rnd, { preferFabric: true, preferFar: true });
+        if (pickC && pickC.img) { img = pickC.img; kind = 'cityfabric'; stampOpts = (pickC.flipX || pickC.rot) ? { flipX: !!pickC.flipX, rot: pickC.rot || 0 } : null; }
+        else { continue; }
       } else {
       const whCut = profile.warehouseBias < 0.15 ? profile.warehouseBias * 0.5 : (0.45 + profile.warehouseBias * 0.3);
       const standCut = profile.standsOnlyAtSF ? whCut : (whCut + profile.standBias * 0.35);
@@ -2654,16 +2706,25 @@ export function buildTrackScenery(track) {
   // Ground plate cached at modest resolution
   const ground = buildGroundPlate(track, theme);
 
-  // Phase A: enforce visible stamp budgets — prefer larger Md landmarks
+  // Phase A: enforce visible stamp budgets — prefer larger Md landmarks.
+  // cityfabric is EXEMPT from mid/near/far caps (continuous carpet must survive).
   const midCap = profile.midCap != null ? profile.midCap : SCENERY_DENSITY.midCap;
   const farCap = profile.farCap != null ? profile.farCap : SCENERY_DENSITY.farCap;
   const nearCap = profile.nearCap != null ? profile.nearCap : SCENERY_DENSITY.nearCap;
-  const midKeepDist = profile.cityCircuit ? 72 : 150; // city: abut / 15–25% overlap
-  const farCapped = enforceLayerCap(far, farCap, profile.cityCircuit ? 140 : 180);
-  const midCapped = enforceLayerCap(mid, midCap, midKeepDist);
-  const nearCapped = enforceLayerCap(near, nearCap, profile.cityCircuit ? 90 : 120);
-  // Thinner near list for low-zoom draw path (cam.zoom < ~0.7)
-  const nearThin = enforceLayerCap(nearCapped, Math.max(4, Math.floor(nearCap * 0.45)), 160);
+  const midKeepDist = profile.cityCircuit ? 72 : 150;
+  function splitFabricCap(list, cap, minDist) {
+    const arr = list || [];
+    if (!profile.cityCircuit) return enforceLayerCap(arr, cap, minDist);
+    const fabric = arr.filter((it) => it && it.kind === 'cityfabric');
+    const other = arr.filter((it) => it && it.kind !== 'cityfabric');
+    const cappedOther = enforceLayerCap(other, cap, minDist);
+    return cappedOther.concat(fabric).sort((a, b) => a.sortY - b.sortY);
+  }
+  const farCapped = splitFabricCap(far, farCap, profile.cityCircuit ? 140 : 180);
+  const midCapped = splitFabricCap(mid, midCap, midKeepDist);
+  const nearCapped = splitFabricCap(near, nearCap, profile.cityCircuit ? 90 : 120);
+  // Thinner near list for low-zoom draw path — still keep fabric
+  const nearThin = splitFabricCap(nearCapped, Math.max(4, Math.floor(nearCap * 0.45)), 160);
 
   // A.1 hard scrub: cityCircuit mid/near/far never keep warehouse stamps
   let farFinal = farCapped;
@@ -2678,23 +2739,31 @@ export function buildTrackScenery(track) {
     nearThinFinal = dropWh(nearThinFinal);
   }
 
+  const finalAll = [...farFinal, ...midFinal, ...nearFinal];
+  const fabricFinal = finalAll.filter((it) => it.kind === 'cityfabric').length;
+  const accentFinal = finalAll.filter((it) => it.kind === 'cityblock' || it.kind === 'citystreet').length;
   const stampCounts = {
     tower: towerCount,
     billboard: billboardCount,
     crane: craneCount,
     containers: stampLog.filter((p) => p.kind === 'containers').length,
-    cityblock: stampLog.filter((p) => p.kind === 'cityblock').length,
-    citystreet: stampLog.filter((p) => p.kind === 'citystreet').length,
-    cityfabric: stampLog.filter((p) => p.kind === 'cityfabric').length,
+    cityblock: finalAll.filter((it) => it.kind === 'cityblock').length,
+    citystreet: finalAll.filter((it) => it.kind === 'citystreet').length,
+    cityfabric: fabricFinal,
+    cityAccents: accentFinal,
     warehouse: stampLog.filter((p) => p.kind === 'warehouse').length,
     warehouseAfterScrub: profile.cityCircuit
-      ? [...farFinal, ...midFinal, ...nearFinal].filter((it) => it.kind === 'warehouse').length
+      ? finalAll.filter((it) => it.kind === 'warehouse').length
       : null,
     cityblockMdPool: (sprites.buildings.cityblockMd || []).length,
     citystreetMdPool: (sprites.buildings.citystreetMd || []).length,
     far: farFinal.length, mid: midFinal.length, near: nearFinal.length,
     farRaw: far.length, midRaw: mid.length, nearRaw: near.length,
-    caps: { mid: midCap, far: farCap, near: nearCap }
+    caps: {
+      mid: midCap, far: farCap, near: nearCap,
+      fabricUncapped: !!profile.cityCircuit,
+      cityAccentCap: profile.cityCircuit ? CITY_ACCENT_CAP : null
+    }
   };
   return {
     trackId: track.id,

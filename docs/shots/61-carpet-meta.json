@@ -1,0 +1,226 @@
+[
+  {
+    "id": "neon_loop",
+    "meta": {
+      "trackId": "neon_loop",
+      "warehouseBias": 0,
+      "cityfabricBias": 0.88,
+      "cityCircuit": true,
+      "stampCounts": {
+        "tower": 0,
+        "billboard": 0,
+        "crane": 0,
+        "containers": 0,
+        "cityblock": 0,
+        "citystreet": 1,
+        "cityfabric": 590,
+        "cityAccents": 1,
+        "warehouse": 0,
+        "warehouseAfterScrub": 0,
+        "cityblockMdPool": 3,
+        "citystreetMdPool": 3,
+        "far": 151,
+        "mid": 449,
+        "near": 19,
+        "farRaw": 151,
+        "midRaw": 449,
+        "nearRaw": 260,
+        "caps": {
+          "mid": 40,
+          "far": 16,
+          "near": 18,
+          "fabricUncapped": true,
+          "cityAccentCap": 10
+        }
+      },
+      "warehouseAfterScrub": 0,
+      "kinds": {
+        "cityfabric": 590,
+        "other": 27,
+        "citystreet": 1,
+        "stand": 1
+      },
+      "srcKeys": {
+        "cityfabric-row": 230,
+        "cityfabric-row-b": 177,
+        "cityfabric-row-c": 183,
+        "citystreet-b": 1
+      },
+      "cloneHits400": 3728,
+      "pixi": "pixi-contiguous-v4",
+      "stampSizes": {
+        "cityblock": [
+          512,
+          197
+        ],
+        "citystreet": [
+          384,
+          152
+        ],
+        "cityblockB": [
+          338,
+          288
+        ],
+        "citystreetB": [
+          370,
+          282
+        ],
+        "cityblockC": [
+          448,
+          285
+        ],
+        "citystreetC": [
+          384,
+          235
+        ],
+        "cityfabricRow": [
+          370,
+          202
+        ],
+        "urbanLot": [
+          512,
+          512
+        ],
+        "urbanRooftop": [
+          512,
+          512
+        ],
+        "warehouse": [
+          384,
+          245
+        ],
+        "maxStampPx": 384,
+        "heroStampPx": 512
+      },
+      "packName": "realistic-v5-city-carpet",
+      "urbanRooftop": true,
+      "groundMode": "urbanRooftop",
+      "trackWidth": {
+        "min": 539.3039909254402,
+        "max": 539.9999295142993,
+        "avg": 539.8729180925272,
+        "ratio": 1.0012904384179782,
+        "note": "outer/inner roughly parallel (constant-ish width)"
+      }
+    }
+  },
+  {
+    "fps": {
+      "ok": true,
+      "frames": 121,
+      "elapsed": 2.00920000000298,
+      "fps": 60.22297431804724,
+      "zoom": 0.48,
+      "pixiReady": true,
+      "canvas": "pixi"
+    },
+    "fpsLine": "Pixi Neon Loop ZOOM_FAR(~0.48) mid-straight: ~60.2 FPS over 2.01s (121 frames, cam locked / frozen pose). City carpet v39 (fabric uncapped + rooftop)."
+  },
+  {
+    "id": "gridlock",
+    "meta": {
+      "trackId": "gridlock",
+      "warehouseBias": 0,
+      "cityfabricBias": 0.88,
+      "cityCircuit": true,
+      "stampCounts": {
+        "tower": 0,
+        "billboard": 0,
+        "crane": 0,
+        "containers": 0,
+        "cityblock": 3,
+        "citystreet": 1,
+        "cityfabric": 463,
+        "cityAccents": 4,
+        "warehouse": 5,
+        "warehouseAfterScrub": 0,
+        "cityblockMdPool": 3,
+        "citystreetMdPool": 3,
+        "far": 121,
+        "mid": 351,
+        "near": 18,
+        "farRaw": 121,
+        "midRaw": 356,
+        "nearRaw": 248,
+        "caps": {
+          "mid": 40,
+          "far": 16,
+          "near": 18,
+          "fabricUncapped": true,
+          "cityAccentCap": 10
+        }
+      },
+      "warehouseAfterScrub": 0,
+      "kinds": {
+        "cityfabric": 463,
+        "citystreet": 1,
+        "cityblock": 3,
+        "other": 23
+      },
+      "srcKeys": {
+        "cityfabric-row": 162,
+        "cityfabric-row-c": 173,
+        "cityfabric-row-b": 128,
+        "citystreet-b": 1,
+        "cityblock-b": 2,
+        "cityblock-c": 1
+      },
+      "cloneHits400": 3308,
+      "pixi": "pixi-contiguous-v4",
+      "stampSizes": {
+        "cityblock": [
+          512,
+          197
+        ],
+        "citystreet": [
+          384,
+          152
+        ],
+        "cityblockB": [
+          338,
+          288
+        ],
+        "citystreetB": [
+          370,
+          282
+        ],
+        "cityblockC": [
+          448,
+          285
+        ],
+        "citystreetC": [
+          384,
+          235
+        ],
+        "cityfabricRow": [
+          370,
+          202
+        ],
+        "urbanLot": [
+          512,
+          512
+        ],
+        "urbanRooftop": [
+          512,
+          512
+        ],
+        "warehouse": [
+          384,
+          245
+        ],
+        "maxStampPx": 384,
+        "heroStampPx": 512
+      },
+      "packName": "realistic-v5-city-carpet",
+      "urbanRooftop": true,
+      "groundMode": "urbanRooftop",
+      "trackWidth": {
+        "min": 347.2989419239805,
+        "max": 350,
+        "avg": 349.8381034878671,
+        "ratio": 1.0077773288368115,
+        "note": "outer/inner roughly parallel (constant-ish width)"
+      }
+    }
+  }
+]

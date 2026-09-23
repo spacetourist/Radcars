@@ -81,23 +81,33 @@ function bakeTrackCanvas(track, scale = 0.5) {
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
 
-  ctx.strokeStyle = 'rgba(22, 18, 14, 0.96)';
-  ctx.lineWidth = 62;
-  strokeLoop(ctx, track.outer);
-  ctx.strokeStyle = 'rgba(38, 32, 24, 0.72)';
-  ctx.lineWidth = 44;
+  // Opaque asphalt ribbon between outer and inner kerbs (evenodd ring — no void punch)
+  {
+    const ag = ctx.createLinearGradient(0, 0, track.width, track.height);
+    ag.addColorStop(0, track.asphalt || '#1a222c');
+    ag.addColorStop(0.5, shadeHex(track.asphalt || '#1a222c', -8));
+    ag.addColorStop(1, shadeHex(track.asphalt || '#1a222c', 4));
+    ctx.beginPath();
+    if (track.outer && track.outer.length) {
+      ctx.moveTo(track.outer[0].x, track.outer[0].y);
+      for (let i = 1; i < track.outer.length; i++) ctx.lineTo(track.outer[i].x, track.outer[i].y);
+      ctx.closePath();
+    }
+    if (track.inner && track.inner.length) {
+      ctx.moveTo(track.inner[0].x, track.inner[0].y);
+      for (let i = 1; i < track.inner.length; i++) ctx.lineTo(track.inner[i].x, track.inner[i].y);
+      ctx.closePath();
+    }
+    ctx.fillStyle = ag;
+    ctx.fill('evenodd');
+  }
+
+  // Soft shoulder shadow outside outer kerb (does not erase asphalt)
+  ctx.strokeStyle = 'rgba(22, 18, 14, 0.55)';
+  ctx.lineWidth = 28;
   strokeLoop(ctx, track.outer);
 
-  ctx.beginPath();
-  pathPoly(ctx, track.outer);
-  const ag = ctx.createLinearGradient(0, 0, track.width, track.height);
-  ag.addColorStop(0, track.asphalt || '#1a222c');
-  ag.addColorStop(0.5, shadeHex(track.asphalt || '#1a222c', -8));
-  ag.addColorStop(1, shadeHex(track.asphalt || '#1a222c', 4));
-  ctx.fillStyle = ag;
-  ctx.fill();
-
-  // Racing groove — dark rubber band + worn light lane (not gold batwing deco alone)
+  // Racing groove — dark rubber band + worn light lane on the filled ribbon
   ctx.strokeStyle = 'rgba(4, 3, 2, 0.58)';
   ctx.lineWidth = 52;
   strokeLoop(ctx, track.line);
@@ -113,13 +123,6 @@ function bakeTrackCanvas(track, scale = 0.5) {
   ctx.strokeStyle = 'rgba(255, 250, 235, 0.14)';
   ctx.lineWidth = 5;
   strokeLoop(ctx, track.line);
-
-  ctx.globalCompositeOperation = 'destination-out';
-  ctx.beginPath();
-  pathPoly(ctx, track.inner);
-  ctx.fillStyle = '#000';
-  ctx.fill();
-  ctx.globalCompositeOperation = 'source-over';
 
   // Block kerbs on inner apexes (red/white) — restores ribbon readability
   {
@@ -262,6 +265,12 @@ export async function createPixiRenderer(opts) {
   const carSprites = new Map();
   let countdownText = null;
 
+  try {
+    if (typeof window !== 'undefined') {
+      window.__RAD_PIXI_DIRTY__ = () => { dirtyTrack = true; dirtyScenery = true; groundTrackId = null; groundSprite = null; };
+    }
+  } catch (_) {}
+
   onPackReady(() => {
     try {
       sprites.invalidatePackCars();
@@ -386,6 +395,7 @@ export async function createPixiRenderer(opts) {
     const pack = getAssetPack();
     const asphalt = pack && pack.ready && pack.asphalt ? pack.asphalt : null;
     const urbanLot = pack && pack.ready && pack.urbanLot ? pack.urbanLot : null;
+    const urbanRooftop = pack && pack.ready && pack.urbanRooftop ? pack.urbanRooftop : null;
     const cityCircuit = !!(scenery && scenery.profile && scenery.profile.cityCircuit);
     const needRebuild = !groundSprite || groundTrackId !== tid;
 
@@ -393,22 +403,38 @@ export async function createPixiRenderer(opts) {
       clearContainer(groundLayer);
       groundSprite = null;
       groundMode = null;
-      // City circuit: ONE urban-lot TilingSprite under entire track AABB × ~1.2
-      if (cityCircuit && urbanLot) {
-        const tex = textureFrom(urbanLot);
+      // City circuit ground: rooftop fill (v5) preferred; else lot under fabric carpet
+      if (cityCircuit && (urbanRooftop || urbanLot)) {
+        const src = urbanRooftop || urbanLot;
+        const tex = textureFrom(src);
         if (tex) {
           try { tex.source.style.addressMode = 'repeat'; } catch (_) {}
           const margin = Math.max(track.width || 2900, track.height || 2100) * 0.1;
           const tw = (track.width || 2900) * 1.2 + margin * 2;
           const th = (track.height || 2100) * 1.2 + margin * 2;
+          // Lot under rooftop when both present (rooftop is readable surface)
+          if (urbanRooftop && urbanLot) {
+            const lotTex = textureFrom(urbanLot);
+            if (lotTex) {
+              try { lotTex.source.style.addressMode = 'repeat'; } catch (_) {}
+              const lot = new TilingSprite({ texture: lotTex, width: tw, height: th });
+              lot.x = -((tw - (track.width || 2900)) * 0.5);
+              lot.y = -((th - (track.height || 2100)) * 0.5);
+              lot.tileScale.set(0.85, 0.85);
+              lot.tint = 0x6a6558;
+              lot.alpha = 0.55;
+              groundLayer.addChild(lot);
+            }
+          }
           const tile = new TilingSprite({ texture: tex, width: tw, height: th });
           tile.x = -((tw - (track.width || 2900)) * 0.5);
           tile.y = -((th - (track.height || 2100)) * 0.5);
-          tile.tileScale.set(0.85, 0.85);
-          tile.tint = 0xd0c8b8;
+          tile.tileScale.set(urbanRooftop ? 0.55 : 0.85, urbanRooftop ? 0.55 : 0.85);
+          // Rooftop must be the readable surface (full tint); lot alone stays muted fallback
+          tile.tint = urbanRooftop ? 0xffffff : 0xb0a898;
           groundLayer.addChild(tile);
           groundSprite = tile;
-          groundMode = 'urbanLot';
+          groundMode = urbanRooftop ? 'urbanRooftop' : 'urbanLot';
         }
       }
       // Prefer one baked plate sprite (already continuous fabric)
@@ -455,6 +481,7 @@ export async function createPixiRenderer(opts) {
         groundMode = 'gfx';
       }
       groundTrackId = tid;
+      try { if (typeof window !== 'undefined') window.__RAD_GROUND_MODE__ = groundMode; } catch (_) {}
     }
     if (groundSprite) groundSprite.alpha = fade;
   }
@@ -472,15 +499,17 @@ export async function createPixiRenderer(opts) {
 
     ensureGround(track, scenery, zoom);
 
-    fillLayer(farLayer, scenery.far, cam, zoom, 160, 10);
-    fillLayer(midLayer, scenery.mid, cam, zoom, 120, 18);
+    // City carpet: raise vis caps so uncapped fabric actually draws (batch-friendly same tex)
+    const cityVis = !!(scenery.profile && scenery.profile.cityCircuit);
+    fillLayer(farLayer, scenery.far, cam, zoom, 160, cityVis ? 140 : 10);
+    fillLayer(midLayer, scenery.mid, cam, zoom, 120, cityVis ? 320 : 18);
     // Perf: drop near layer entirely when zoom < ~0.7 (overview / ZOOM_FAR)
     if (zoom < 0.7) {
       clearContainer(nearLayer);
       const pool = poolFor(nearLayer);
       for (const spr of pool) spr.visible = false;
     } else {
-      const nearCap = zoom < 0.85 ? 8 : 12;
+      const nearCap = cityVis ? (zoom < 0.85 ? 80 : 120) : (zoom < 0.85 ? 8 : 12);
       fillLayer(nearLayer, scenery.near, cam, zoom, 80, nearCap);
     }
     return scenery;
@@ -572,7 +601,8 @@ export async function createPixiRenderer(opts) {
 
   function syncCars(cars, zoom) {
     const live = new Set();
-    for (const c of cars) {
+    for (const c of (cars || [])) {
+      if (!c || c.x == null || c.y == null) continue;
       live.add(c);
       let spr = carSprites.get(c);
       if (!spr) {
