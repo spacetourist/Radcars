@@ -1,0 +1,258 @@
+{
+  "pass": "long-chase-v43",
+  "sw": "radcars-v43-long-chase",
+  "tracks": [
+    {
+      "id": "neon_loop",
+      "meta": {
+        "trackId": "neon_loop",
+        "world": [
+          4800,
+          3500
+        ],
+        "lineN": 192,
+        "cps": 24,
+        "cpR": 300,
+        "lap": 8907,
+        "stampCounts": {
+          "tower": 0,
+          "billboard": 0,
+          "crane": 0,
+          "containers": 0,
+          "cityblock": 1,
+          "citystreet": 1,
+          "cityfabric": 1480,
+          "cityAccents": 2,
+          "warehouse": 0,
+          "warehouseAfterScrub": 0,
+          "cityblockMdPool": 3,
+          "citystreetMdPool": 3,
+          "far": 1068,
+          "mid": 419,
+          "near": 18,
+          "farRaw": 1068,
+          "midRaw": 419,
+          "nearRaw": 322,
+          "caps": {
+            "mid": 40,
+            "far": 16,
+            "near": 18,
+            "fabricUncapped": true,
+            "cityAccentCap": 10
+          }
+        },
+        "warehouseAfterScrub": 0,
+        "farLock": {
+          "padWu": 3960,
+          "halfDiagWu": 3059.59329178097,
+          "tileScaleBefore": 0.55,
+          "tileScaleAfter": 0.14,
+          "groundMode": "urbanRooftop",
+          "dualLayer": true,
+          "dualAlpha": 0.45,
+          "dualUvFrac": {
+            "x": 0.37,
+            "y": 0.41
+          },
+          "dualOffPx": {
+            "x": 189.44,
+            "y": 209.92
+          },
+          "pack": "realistic-v5.1-rooftop-soft",
+          "trackW": 4800,
+          "trackH": 3500,
+          "tileW": 13254,
+          "tileH": 11420,
+          "follow": true,
+          "sprW": 13254,
+          "sprH": 11420,
+          "sprX": -4227,
+          "sprY": -3960,
+          "texW": 512,
+          "texH": 512,
+          "children": 4
+        },
+        "groundMode": "urbanRooftop"
+      }
+    },
+    {
+      "id": "gridlock",
+      "meta": {
+        "trackId": "gridlock",
+        "world": [
+          4000,
+          2800
+        ],
+        "lineN": 176,
+        "cps": 22,
+        "cpR": 280,
+        "lap": 9451,
+        "stampCounts": {
+          "tower": 0,
+          "billboard": 0,
+          "crane": 0,
+          "containers": 0,
+          "cityblock": 0,
+          "citystreet": 0,
+          "cityfabric": 1201,
+          "cityAccents": 0,
+          "warehouse": 2,
+          "warehouseAfterScrub": 0,
+          "cityblockMdPool": 3,
+          "citystreetMdPool": 3,
+          "far": 818,
+          "mid": 383,
+          "near": 19,
+          "farRaw": 818,
+          "midRaw": 385,
+          "nearRaw": 299,
+          "caps": {
+            "mid": 40,
+            "far": 16,
+            "near": 18,
+            "fabricUncapped": true,
+            "cityAccentCap": 10
+          }
+        },
+        "warehouseAfterScrub": 0,
+        "farLock": {
+          "padWu": 3960,
+          "halfDiagWu": 3059.59329178097,
+          "tileScaleBefore": 0.55,
+          "tileScaleAfter": 0.14,
+          "groundMode": "urbanRooftop",
+          "dualLayer": true,
+          "dualAlpha": 0.45,
+          "dualUvFrac": {
+            "x": 0.37,
+            "y": 0.41
+          },
+          "dualOffPx": {
+            "x": 189.44,
+            "y": 209.92
+          },
+          "pack": "realistic-v5.1-rooftop-soft",
+          "trackW": 4000,
+          "trackH": 2800,
+          "tileW": 13254,
+          "tileH": 10920,
+          "follow": true,
+          "sprW": 13254,
+          "sprH": 10920,
+          "sprX": -4627,
+          "sprY": -4060,
+          "texW": 512,
+          "texH": 512,
+          "children": 4
+        },
+        "groundMode": "urbanRooftop"
+      }
+    }
+  ],
+  "fps": {
+    "ok": true,
+    "frames": 121,
+    "elapsed": 2.0114000000059606,
+    "fps": 60.15710450414707,
+    "zoom": 0.24,
+    "pixiReady": true,
+    "farLock": {
+      "padWu": 3960,
+      "halfDiagWu": 3059.59329178097,
+      "tileScaleBefore": 0.55,
+      "tileScaleAfter": 0.14,
+      "groundMode": "urbanRooftop",
+      "dualLayer": true,
+      "dualAlpha": 0.45,
+      "dualUvFrac": {
+        "x": 0.37,
+        "y": 0.41
+      },
+      "dualOffPx": {
+        "x": 189.44,
+        "y": 209.92
+      },
+      "pack": "realistic-v5.1-rooftop-soft",
+      "trackW": 4800,
+      "trackH": 3500,
+      "tileW": 13254,
+      "tileH": 11420,
+      "follow": true,
+      "sprW": 13254,
+      "sprH": 11420,
+      "sprX": -4227,
+      "sprY": -3960,
+      "texW": 512,
+      "texH": 512,
+      "children": 4
+    },
+    "canvas": "pixi",
+    "fpsLine": "Pixi Neon Loop ZOOM_FAR(~0.24) mid-straight: ~60.2 FPS over 2.01s (121 frames). Long-chase v43 padWu=3960 tileScale=0.14 dualLayer=true."
+  },
+  "length": {
+    "neon_loop_wu": {
+      "before_approx": 5144,
+      "after": 8907,
+      "factor": 1.73
+    },
+    "gridlock_wu": {
+      "before_approx": 5559,
+      "after": 9451,
+      "factor": 1.7
+    },
+    "razor_S": {
+      "before": 1.4,
+      "after": 1.7
+    },
+    "cargo_S": {
+      "before": 1.4,
+      "after": 1.7
+    },
+    "neon_lineN": {
+      "before": 144,
+      "after": 192
+    },
+    "gridlock_lineN": {
+      "before": 144,
+      "after": 176
+    }
+  },
+  "zoom": {
+    "ZOOM_NEAR": {
+      "before": 1.02,
+      "after": 1.02
+    },
+    "ZOOM_FAR": {
+      "before": 0.48,
+      "after": 0.24
+    },
+    "LOOKAHEAD_MIN": {
+      "before": 40,
+      "after": 70
+    },
+    "LOOKAHEAD_MAX": {
+      "before": 280,
+      "after": 780
+    },
+    "note": "ZOOM_FAR halved => ~2x world visible at pace; look-ahead raised for rear-of-travel chase"
+  },
+  "padWu": {
+    "before": 1930,
+    "after": 3960
+  },
+  "proofs": [
+    "docs/shots/69-neon-long-chase-mid.png",
+    "docs/shots/69b-neon-long-chase-far.png",
+    "docs/shots/69c-neon-long-chase-grid.png",
+    "docs/shots/70-gridlock-long-chase-mid.png",
+    "docs/shots/70b-gridlock-long-chase-far.png",
+    "docs/shots/70c-gridlock-long-chase-grid.png"
+  ],
+  "kept": [
+    "asphalt clear of city carpet",
+    "padWu FAR void coverage bumped for ZOOM_FAR 0.24",
+    "pixi ?pixi=1 opt-in only",
+    "warehouseAfterScrub=0",
+    "Razor/Cargo art identity freeze (scale-only lengthen)"
+  ]
+}

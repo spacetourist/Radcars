@@ -10,16 +10,18 @@ import { sfx } from './audio.js';
 import { placePrize, persistSave } from './career.js';
 import { clamp } from './util.js';
 
-/** Camera: stay open after GO; speed pulls further out (v33).
+/** Camera: stay open after GO; speed pulls further out (v43 long-chase).
  *  Near must stay close to grid zoom — a high NEAR made race start zoom *in*
- *  and never feel like it zoomed out again. */
+ *  and never feel like it zoomed out again.
+ *  ZOOM_FAR ~half of v42 (0.48→0.24) ⇒ ~2× world visible at pace.
+ *  Look-ahead raised so the player sits rear-of-travel with road ahead. */
 const ZOOM_NEAR = 1.02;   // crawl / just after GO (barely tighter than grid)
-const ZOOM_FAR = 0.48;    // pace — lots of upcoming track
+const ZOOM_FAR = 0.24;    // pace — ~2× prior pull-out (was 0.48)
 const ZOOM_GRID = 0.88;
 const ZOOM_LERP_RACE = 0.18;
 const ZOOM_LERP_GRID = 0.08;
-const LOOKAHEAD_MIN = 40;
-const LOOKAHEAD_MAX = 280;
+const LOOKAHEAD_MIN = 70;
+const LOOKAHEAD_MAX = 780; // rear-bias chase; ≈2.8× v42 so far-zoom still frames car aft
 /** Full zoom-out by modest race pace (|v| often only ~0.8–1.4). */
 const SPD_ZOOM_LO = 0.05;
 const SPD_ZOOM_HI = 0.65;

@@ -130,10 +130,11 @@ function angleBump(a, lo, hi) {
  * Start on top straight facing +X (clockwise on canvas).
  */
 function buildNeonLoopGeometry() {
-  const cx = 1400, cy = 1100;
-  const n = 144;
+  // v43 long chase: ~1.7× centreline radii vs v42 (~5.1k → ~8.7k wu lap)
+  const cx = 2300, cy = 1650;
+  const n = 192;
   const halfW = 270; // constant ribbon half-width → ~540wu lane
-  const baseRx = 1030, baseRy = 575;
+  const baseRx = 1750, baseRy = 980;
 
   const centerline = [];
   for (let i = 0; i < n; i++) {
@@ -202,12 +203,12 @@ function buildNeonLoopGeometry() {
     });
   }
 
-  const cpCount = 18;
+  const cpCount = 24;
   const checkpoints = [];
   for (let i = 0; i < cpCount; i++) {
     const idx = Math.round((startIndex + (i / cpCount) * linePts.length) % linePts.length);
     const p = linePts[idx];
-    const n2 = linePts[(idx + 3) % linePts.length];
+    const n2 = linePts[(idx + 4) % linePts.length];
     const dx = n2.x - p.x, dy = n2.y - p.y;
     const len = Math.hypot(dx, dy) || 1;
     checkpoints.push({ x: p.x, y: p.y, nx: dx / len, ny: dy / len });
@@ -244,7 +245,7 @@ function buildNeonLoopGeometry() {
     checkpoints,
     startIndex,
     landmarks,
-    cpHitRadius: 280
+    cpHitRadius: 300
   };
 }
 
@@ -294,8 +295,8 @@ export const TRACKS = [
     asphalt: '#1a222c',
     wall: '#00e8ff',
     accent: '#ff2bd6',
-    width: 2900,
-    height: 2100,
+    width: 4800,
+    height: 3500,
     lapsDefault: 3,
     ...buildNeonLoopGeometry()
   },
@@ -307,27 +308,30 @@ export const TRACKS = [
     asphalt: '#1a1e28',
     wall: '#b8ff00', // lime identity
     accent: '#ff8a00',
-    width: 2380,
-    height: 1540,
+    width: 4000,
+    height: 2800,
     lapsDefault: 3,
     ...(() => {
       // City ring with PARALLEL walls: rounded-rect centreline + constant half-width
-      const cx = 1190, cy = 770;
+      // v43 long chase: ~1.7× ring vs v42 (~5.6k → ~9.5k wu lap)
+      const cx = 2000, cy = 1400;
       const halfW = 175;
-      const dense = roundedRectCenterline(cx, cy, 920, 560, 210, 22, 14);
+      const rw = 1560, rh = 950, rr = 350;
+      const dense = roundedRectCenterline(cx, cy, rw, rh, rr, 28, 16);
       // Mild pit bay: shove N straight centreline outward (parallel walls preserved)
+      const pitY = cy - rh + 40;
       for (const p of dense) {
-        if (p.y < cy - 520 && p.x > cx - 220 && p.x < cx + 220) {
-          const u = 1 - Math.abs(p.x - cx) / 220;
-          p.y -= 48 * Math.max(0, u);
+        if (p.y < pitY && p.x > cx - 360 && p.x < cx + 360) {
+          const u = 1 - Math.abs(p.x - cx) / 360;
+          p.y -= 72 * Math.max(0, u);
         }
       }
       // Mild SE hairpin: pull centreline inward at SE (still parallel ribbon)
       for (const p of dense) {
-        const dx = p.x - (cx + 620), dy = p.y - (cy + 380);
+        const dx = p.x - (cx + rw * 0.67), dy = p.y - (cy + rh * 0.68);
         const d = Math.hypot(dx, dy);
-        if (d < 280) {
-          const u = 1 - d / 280;
+        if (d < 420) {
+          const u = 1 - d / 420;
           p.x -= dx * 0.12 * u;
           p.y -= dy * 0.12 * u;
         }
@@ -338,7 +342,7 @@ export const TRACKS = [
       let best = Infinity;
       for (let i = 0; i < dense.length; i++) {
         const p = dense[i];
-        const score = Math.abs(p.y - (cy - 560)) + Math.abs(p.x - cx);
+        const score = Math.abs(p.y - (cy - rh)) + Math.abs(p.x - cx);
         if (score < best) { best = score; startIndex = i; }
       }
       const spawns = [];
@@ -357,11 +361,11 @@ export const TRACKS = [
         });
       }
       const checkpoints = [];
-      const cpN = 16;
+      const cpN = 22;
       for (let i = 0; i < cpN; i++) {
         const idx = Math.round((startIndex + (i / cpN) * dense.length) % dense.length);
         const p = dense[idx];
-        const n = dense[(idx + 4) % dense.length];
+        const n = dense[(idx + 5) % dense.length];
         const dx = n.x - p.x, dy = n.y - p.y;
         const len = Math.hypot(dx, dy) || 1;
         checkpoints.push({ x: p.x, y: p.y, nx: dx / len, ny: dy / len });
@@ -369,13 +373,13 @@ export const TRACKS = [
       const hairIdx = Math.round(dense.length * 0.55) % dense.length;
       const landmarks = [
         { id: 'start_finish', x: p0.x, y: p0.y, index: startIndex, kind: 'start' },
-        { id: 'pit', x: cx, y: cy - 560 - halfW - 30, kind: 'pit', index: startIndex },
+        { id: 'pit', x: cx, y: cy - rh - halfW - 30, kind: 'pit', index: startIndex },
         { id: 'hairpin', x: dense[hairIdx].x, y: dense[hairIdx].y, kind: 'chicane', index: hairIdx },
-        { id: 'corner_ne', x: cx + 920, y: cy - 400, kind: 'corner', index: Math.round(dense.length * 0.2) },
-        { id: 'corner_sw', x: cx - 900, y: cy + 500, kind: 'corner', index: Math.round(dense.length * 0.75) },
-        { id: 'corner_nw', x: cx - 900, y: cy - 400, kind: 'corner', index: Math.round(dense.length * 0.9) }
+        { id: 'corner_ne', x: cx + rw, y: cy - rh * 0.71, kind: 'corner', index: Math.round(dense.length * 0.2) },
+        { id: 'corner_sw', x: cx - rw * 0.98, y: cy + rh * 0.89, kind: 'corner', index: Math.round(dense.length * 0.75) },
+        { id: 'corner_nw', x: cx - rw * 0.98, y: cy - rh * 0.71, kind: 'corner', index: Math.round(dense.length * 0.9) }
       ];
-      return { outer, inner, line: dense, spawns, checkpoints, startIndex, landmarks, cpHitRadius: 260 };
+      return { outer, inner, line: dense, spawns, checkpoints, startIndex, landmarks, cpHitRadius: 280 };
     })()
   },
   {
@@ -386,16 +390,16 @@ export const TRACKS = [
     asphalt: '#221828',
     wall: '#ff2bd6',
     accent: '#00e8ff',
-    width: 2520,
-    height: 1680,
+    width: 3140,
+    height: 2100,
     lapsDefault: 3,
     ...(() => {
-      // Twin-apex peanut (~1.4×)
+      // Twin-apex peanut (~1.7× — lengthened ribbon, art identity freeze)
       const outer = [];
       const inner = [];
       const line = [];
-      const n = 128;
-      const S = 1.4;
+      const n = 144;
+      const S = 1.7;
       const cx = 900 * S, cy = 600 * S;
       for (let i = 0; i < n; i++) {
         const a = (i / n) * Math.PI * 2;
@@ -468,12 +472,12 @@ export const TRACKS = [
     asphalt: '#18241c',
     wall: '#ffe600',
     accent: '#00e8ff',
-    width: 2310,
-    height: 1470,
+    width: 2800,
+    height: 1780,
     lapsDefault: 3,
     ...(() => {
-      // Quay / warehouse / pinch (~1.4×)
-      const S = 1.4;
+      // Quay / warehouse / pinch (~1.7× — lengthened ribbon, art identity freeze)
+      const S = 1.7;
       const outerCorners = scalePts([
         { x: 55, y: 80 }, { x: 400, y: 55 }, { x: 750, y: 48 },
         { x: 980, y: 22 }, { x: 1100, y: 22 },

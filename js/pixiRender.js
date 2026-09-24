@@ -444,13 +444,15 @@ export async function createPixiRenderer(opts) {
           try { tex.source.style.addressMode = 'repeat'; } catch (_) {}
           const cssW = (typeof cssWidth === 'number' && cssWidth > 0) ? cssWidth : 1280;
           const cssH = (typeof cssHeight === 'number' && cssHeight > 0) ? cssHeight : 720;
-          const halfDiagWu = (0.5 * Math.hypot(cssW, cssH)) / 0.48;
-          const padWu = Math.max(1200, Math.ceil(halfDiagWu + 400)); // ≥ halfDiag + look-ahead (~1930 @ 1280x720)
-          // Cover full track AABB + pad, OR at least 2.5× viewport so follow never gaps
-          const twTrack = track.width || 2900;
-          const thTrack = track.height || 2100;
-          const viewCoverW = Math.ceil((cssW / 0.48) + padWu * 2);
-          const viewCoverH = Math.ceil((cssH / 0.48) + padWu * 2);
+          // v43: ZOOM_FAR 0.24 (~2× prior pull-out) — pad must cover wider frustum + look-ahead
+          const ZOOM_FAR_COVER = 0.24;
+          const halfDiagWu = (0.5 * Math.hypot(cssW, cssH)) / ZOOM_FAR_COVER;
+          const padWu = Math.max(2200, Math.ceil(halfDiagWu + 900)); // ≥ halfDiag + look-ahead (~3960 @ 1280x720)
+          // Cover full track AABB + pad, OR at least viewport+pad so follow never gaps
+          const twTrack = track.width || 4800;
+          const thTrack = track.height || 3500;
+          const viewCoverW = Math.ceil((cssW / ZOOM_FAR_COVER) + padWu * 2);
+          const viewCoverH = Math.ceil((cssH / ZOOM_FAR_COVER) + padWu * 2);
           const tw = Math.max(twTrack + padWu * 2, viewCoverW);
           const th = Math.max(thTrack + padWu * 2, viewCoverH);
           const ox = -((tw - twTrack) * 0.5);
@@ -580,9 +582,9 @@ export async function createPixiRenderer(opts) {
           try { tex.source.style.addressMode = 'repeat'; } catch (_) {}
           const cssW = (typeof cssWidth === 'number' && cssWidth > 0) ? cssWidth : 1280;
           const cssH = (typeof cssHeight === 'number' && cssHeight > 0) ? cssHeight : 720;
-          const margin = Math.max(1000, Math.ceil((0.5 * Math.hypot(cssW, cssH)) / 0.48));
-          const tw = (track.width || 2900) + margin * 2;
-          const th = (track.height || 2100) + margin * 2;
+          const margin = Math.max(1800, Math.ceil((0.5 * Math.hypot(cssW, cssH)) / 0.24));
+          const tw = (track.width || 4800) + margin * 2;
+          const th = (track.height || 3500) + margin * 2;
           const tile = new TilingSprite({ texture: tex, width: tw, height: th });
           tile.x = -margin;
           tile.y = -margin;

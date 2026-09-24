@@ -1,0 +1,1 @@
+Pixi Neon Loop ZOOM_FAR(~0.24) mid-straight: ~60.2 FPS over 2.01s (121 frames). Long-chase v43 padWu=3960 tileScale=0.14 dualLayer=true.
