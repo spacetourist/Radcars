@@ -67,7 +67,8 @@ function pointInPoly(px, py, poly) {
 }
 
 function isOnAsphalt(track, x, y) {
-  return pointInPoly(x, y, track.outer) && !pointInPoly(x, y, track.inner);
+  // XOR so the driveable ribbon is detected even if outer/inner were swapped
+  return pointInPoly(x, y, track.outer) !== pointInPoly(x, y, track.inner);
 }
 
 function perimeterNormals(poly) {

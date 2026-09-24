@@ -1,4 +1,4 @@
-const CACHE = 'radcars-v41-rooftop-soft';
+const CACHE = 'radcars-v42-track-clear';
 const ASSETS = [
   './',
   './index.html',

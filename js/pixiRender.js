@@ -48,6 +48,32 @@ function pathPoly(ctx, pts) {
   ctx.closePath();
 }
 
+
+/** White where city carpet may draw; asphalt ribbon punched out (destination-out evenodd). */
+function bakeCarpetMask(track, margin = 3200) {
+  const scale = 0.25;
+  const w = (track.width || 2900) + margin * 2;
+  const h = (track.height || 2100) + margin * 2;
+  const c = document.createElement('canvas');
+  c.width = Math.max(64, Math.ceil(w * scale));
+  c.height = Math.max(64, Math.ceil(h * scale));
+  const ctx = c.getContext('2d');
+  ctx.scale(scale, scale);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, w, h);
+  ctx.save();
+  ctx.translate(margin, margin);
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.beginPath();
+  pathPoly(ctx, track.outer);
+  pathPoly(ctx, track.inner);
+  ctx.fill('evenodd');
+  ctx.restore();
+  c._margin = margin;
+  return c;
+}
+
+
 function strokeLoop(ctx, pts) {
   if (!pts || !pts.length) return;
   ctx.beginPath();
@@ -479,6 +505,22 @@ export async function createPixiRenderer(opts) {
               dualOn = true;
             }
           }
+          
+          // Hard clip: carpet (lot + dual rooftop) only outside the asphalt ribbon
+          try {
+            const maskCanvas = bakeCarpetMask(track, Math.max(3200, padWu + 800));
+            const maskTex = Texture.from(maskCanvas);
+            const maskSpr = new Sprite(maskTex);
+            const mrg = maskCanvas._margin || 3200;
+            maskSpr.x = -mrg;
+            maskSpr.y = -mrg;
+            maskSpr.width = (track.width || 2900) + mrg * 2;
+            maskSpr.height = (track.height || 2100) + mrg * 2;
+            maskSpr._carpetMask = true;
+            groundLayer.addChild(maskSpr);
+            groundLayer.mask = maskSpr;
+          } catch (_) {}
+
           groundMode = urbanRooftop ? 'urbanRooftop' : 'urbanLot';
           groundFollow = true;
           groundPadWu = padWu;
@@ -576,6 +618,7 @@ export async function createPixiRenderer(opts) {
     const ox = cam.x - groundTileW * 0.5;
     const oy = cam.y - groundTileH * 0.5;
     for (const ch of groundLayer.children) {
+      if (ch._carpetMask) continue; // world-fixed asphalt punch
       ch.x = ox;
       ch.y = oy;
       // Scroll UVs so texture feels world-stable while sprite follows cam

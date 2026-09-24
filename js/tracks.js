@@ -27,7 +27,7 @@ function ovalPoints(cx, cy, rx, ry, n = 48) {
 
 /**
  * Build outer/inner walls as a constant-width ribbon around a centreline.
- * Normals point "left" of travel; +halfW = outer, -halfW = inner for CCW centreline.
+ * Parallel walls around centreline; outer/inner normalized so outer always encloses inner.
  */
 
 /** Closed rounded-rect centreline (straight samples + corner arcs). */
@@ -78,10 +78,19 @@ function roundedRectCenterline(cx, cy, rw, rh, radius, edgeN = 18, arcN = 10) {
   return pts;
 }
 
+function signedArea(poly) {
+  let a = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const p = poly[i], q = poly[(i + 1) % poly.length];
+    a += p.x * q.y - q.x * p.y;
+  }
+  return a * 0.5;
+}
+
 function offsetRibbon(centerline, halfW) {
   const n = centerline.length;
-  const outer = [];
-  const inner = [];
+  const sideA = [];
+  const sideB = [];
   for (let i = 0; i < n; i++) {
     const prev = centerline[(i - 1 + n) % n];
     const cur = centerline[i];
@@ -90,10 +99,17 @@ function offsetRibbon(centerline, halfW) {
     let ty = next.y - prev.y;
     const tlen = Math.hypot(tx, ty) || 1;
     tx /= tlen; ty /= tlen;
-    // Left normal (CCW centreline → outward for typical oval)
+    // Left normal of travel. For a CCW loop around the infield this points INWARD.
     const nx = -ty, ny = tx;
-    outer.push({ x: cur.x + nx * halfW, y: cur.y + ny * halfW });
-    inner.push({ x: cur.x - nx * halfW, y: cur.y - ny * halfW });
+    sideA.push({ x: cur.x + nx * halfW, y: cur.y + ny * halfW });
+    sideB.push({ x: cur.x - nx * halfW, y: cur.y - ny * halfW });
+  }
+  // Normalize: outer must be the larger enclosing loop (fixes CW/CCW sign flips
+  // that previously swapped walls on Neon Loop / Gridlock and let carpet stamp on asphalt).
+  let outer = sideB, inner = sideA;
+  if (Math.abs(signedArea(sideA)) > Math.abs(signedArea(sideB))) {
+    outer = sideA;
+    inner = sideB;
   }
   return { outer, inner };
 }
@@ -547,7 +563,8 @@ export function trackWallSegments(track) {
 export function isOnTrack(track, x, y) {
   const inOuter = pointInPolySimple(x, y, track.outer);
   const inInner = pointInPolySimple(x, y, track.inner);
-  return inOuter && !inInner;
+  // XOR: driveable ribbon between walls (order-safe if outer/inner ever swap)
+  return inOuter !== inInner;
 }
 
 function pointInPolySimple(px, py, poly) {

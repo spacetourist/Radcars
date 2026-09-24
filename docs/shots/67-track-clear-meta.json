@@ -1,0 +1,21 @@
+{
+  "fix": "track-clear-v42",
+  "rootCause": "offsetRibbon left-normal assigned outer/inner swapped on CCW Neon/Gridlock centreline so isOnAsphalt never matched the ribbon; cityfabric stamps painted on asphalt above the track bake.",
+  "sw": "radcars-v42-track-clear",
+  "fps": "Pixi Neon Loop ZOOM_FAR(~0.48) mid-straight: ~60.0 FPS over 2.02s (121 frames). Track-clear v42 padWu=1930 tileScale 0.14 dualLayer=True.",
+  "proofs": [
+    "docs/shots/67-neon-track-clear-race.png",
+    "docs/shots/67b-neon-track-clear-race-far.png",
+    "docs/shots/67c-neon-track-clear-grid-far.png",
+    "docs/shots/68-gridlock-track-clear-race.png",
+    "docs/shots/68b-gridlock-track-clear-race-far.png",
+    "docs/shots/68c-gridlock-track-clear-grid-far.png"
+  ],
+  "kept": [
+    "padWu FAR void coverage",
+    "dual-layer soft FAR city",
+    "pixi ?pixi=1 opt-in only",
+    "warehouseAfterScrub=0",
+    "Razor/Cargo identity freeze"
+  ]
+}
