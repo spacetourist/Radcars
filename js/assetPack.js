@@ -1230,6 +1230,41 @@ export function loadAssetPack() {
 
     pack.trackHints = (manifest && manifest.trackHints) || {};
 
+    // vintage-fast-v1: chroma-key tiny stamps; override cyan/pink/lime cars; expose props
+    pack.vintage = { cars: {}, props: {}, ready: false };
+    try {
+      const vMeta = manifest && manifest.packs && manifest.packs['vintage-fast-v1'];
+      if (vMeta && vMeta.assets) {
+        const vChroma = (vMeta.chroma || chromaDefault || '#FF00FF');
+        const vCars = Array.isArray(vMeta.assets.cars) ? vMeta.assets.cars : [];
+        const vProps = Array.isArray(vMeta.assets.props) ? vMeta.assets.props : [];
+        for (const rel of vCars) {
+          const img = await tryProcessed(rel, { keyColor: vChroma, maxEdge: 96 });
+          if (!img) continue;
+          const key = keyFromRel(rel); // cyan / pink / lime
+          pack.vintage.cars[key] = img;
+          pack.cars[key] = img; // prefer vintage cars on race path
+        }
+        for (const rel of vProps) {
+          const base = String(rel).split('/').pop().replace(/\.png$/i, '');
+          // skip kerb-stripe — procedural kerbs preferred
+          if (/kerb/i.test(base)) continue;
+          const img = await tryProcessed(rel, { keyColor: vChroma, maxEdge: 96 });
+          if (!img) continue;
+          const propKey = base.replace(/^scenery-/, '');
+          pack.vintage.props[propKey] = img;
+          // also mirror into scenery for stamp pickers
+          pack.scenery[propKey] = img;
+          pack.scenery['vintage-' + propKey] = img;
+        }
+        pack.vintage.ready = !!(Object.keys(pack.vintage.cars).length || Object.keys(pack.vintage.props).length);
+        pack.vintageName = 'vintage-fast-v1';
+        if (pack.vintage.ready) pack.name = 'vintage-fast-v1';
+      }
+    } catch (e) {
+      console.warn('[assetPack] vintage-fast-v1 load', e && e.message);
+    }
+
     const anyCar = Object.values(pack.cars).some(Boolean);
     const anyScenery = !!(warehouse || grandstand || grandstandLarge || tower || crowd || crowdDense || tyrewall || props || palms || billboard || crane || containers || cityblock || citystreet || cityblockB || citystreetB || cityblockC || citystreetC || cityfabricRow);
     pack.ready = !!(anyCar || anyScenery || skyline);
@@ -1292,7 +1327,12 @@ export function loadAssetPack() {
           skylineRel: bgRel,
           tower: !!tower,
           asphalt: !!asphalt,
-          bgRoles
+          bgRoles,
+          vintage: pack.vintage || null,
+          vintageReady: !!(pack.vintage && pack.vintage.ready),
+          vintageProps: pack.vintage && pack.vintage.props
+            ? Object.keys(pack.vintage.props)
+            : []
         };
       }
     } catch (_) {}

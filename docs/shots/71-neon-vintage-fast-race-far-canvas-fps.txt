@@ -1,0 +1,4 @@
+track=neon_loop renderer=canvas FORCED_ZOOM_FAR=0.24
+fps=59.5 zoom=0.24
+fabric=0 roadside=16
+mode={"track":"neon_loop","stamps":16,"rooftop":false,"fabric":false,"mode":"vintage-sprint","props":16}

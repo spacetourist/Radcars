@@ -1,4 +1,4 @@
-const CACHE = 'radcars-v43-long-chase';
+const CACHE = 'radcars-v44-vintage-fast';
 const ASSETS = [
   './',
   './index.html',
@@ -28,6 +28,16 @@ const ASSETS = [
   './js/pixiRender.js',
   './vendor/pixi.min.mjs',
   './assets/generated/manifest.json',
+  './assets/generated/vintage/car-cyan.png',
+  './assets/generated/vintage/car-pink.png',
+  './assets/generated/vintage/car-lime.png',
+  './assets/generated/vintage/barrier-tyre.png',
+  './assets/generated/vintage/cone.png',
+  './assets/generated/vintage/lamp.png',
+  './assets/generated/vintage/tree.png',
+  './assets/generated/vintage/billboard.png',
+  './assets/generated/vintage/chequer-gantry.png',
+  './assets/generated/vintage/kerb-stripe.png',
   './assets/generated/bg/bg-skyline-horizon.png',
   './assets/generated/cars/car-cyan.png',
   './assets/generated/cars/car-pink.png',

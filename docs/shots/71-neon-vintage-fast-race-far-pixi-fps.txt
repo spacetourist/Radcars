@@ -1,0 +1,6 @@
+track=neon_loop renderer=pixi
+fps=60.2 frames=151 dt=2.51s zoom=0.46950674092106387
+ground="vintageFlat"
+vintage={"track":"neon_loop","stamps":16,"rooftop":false,"fabric":false,"mode":"vintage-sprint","props":16}
+stamps={"tower":0,"billboard":4,"crane":0,"containers":0,"cityblock":0,"citystreet":0,"cityfabric":0,"cityAccents":0,"warehouse":0,"warehouseAfterScrub":0,"far":0,"mid":16,"near":0,"farRaw":0,"midRaw":16,"nearRaw":0,"caps":{"mid":16,"far":0,"near":4,"fabricUncapped":false,"cityAccentCap":0,"vintageFast":true},"roadsideCap":16,"roadsideTotal":16,"mode":"vintage-sprint"}
+pack={"pack":"vintage-fast-v1","vintageReady":true,"vintageProps":["barrier-tyre","cone","lamp","tree","billboard","chequer-gantry"]}

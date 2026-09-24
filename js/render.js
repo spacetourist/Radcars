@@ -251,6 +251,8 @@ export function createRenderer(canvas) {
   }
 
   function maybeFillAsphaltTexture(ctx, track) {
+    // vintage-sprint: flat asphalt only — no grit tile
+    if (track && (track.id === 'neon_loop' || track.id === 'gridlock' || track.asphalt === '#2a2a32')) return;
     const pack = getAssetPack();
     if (!pack || !pack.ready || !pack.asphalt) return;
     if (!asphaltPatternTried) {
@@ -311,34 +313,42 @@ export function createRenderer(canvas) {
     ctx.setLineDash([]);
     ctx.restore();
 
-    // Warm asphalt plate
+    // Asphalt plate — flat vintage #2a2a32 on Neon/Gridlock; gradient elsewhere
+    const vintageFast = track.id === 'neon_loop' || track.id === 'gridlock' || track.asphalt === '#2a2a32';
     ctx.beginPath();
     pathPoly(ctx, track.outer);
-    const asphaltGrad = ctx.createLinearGradient(0, 0, track.width, track.height);
-    asphaltGrad.addColorStop(0, track.asphalt);
-    asphaltGrad.addColorStop(0.5, shade(track.asphalt, -8));
-    asphaltGrad.addColorStop(1, shade(track.asphalt, 4));
-    ctx.fillStyle = asphaltGrad;
-    ctx.fill();
+    if (vintageFast) {
+      ctx.fillStyle = track.asphalt || '#2a2a32';
+      ctx.fill();
+    } else {
+      const asphaltGrad = ctx.createLinearGradient(0, 0, track.width, track.height);
+      asphaltGrad.addColorStop(0, track.asphalt);
+      asphaltGrad.addColorStop(0.5, shade(track.asphalt, -8));
+      asphaltGrad.addColorStop(1, shade(track.asphalt, 4));
+      ctx.fillStyle = asphaltGrad;
+      ctx.fill();
+    }
 
-    // Optional pack asphalt tile — very subtle; skip if muddy at race zoom
+    // Optional pack asphalt tile — skipped on vintage-sprint
     maybeFillAsphaltTexture(ctx, track);
 
     ctx.save();
     ctx.beginPath();
     pathPoly(ctx, track.outer);
     ctx.clip();
-    // Subtle asphalt grit
-    ctx.fillStyle = 'rgba(255,255,255,0.028)';
-    for (let y = 0; y < track.height; y += 17) {
-      for (let x = (y % 34); x < track.width; x += 23) {
-        ctx.fillRect(x, y, 1.5, 1.5);
+    // Subtle asphalt grit (skip on vintage — flat arcade look)
+    if (!vintageFast) {
+      ctx.fillStyle = 'rgba(255,255,255,0.028)';
+      for (let y = 0; y < track.height; y += 17) {
+        for (let x = (y % 34); x < track.width; x += 23) {
+          ctx.fillRect(x, y, 1.5, 1.5);
+        }
       }
-    }
-    ctx.fillStyle = 'rgba(0,0,0,0.045)';
-    for (let y = 8; y < track.height; y += 29) {
-      for (let x = 11; x < track.width; x += 31) {
-        ctx.fillRect(x, y, 2, 1);
+      ctx.fillStyle = 'rgba(0,0,0,0.045)';
+      for (let y = 8; y < track.height; y += 29) {
+        for (let x = 11; x < track.width; x += 31) {
+          ctx.fillRect(x, y, 2, 1);
+        }
       }
     }
 
@@ -469,12 +479,18 @@ export function createRenderer(canvas) {
     }
   }
 
-  /** Industrial infield: parking plate, seams, low yard marks — loop sits in a yard. */
+  /** Infield fill — vintage flat grass on Neon/Gridlock; industrial yard elsewhere. */
   function drawInfieldYard(ctx, track) {
-    const plate = '#3e4856';
-    const plateHi = '#505a6a';
+    const vintageFast = track.id === 'neon_loop' || track.id === 'gridlock' || track.asphalt === '#2a2a32';
     ctx.beginPath();
     pathPoly(ctx, track.inner);
+    if (vintageFast) {
+      ctx.fillStyle = '#1e3a28';
+      ctx.fill();
+      return;
+    }
+    const plate = '#3e4856';
+    const plateHi = '#505a6a';
     const g = ctx.createRadialGradient(
       track.width * 0.5, track.height * 0.48, 40,
       track.width * 0.5, track.height * 0.5, Math.max(track.width, track.height) * 0.35
@@ -499,66 +515,15 @@ export function createRenderer(canvas) {
     for (let y = 0; y < track.height; y += 64) {
       ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(track.width, y); ctx.stroke();
     }
-
-    // Parking bay chevrons / stalls (faint)
-    ctx.strokeStyle = 'rgba(255,230,0,0.18)';
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([10, 14]);
-    const cx = track.width * 0.5, cy = track.height * 0.5;
-    for (let row = -2; row <= 2; row++) {
-      const y = cy + row * 48;
-      ctx.beginPath();
-      ctx.moveTo(cx - 160, y);
-      ctx.lineTo(cx + 160, y);
-      ctx.stroke();
+    ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+    for (let x = 0; x < track.width; x += 256) {
+      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, track.height); ctx.stroke();
     }
-    ctx.setLineDash([]);
-    // Stall ticks
-    ctx.strokeStyle = 'rgba(255,255,255,0.14)';
-    ctx.lineWidth = 1.5;
-    for (let col = -3; col <= 3; col++) {
-      const x = cx + col * 42;
-      ctx.beginPath();
-      ctx.moveTo(x, cy - 110);
-      ctx.lineTo(x, cy + 110);
-      ctx.stroke();
+    for (let y = 0; y < track.height; y += 256) {
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(track.width, y); ctx.stroke();
     }
-
-    // Worn patches
-    ctx.fillStyle = 'rgba(0,0,0,0.12)';
-    ctx.beginPath(); ctx.ellipse(cx - 70, cy + 30, 55, 28, 0.3, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.ellipse(cx + 90, cy - 40, 40, 22, -0.2, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = 'rgba(255,255,255,0.03)';
-    ctx.beginPath(); ctx.ellipse(cx + 20, cy + 60, 70, 18, 0.1, 0, Math.PI * 2); ctx.fill();
-
-    // Hazard tape strips (Gridlock vocabulary)
-    ctx.strokeStyle = 'rgba(255,230,0,0.14)';
-    ctx.lineWidth = 3;
-    ctx.setLineDash([8, 8]);
-    ctx.strokeStyle = '#1a1a1a';
-    ctx.beginPath();
-    ctx.moveTo(cx - 130, cy - 90);
-    ctx.lineTo(cx - 40, cy - 90);
-    ctx.stroke();
-    ctx.strokeStyle = 'rgba(255,230,0,0.35)';
-    ctx.beginPath();
-    ctx.moveTo(cx - 130, cy - 90);
-    ctx.lineTo(cx - 40, cy - 90);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    // Low service hut silhouette marks (identity colours)
-    ctx.fillStyle = 'rgba(30, 36, 46, 0.85)';
-    ctx.fillRect(cx - 30, cy - 20, 70, 36);
-    ctx.fillStyle = 'rgba(255, 190, 90, 0.10)';
-    ctx.fillRect(cx - 24, cy - 12, 16, 10);
-    ctx.fillRect(cx + 4, cy - 12, 16, 10);
-    ctx.fillStyle = 'rgba(255, 170, 70, 0.12)';
-    ctx.fillRect(cx - 30, cy - 22, 70, 2);
-
-    // Grit
-    ctx.fillStyle = 'rgba(255,255,255,0.035)';
-    for (let y = 40; y < track.height; y += 28) {
+    for (let y = 12; y < track.height; y += 29) {
       for (let x = 40 + (y % 40); x < track.width; x += 37) {
         ctx.fillRect(x, y, 1.5, 1.5);
       }
@@ -795,7 +760,7 @@ export function createRenderer(canvas) {
         ctx.translate(x, y);
         ctx.rotate(ang);
         ctx.globalAlpha = 0.82 + 0.18 * intensity;
-        ctx.fillStyle = light ? '#f6f6f6' : '#c8102e';
+        ctx.fillStyle = light ? '#e8e8e8' : '#e02020';
         ctx.fillRect(-7.5, -4.6, 15, 9.2);
         // Soft shadow edge so kerbs pop off asphalt
         ctx.fillStyle = 'rgba(0,0,0,0.28)';

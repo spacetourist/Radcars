@@ -104,13 +104,15 @@ function themeFor(track) {
   const wall = track.wall || '';
   if (id === 'gridlock') {
     return {
-      skyTop: '#070a12', skyMid: '#0c1424', skyBot: '#141a22',
-      ground: '#121410', groundHi: '#1c1c16',
-      neonA: sodiumA, neonB: sodiumB, neonC: wall || '#b8ff00', // lime tip sparse
+      skyTop: '#050508', skyMid: '#0c0c12', skyBot: '#0c0c12',
+      ground: '#0c0c12', groundHi: '#1e3a28',
+      neonA: sodiumA, neonB: sodiumB, neonC: wall || '#b8ff00',
       brick: '#2a3038', brickHi: '#3a4250', metal: '#1a1e26',
       window: '#1a2838', glowWin: sodiumB,
       identity: wall || '#b8ff00',
-      skyWash: '#ffc070'
+      skyWash: '#ffc070',
+      vintageFast: true,
+      infield: '#1e3a28', outfield: '#0c0c12', asphalt: '#2a2a32'
     };
   }
   if (id === 'razor_hairpin') {
@@ -139,12 +141,14 @@ function themeFor(track) {
     };
   }
   return {
-    skyTop: '#061018', skyMid: '#0c1a2c', skyBot: '#1a1820',
-    ground: '#161410', groundHi: '#242018',
+    skyTop: '#050508', skyMid: '#0c0c12', skyBot: '#0c0c12',
+    ground: '#0c0c12', groundHi: '#1e3a28',
     neonA: sodiumA, neonB: sodiumB, neonC: sodiumC,
     brick: '#262c36', brickHi: '#363c48', metal: '#1a1e28',
     window: '#1a2434', glowWin: '#ffb060',
-    identity: wall || '#ff2bd6'
+    identity: wall || '#ff2bd6',
+    vintageFast: true,
+    infield: '#1e3a28', outfield: '#0c0c12', asphalt: '#2a2a32'
   };
 }
 
@@ -1191,34 +1195,33 @@ export function getSceneryDensityProfile(track) {
     label: 'reference'
   };
   if (id === 'gridlock') {
-    // A.1 city circuit: cityblock + citystreet + billboards only; warehouseBias 0
+    // vintage-sprint: flat fills, no city carpet / fabric / rooftop (perf pivot)
     return {
       ...base,
-      beadOut: 220,
-      beadIn: 240,
-      billboardCap: 8,
-      billboardBias: 0.14,
+      beadOut: 99999,
+      beadIn: 99999,
+      billboardCap: 0,
+      billboardBias: 0,
       warehouseScale: [0.68, 1.05],
       warehouseBias: 0,
-      standBias: 0.05,
-      infieldYardN: 8,
-      palmChance: 0.02,
-      lampChance: 0.4,
-      urbanSkyline: true,
-      cityCircuit: true,
-      cityfabricBias: 0.88,
-      cityblockBias: 0.06,
-      citystreetBias: 0.05,
-      billboardBias: 0,
-      billboardCap: 0,
-      standsOnlyAtSF: true, // standLarge only at S/F
-      infieldGapMul: 1.45,
-      midCap: 40,
-      farCap: 16,
-      nearCap: 18,
-      cityAccentCap: 10,
-      infieldYardN: 4,
-      label: 'city_circuit_gridlock'
+      standBias: 0,
+      infieldYardN: 0,
+      palmChance: 0,
+      lampChance: 0,
+      urbanSkyline: false,
+      cityCircuit: false,
+      cityfabricBias: 0,
+      cityblockBias: 0,
+      citystreetBias: 0,
+      towerCap: 0,
+      standsOnlyAtSF: true,
+      infieldGapMul: 1,
+      midCap: 0,
+      farCap: 0,
+      nearCap: 0,
+      cityAccentCap: 0,
+      vintageFast: true,
+      label: 'vintage_sprint_gridlock'
     };
   }
   if (id === 'razor_hairpin') {
@@ -1258,29 +1261,29 @@ export function getSceneryDensityProfile(track) {
       label: 'industrial_quay'
     };
   }
-  // neon_loop — A.1 city circuit (no warehouses; cityblock/citystreet/billboards)
+  // neon_loop — vintage-sprint flat arcade (city carpet paused)
   return {
     ...base,
-    beadOut: 210,
-    beadIn: 230,
-    infieldYardN: 10,
-    palmChance: 0.06,
-    standBias: 0.12,
+    beadOut: 99999,
+    beadIn: 99999,
+    infieldYardN: 0,
+    palmChance: 0,
+    lampChance: 0,
+    standBias: 0,
     warehouseBias: 0,
-    billboardBias: 0.14,
-    billboardCap: 7,
-    cityCircuit: true,
-    cityfabricBias: 0.88,
-    cityblockBias: 0.06,
-    citystreetBias: 0.05,
     billboardBias: 0,
     billboardCap: 0,
-    midCap: 40,
-    farCap: 16,
-    nearCap: 18,
-    cityAccentCap: 10,
-    infieldYardN: 4,
-    label: 'city_circuit_neon'
+    towerCap: 0,
+    cityCircuit: false,
+    cityfabricBias: 0,
+    cityblockBias: 0,
+    citystreetBias: 0,
+    midCap: 0,
+    farCap: 0,
+    nearCap: 0,
+    cityAccentCap: 0,
+    vintageFast: true,
+    label: 'vintage_sprint_neon'
   };
 }
 
@@ -1295,6 +1298,126 @@ export function buildTrackScenery(track) {
   const far = [];
   const mid = [];
   const near = [];
+
+  // vintage-sprint: skip ALL heavy stamp / fabric / rooftop paths — flat fills + sparse vintage props
+  if (profile.vintageFast) {
+    const start = track.spawns && track.spawns[0];
+    const startX = start ? start.x : track.width * 0.5;
+    const startY = start ? start.y : track.height * 0.2;
+    const ground = buildVintageGroundPlate(track, theme);
+    const skyline = null; // no pack skyline cost on race path
+    const midV = [];
+    const nearV = [];
+    // Sparse roadside from vintage-fast-v1 (hard cap ≤16 world stamps)
+    const ROAD_CAP = 16;
+    try {
+      const pack = getAssetPack();
+      const props = (pack && pack.vintage && pack.vintage.props) ? pack.vintage.props : null;
+      if (props && Object.keys(props).length) {
+        const id = track.id || '';
+        // Identity: Neon prefers tree; Gridlock prefers lamp; shared tyre/cone/billboard
+        const pool = [];
+        if (id === 'gridlock') {
+          if (props.lamp) pool.push(['lamp', props.lamp]);
+          if (props.cone) pool.push(['cone', props.cone]);
+          if (props['barrier-tyre']) pool.push(['barrier-tyre', props['barrier-tyre']]);
+          if (props.billboard) pool.push(['billboard', props.billboard]);
+        } else {
+          if (props.tree) pool.push(['tree', props.tree]);
+          if (props.cone) pool.push(['cone', props.cone]);
+          if (props['barrier-tyre']) pool.push(['barrier-tyre', props['barrier-tyre']]);
+          if (props.billboard) pool.push(['billboard', props.billboard]);
+        }
+        const gantry = props['chequer-gantry'] || null;
+        const edgesV = perimeterNormals(track.outer);
+        let placed = 0;
+        // Place along outer wall at large spacing
+        let acc = 0;
+        const spacing = 520;
+        let nextAt = spacing * 0.4;
+        let pi = 0;
+        for (const e of edgesV) {
+          if (placed >= ROAD_CAP) break;
+          const end = acc + e.len;
+          while (nextAt <= end + 1e-6 && placed < ROAD_CAP) {
+            const tt = e.len > 0 ? (nextAt - acc) / e.len : 0.5;
+            const bx = e.ax + (e.bx - e.ax) * tt;
+            const by = e.ay + (e.by - e.ay) * tt;
+            const x = bx + e.nx * (42 + rnd() * 28);
+            const y = by + e.ny * (42 + rnd() * 28);
+            nextAt += spacing;
+            if (isOnAsphalt(track, x, y)) continue;
+            if (!pool.length) break;
+            const [kind, img] = pool[pi % pool.length];
+            pi++;
+            const scale = kind === 'billboard' ? 1.1 : (kind === 'tree' || kind === 'lamp' ? 1.0 : 0.85);
+            const w = (img.width || 32) * scale;
+            const h = (img.height || 32) * scale;
+            midV.push({
+              img, x, y, w, h, scale, kind, sortY: y + h * 0.45, layer: 'mid'
+            });
+            placed++;
+          }
+          acc = end;
+        }
+        // Start/finish gantry once
+        if (gantry && placed < ROAD_CAP) {
+          const gx = startX + 10;
+          const gy = startY - 70;
+          if (!isOnAsphalt(track, gx, gy)) {
+            const scale = 1.2;
+            const w = (gantry.width || 64) * scale;
+            const h = (gantry.height || 48) * scale;
+            nearV.push({
+              img: gantry, x: gx, y: gy, w, h, scale,
+              kind: 'chequer-gantry', sortY: gy + h * 0.5, layer: 'near'
+            });
+            placed++;
+          }
+        }
+      }
+    } catch (_) {}
+    const stampCounts = {
+      tower: 0, billboard: midV.filter((i) => i.kind === 'billboard').length,
+      crane: 0, containers: 0,
+      cityblock: 0, citystreet: 0, cityfabric: 0, cityAccents: 0,
+      warehouse: 0, warehouseAfterScrub: 0,
+      far: 0, mid: midV.length, near: nearV.length,
+      farRaw: 0, midRaw: midV.length, nearRaw: nearV.length,
+      caps: { mid: ROAD_CAP, far: 0, near: 4, fabricUncapped: false, cityAccentCap: 0, vintageFast: true },
+      roadsideCap: ROAD_CAP,
+      roadsideTotal: midV.length + nearV.length,
+      mode: 'vintage-sprint'
+    };
+    try {
+      if (typeof window !== 'undefined') {
+        window.__RAD_VINTAGE_FAST__ = {
+          track: track.id,
+          stamps: midV.length + nearV.length,
+          rooftop: false, fabric: false, mode: 'vintage-sprint',
+          props: stampCounts.roadsideTotal
+        };
+      }
+    } catch (_) {}
+    return {
+      trackId: track.id,
+      theme,
+      profile,
+      sprites,
+      far: [],
+      mid: midV,
+      near: nearV,
+      nearThin: nearV.slice(0, 4),
+      skyline,
+      ground,
+      startX,
+      startY,
+      beadAnchors: [],
+      beadSpacing: profile.beadOut,
+      beadSpacingIn: profile.beadIn,
+      stampCounts
+    };
+  }
   const edges = perimeterNormals(track.outer);
   // When pack art is ready, cut remaining procedural neon-framed kinds so they don't dominate
   const packReady = !!(getAssetPack() && getAssetPack().ready);
@@ -1405,7 +1528,7 @@ export function buildTrackScenery(track) {
   let cityAccentCount = 0;
   const CITY_ACCENT_CAP = (profile.cityAccentCap != null ? profile.cityAccentCap : 10);
   function placeCityFabricRing() {
-    if (!profile.cityCircuit) return;
+    if (!profile.cityCircuit || profile.vintageFast) return;
     const cfPool = (sprites.buildings.cityfabricMd && sprites.buildings.cityfabricMd.length)
       ? sprites.buildings.cityfabricMd
       : (sprites.buildings.cityfabric || []);
@@ -1505,7 +1628,7 @@ export function buildTrackScenery(track) {
 
   /** Sparse outfield fabric carpet — extends readable city past ring cliff (FAR lock). */
   function placeCityFabricCarpet() {
-    if (!profile.cityCircuit) return;
+    if (!profile.cityCircuit || profile.vintageFast) return;
     const cfPool = (sprites.buildings.cityfabricMd && sprites.buildings.cityfabricMd.length)
       ? sprites.buildings.cityfabricMd
       : (sprites.buildings.cityfabric || []);
@@ -2888,7 +3011,39 @@ function buildSkylineStrip(theme, track) {
   return canvas;
 }
 
+function buildVintageGroundPlate(track, theme) {
+  // Cheap flat outfield + infield — no rooftop/lot tiling, no dual patterns
+  const margin = 400;
+  const sw = Math.ceil((track.width + margin * 2) / 2);
+  const sh = Math.ceil((track.height + margin * 2) / 2);
+  const { canvas, ctx } = makeCanvas(sw, sh);
+  const outfield = (theme && theme.outfield) || '#0c0c12';
+  const infield = (theme && theme.infield) || '#1e3a28';
+  ctx.fillStyle = outfield;
+  ctx.fillRect(0, 0, sw, sh);
+  // Infield (inside inner kerb) in plate space
+  if (track.inner && track.inner.length) {
+    ctx.save();
+    ctx.translate(margin / 2, margin / 2);
+    ctx.scale(0.5, 0.5);
+    ctx.beginPath();
+    const pts = track.inner;
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.closePath();
+    ctx.fillStyle = infield;
+    ctx.fill();
+    ctx.restore();
+  }
+  canvas._margin = margin;
+  canvas._scale = 2;
+  canvas._vintageFast = true;
+  return canvas;
+}
+
 function buildGroundPlate(track, theme) {
+  if (theme && theme.vintageFast) return buildVintageGroundPlate(track, theme);
+
   // Wide plate: infield + outfield + beyond stamp ring — FAR lock pad ≥ ~1000wu
   const margin = 1100;
   const sw = Math.ceil((track.width + margin * 2) / 2);
@@ -3027,6 +3182,12 @@ function buildGroundPlate(track, theme) {
 /** Draw screen-space sky + parallax skyline behind the world. */
 export function drawArenaBackground(ctx, scenery, cam, W, H) {
   const theme = scenery.theme;
+  // vintage-sprint: solid void — no pack skyline fill-rate cost
+  if ((scenery.profile && scenery.profile.vintageFast) || (theme && theme.vintageFast)) {
+    ctx.fillStyle = (theme && theme.outfield) || '#0c0c12';
+    ctx.fillRect(0, 0, W, H);
+    return;
+  }
   const pack = getAssetPack();
   const packSky = (pack && pack.ready && pack.skyline) ? pack.skyline : null;
 
@@ -3127,7 +3288,14 @@ export function drawGroundPlate(ctx, scenery, track, zoom = 1) {
   if (!g) return;
   const margin = g._margin || 200;
   const scale = g._scale || 2;
-  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingEnabled = !(g._vintageFast);
+  if (g._vintageFast || (scenery.profile && scenery.profile.vintageFast)) {
+    ctx.save();
+    ctx.globalAlpha = 1;
+    ctx.drawImage(g, -margin, -margin, g.width * scale, g.height * scale);
+    ctx.restore();
+    return;
+  }
   // Overview: plate still reads; race: stronger skyline peek through plate (v23)
   const z = zoom || 1;
   // A.1: stronger plate so stamps sit on continuous ground (less black void)
@@ -3194,23 +3362,26 @@ function drawLayer(ctx, items, cam, W, H, zoom, pad, visCap) {
 }
 
 export function drawSceneryFar(ctx, scenery, cam, W, H, zoom) {
-  drawLayer(ctx, scenery.far, cam, W, H, zoom, 160, 10);
+  const vf = !!(scenery.profile && scenery.profile.vintageFast);
+  drawLayer(ctx, scenery.far, cam, W, H, zoom, 160, vf ? 0 : 10);
 }
 
 export function drawSceneryMid(ctx, scenery, cam, W, H, zoom) {
-  drawLayer(ctx, scenery.mid, cam, W, H, zoom, 120, 18);
+  const vf = !!(scenery.profile && scenery.profile.vintageFast);
+  drawLayer(ctx, scenery.mid, cam, W, H, zoom, 120, vf ? 16 : 18);
 }
 
 export function drawSceneryNear(ctx, scenery, cam, W, H, zoom) {
   // Phase A: at low zoom drop most near stamps (use nearThin if present)
   const z = zoom != null ? zoom : ((cam && cam.zoom) || 1);
+  const vf = !!(scenery.profile && scenery.profile.vintageFast);
   let items = scenery.near;
-  let visCap = 12;
+  let visCap = vf ? 4 : 12;
   if (z < 0.7) {
     items = scenery.nearThin || scenery.near;
-    visCap = 5;
+    visCap = vf ? 2 : 5;
   } else if (z < 0.85) {
-    visCap = 8;
+    visCap = vf ? 3 : 8;
   }
   drawLayer(ctx, items, cam, W, H, zoom, 80, visCap);
 }

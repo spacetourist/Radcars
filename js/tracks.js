@@ -290,9 +290,9 @@ export const TRACKS = [
     id: 'neon_loop',
     name: 'Neon Loop',
     difficulty: 1,
-    // Warm asphalt + deep blue-grey industrial night (less pure black)
-    bg: '#0c1420',
-    asphalt: '#1a222c',
+    // vintage-sprint flat palette (perf pivot — see level-design-vintage-fast-v1)
+    bg: '#0c0c12',
+    asphalt: '#2a2a32',
     wall: '#00e8ff',
     accent: '#ff2bd6',
     width: 4800,
@@ -304,8 +304,8 @@ export const TRACKS = [
     id: 'gridlock',
     name: 'Gridlock Circuit',
     difficulty: 2,
-    bg: '#0c1018',
-    asphalt: '#1a1e28',
+    bg: '#0c0c12',
+    asphalt: '#2a2a32',
     wall: '#b8ff00', // lime identity
     accent: '#ff8a00',
     width: 4000,
