@@ -54,34 +54,8 @@ html, body {
     linear-gradient(180deg, #0a0b10 0%, #050608 100%);
 }
 
-#menu-backdrop {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 3; /* above idle canvas, below #ui */
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.35s ease;
-}
-#menu-backdrop.visible { opacity: 1; }
 
-#pixi-game {
-  display: block;
-  position: relative;
-  z-index: 2;
-  max-width: 100%;
-  max-height: 100%;
-  background: #050608;
-  image-rendering: auto;
-  transform: translateZ(0);
-}
 
-.rad-pixi-hidden {
-  /* Canvas2D kept for layout/resize math while Pixi draws */
-  opacity: 0 !important;
-  pointer-events: none !important;
-}
 
 #game {
   display: block;
@@ -438,7 +412,7 @@ html, body {
   letter-spacing: 0.04em;
 }
 .hud-left, .hud-right { display: flex; flex-wrap: wrap; gap: 2px; align-items: center; }
-.hud-right { justify-content: flex-end; }
+.hud-right { justify-content: flex-end; margin-right: 58px; }
 .hud .pill-lap {
   background: linear-gradient(180deg, #3a3428, #1a1610);
   border-color: #e8d8b0;
@@ -577,8 +551,8 @@ html, body {
   text-transform: uppercase;
 }
 
-/* Right-thumb cluster (landscape): GAS primary lower-right, FIRE above,
-   BRK/N2O smaller inward stack so they don't fight gas/fire. */
+/* Right-thumb cluster (landscape): GAS lower-right, BRK inward.
+*/
 .tc-right {
   pointer-events: none;
   position: absolute;
@@ -603,22 +577,6 @@ html, body {
   border-color: var(--lime);
   box-shadow: 0 0 20px rgba(184, 255, 0, 0.45);
 }
-.tc-fire {
-  width: 86px; height: 86px;
-  right: max(18px, env(safe-area-inset-right, 0px));
-  bottom: calc(16px + env(safe-area-inset-bottom, 0px) + 118px);
-  border-radius: 50%;
-  border-color: rgba(255, 138, 0, 0.75);
-  color: var(--orange);
-  background: rgba(50, 24, 10, 0.7);
-  font-size: 0.9rem;
-  box-shadow: 0 0 16px rgba(255, 138, 0, 0.28), 0 4px 14px rgba(0,0,0,0.45);
-}
-.tc-fire.active, .tc-fire:active {
-  background: rgba(220, 100, 0, 0.55);
-  border-color: var(--orange);
-  box-shadow: 0 0 20px rgba(255, 138, 0, 0.5);
-}
 .tc-brake {
   width: 58px; height: 58px;
   right: calc(14px + env(safe-area-inset-right, 0px) + 122px);
@@ -628,16 +586,6 @@ html, body {
   color: #ffb0b8;
   font-size: 0.7rem;
   opacity: 0.92;
-}
-.tc-nitro {
-  width: 54px; height: 54px;
-  right: calc(14px + env(safe-area-inset-right, 0px) + 126px);
-  bottom: calc(22px + env(safe-area-inset-bottom, 0px) + 70px);
-  border-radius: 50%;
-  border-color: rgba(255, 43, 214, 0.55);
-  color: #ffb0f0;
-  font-size: 0.68rem;
-  opacity: 0.9;
 }
 .tc-pause {
   top: max(10px, env(safe-area-inset-top, 0px));
@@ -667,18 +615,9 @@ html, body {
   .tc-accel {
     width: 96px; height: 96px;
   }
-  .tc-fire {
-    width: 76px; height: 76px;
-    bottom: calc(14px + env(safe-area-inset-bottom, 0px) + 106px);
-  }
   .tc-brake {
     width: 52px; height: 52px;
     right: calc(12px + env(safe-area-inset-right, 0px) + 108px);
-  }
-  .tc-nitro {
-    width: 48px; height: 48px;
-    right: calc(12px + env(safe-area-inset-right, 0px) + 112px);
-    bottom: calc(18px + env(safe-area-inset-bottom, 0px) + 62px);
   }
 }
 
@@ -693,19 +632,10 @@ html, body {
     width: 88px; height: 88px;
     bottom: 10px;
   }
-  .tc-fire {
-    width: 72px; height: 72px;
-    bottom: calc(10px + 96px);
-  }
   .tc-brake {
     width: 48px; height: 48px;
     bottom: 14px;
     right: calc(12px + env(safe-area-inset-right, 0px) + 100px);
-  }
-  .tc-nitro {
-    width: 46px; height: 46px;
-    bottom: calc(14px + 56px);
-    right: calc(12px + env(safe-area-inset-right, 0px) + 104px);
   }
 }
 

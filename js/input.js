@@ -3,12 +3,7 @@ export function createInput() {
     steer: 0,
     accel: false,
     brake: false,
-    fire: false,
-    firePressed: false,
-    nitro: false,
-    nitroPressed: false,
     pausePressed: false,
-    weaponCycle: 0,
     left: false,
     right: false,
     /** Absolute world heading from radial pad (radians); only while aimActive */
@@ -34,16 +29,12 @@ export function createInput() {
 
   function onKeyDown(e) {
     keys.add(e.key);
-    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' ', 'a', 'A', 'd', 'D', 'w', 'W', 's', 'S'].includes(e.key)) {
+    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'a', 'A', 'd', 'D', 'w', 'W', 's', 'S'].includes(e.key)) {
       e.preventDefault();
     }
     if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') state.accel = true;
     if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') state.brake = true;
-    if (e.key === ' ' || e.key === 'Enter') { if (!e.repeat) state.firePressed = true; state.fire = true; }
-    if (e.key === 'n' || e.key === 'N' || e.key === 'Shift') { if (!e.repeat) state.nitroPressed = true; }
     if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') { if (!e.repeat) state.pausePressed = true; }
-    if (e.key === 'q' || e.key === 'Q') state.weaponCycle = -1;
-    if (e.key === 'e' || e.key === 'E') state.weaponCycle = 1;
     syncSteer();
   }
 
@@ -51,7 +42,6 @@ export function createInput() {
     keys.delete(e.key);
     if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') state.accel = keys.has('ArrowUp') || keys.has('w') || keys.has('W');
     if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') state.brake = keys.has('ArrowDown') || keys.has('s') || keys.has('S');
-    if (e.key === ' ' || e.key === 'Enter') state.fire = false;
     syncSteer();
   }
 
@@ -89,13 +79,6 @@ export function createInput() {
       case 'right': state.right = down; syncSteer(); break;
       case 'accel': state.accel = down; break;
       case 'brake': state.brake = down; break;
-      case 'fire':
-        state.fire = down;
-        if (down) state.firePressed = true;
-        break;
-      case 'nitro':
-        if (down) state.nitroPressed = true;
-        break;
       case 'pause':
         if (down) state.pausePressed = true;
         break;
@@ -203,15 +186,9 @@ export function createInput() {
       aimAngle: state.aimActive ? state.aimAngle : null,
       accel: state.accel,
       brake: state.brake,
-      fire: state.firePressed,
-      nitro: state.nitroPressed,
-      pause: state.pausePressed,
-      weaponCycle: state.weaponCycle
+      pause: state.pausePressed
     };
-    state.firePressed = false;
-    state.nitroPressed = false;
     state.pausePressed = false;
-    state.weaponCycle = 0;
     return out;
   }
 

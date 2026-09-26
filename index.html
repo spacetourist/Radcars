@@ -22,28 +22,19 @@
     <canvas id="game"></canvas>
     <div id="ui"></div>
     <div id="touch-controls" class="hidden">
-      <div class="tc-aim-pad" id="aim-pad" aria-label="Aim direction">
+      <div class="tc-aim-pad" id="aim-pad" aria-label="Steering direction">
         <div class="tc-aim-ring"></div>
         <div class="tc-aim-cross"></div>
         <div class="tc-aim-knob" id="aim-knob"></div>
-        <div class="tc-aim-label">AIM</div>
+        <div class="tc-aim-label">STEER</div>
       </div>
-      <div class="tc-right" aria-label="Throttle and weapons">
+      <div class="tc-right" aria-label="Throttle and brake">
         <button type="button" id="btn-accel" class="tc-btn tc-accel" data-action="accel">GAS</button>
-        <button type="button" id="btn-fire" class="tc-btn tc-fire" data-action="fire">FIRE</button>
         <button type="button" id="btn-brake" class="tc-btn tc-brake" data-action="brake">BRK</button>
-        <button type="button" id="btn-nitro" class="tc-btn tc-nitro" data-action="nitro">N2O</button>
       </div>
       <button type="button" id="btn-pause" class="tc-btn tc-pause" data-action="pause">❚❚</button>
     </div>
   </div>
-  <script type="importmap">
-  {
-    "imports": {
-      "pixi.js": "./vendor/pixi.min.mjs"
-    }
-  }
-  </script>
   <script type="module" src="js/main.js"></script>
 </body>
 </html>

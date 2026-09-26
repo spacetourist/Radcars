@@ -1,99 +1,45 @@
 # Radcars
 
-Original-branded top-down **combat racer** (PWA) — 90s arcade combat-circuit soul with an HD remaster presentation (crisp canvas, smooth UI, bold limited palette). No third-party track/car IP.
+Top-down arcade racer (PWA). **v45-core**: radically simplified to just the cars, the racetrack and the gameplay — plain Canvas 2D, no image assets on the runtime path, no WebGL/Pixi.
 
 ## Quick start
 
 ```bash
 cd /workspace/radcars
-# any static server works (ES modules need http://, not file://)
-npx --yes serve -p 4173
-# or:
-python3 -m http.server 4173
+python3 -m http.server 4173   # or: npx --yes serve -p 4173
 ```
 
-Open `http://localhost:4173` in a desktop browser (landscape recommended).
-
-### Android Chrome (PWA)
-
-1. Serve the folder on your LAN (`npx serve` / `python3 -m http.server`) or host it.
-2. On the phone, open the URL in **Chrome**.
-3. Menu → **Install app** / **Add to Home Screen**.
-4. Launch landscape; use on-screen GAS / steer / FIRE / N2O.
-
-### Optional Capacitor APK
-
-```bash
-npm init -y
-npm i @capacitor/core @capacitor/cli @capacitor/android
-npx cap init Radcars com.radcars.app --web-dir .
-npx cap add android
-npx cap sync android
-npx cap open android
-```
-
-Build a release APK/AAB from Android Studio. Point `webDir` at this folder (or a `dist/` copy).
+Open `http://localhost:4173` (landscape recommended). Live: https://spacetourist.github.io/Radcars/
 
 ## Controls
 
-| Action | Desktop | Touch |
-|--------|---------|-------|
-| Steer | ← → / A D | Left hold buttons |
+| Action | Keyboard | Touch |
+|--------|----------|-------|
 | Accelerate | ↑ / W | GAS |
-| Brake | ↓ / S | BRK |
-| Fire | Space / Enter | FIRE |
-| Nitro | N / Shift | N2O |
-| Cycle weapon | Q / E | (shop select) |
+| Brake / reverse | ↓ / S | BRK |
+| Steer | ← → / A D | drag the STEER ring toward the direction you want the car to point |
 | Pause | P / Esc | ❚❚ |
 
-## Features
+## Gameplay
 
-- Top-down closed tracks with wall bounce & car-car contact
-- 3–7 AI rivals (racing line, overtaking, weapons, nitro)
-- Weapons: front / rear / homing missiles, mines, optional super (max ~3 live)
-- Damage, place prizes, garage shop (repair, engine, armour, nitro, ram, ammo)
-- Career (unlock tracks) + single race · `localStorage` save
-- Mute + procedural beep SFX · offline-capable service worker
+- Menu → pick one of 4 tracks (Neon Loop, Gridlock Circuit, Razor Hairpin, Cargo Dock) → 3-2-1 countdown → race.
+- Laps, AI rival count (1–7) and AI difficulty in Options. HUD shows lap, position, race time and last/best lap flash.
+- Results list finishing order, total times and best laps; best lap per track is saved locally.
+- Chase camera pulls out and looks ahead with speed (long-chase framing from v43).
 
-## Project layout
+## Code map (`js/`)
 
-```
-radcars/
-  index.html
-  manifest.webmanifest
-  sw.js
-  README.md
-  css/style.css
-  icons/
-  js/
-    main.js      entry + screens wiring
-    game.js      race loop
-    physics.js   accel / drag / walls / nitro
-    tracks.js    4 geometric circuits
-    cars.js      entities + checkpoints
-    ai.js        rivals
-    weapons.js   projectiles / mines
-    input.js     keyboard + touch
-    render.js    HD canvas draw
-    scenery.js   procedural buildings / crowds / skyline
-    sprites.js   pre-rendered cars / FX sheets
-    shop.js      garage economy
-    career.js    save / prizes
-    audio.js     beeps
-    ui.js        menus / HUD
-    util.js      math helpers
-```
+| File | Purpose |
+|------|---------|
+| `tracks.js` | Tracks = closed centreline + constant half-width (parallel walls). Resampled; index 0 = start/finish. `project()` / `pointAt()` helpers, starting grid. |
+| `physics.js` | Arcade car model (throttle, brake/reverse, speed-scaled steering, lateral grip), wall constraint via centreline offset, car–car collisions, lap progress (`dist`). |
+| `ai.js` | Centreline follower with lane offsets, corner-speed braking, overtaking dodge, stuck recovery. |
+| `game.js` | Race loop, countdown, laps/finish, standings, chase camera, HUD info. |
+| `render.js` | Canvas 2D: flat ground, asphalt ribbon with kerbs + walls, chequered line, procedural cars (nose = heading, windscreen towards the front), minimap. |
+| `ui.js`, `main.js`, `input.js`, `audio.js`, `career.js`, `cars.js`, `util.js` | Menus/HUD, wiring, keyboard + radial touch input, beeps, saved settings, car factory, maths. |
 
-## Art direction
+## Verification
 
-**HD remaster of a 90s top-down combat racer:** bold arcade palette, chunky car silhouettes, clear barriers, arcade menus — rendered at high resolution with anti-aliased shapes, soft shadows, and smooth UI (not low-res pixel/CRT mush).
+`node docs/verify-core.mjs http://localhost:4173/` drives a real race on every track in headless Chrome (holds throttle, steers via key events), logs player position / heading vs velocity every 0.5 s and writes `docs/shots/73-core-*.png` + `docs/shots/73-core-verify.txt`. Requires `puppeteer-core` in `node_modules` and Chrome at `/usr/bin/google-chrome`.
 
-**Scenery:** each track gets a painted sky + parallax skyline, industrial ground fill, and layers of pre-rendered buildings (warehouses, towers, neon shops, billboards, chimneys, water towers), props, and original crowd/mechanic sprites packed outside the asphalt — denser on straights and at start/finish. Title screen uses a matching neon skyline backdrop.
-
-## Known gaps / future polish
-
-- AI racing line is waypoint-based (can cut corners on odd geometry)
-- No rubber-band difficulty curve beyond per-track stats
-- Weapon cycle on touch is garage-only (Q/E on desktop)
-- Capacitor project files not pre-generated (notes only)
-- Single local player only
+Legacy art under `assets/` and older docs are no longer used by the app.

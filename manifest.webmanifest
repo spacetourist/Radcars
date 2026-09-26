@@ -1,7 +1,7 @@
 {
   "name": "Radcars",
   "short_name": "Radcars",
-  "description": "Top-down combat racing. Career, weapons, garage upgrades.",
+  "description": "Top-down arcade racing.",
   "start_url": "./index.html",
   "display": "fullscreen",
   "orientation": "landscape",

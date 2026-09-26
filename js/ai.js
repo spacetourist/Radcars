@@ -1,114 +1,63 @@
-import { angleDiff, dist, clamp, normalizeAngle } from './util.js';
-import { tryFire, cycleWeapon } from './weapons.js';
-import { triggerNitro } from './physics.js';
+/** AI driver: follow the centreline with a lane offset, brake for corners, avoid cars, recover if stuck. */
+import { clamp, angleDiff } from './util.js';
+import { pointAt, indexAt } from './tracks.js';
+import { MAX_TURN, BRAKE } from './physics.js';
 
-export function stepAI(car, cars, track, weapons, dt, sfx) {
-  if (car.dead || car.finished || car.isPlayer) return { steer: 0, accel: false, brake: false };
+/** Highest speed at which the car's turn rate can hold a curve of radius R. */
+function cornerSpeed(R, top) {
+  const w = MAX_TURN * 0.9; // leave a little steering in reserve
+  return Math.min(top, (w * R) / (1 + (w * R * 0.35) / top));
+}
 
-  // Follow racing line waypoints
-  const line = track.line;
-  let wp = car.aiWp % line.length;
-  let target = line[wp];
-  let d = dist(car.x, car.y, target.x, target.y);
-  // look ahead based on speed (easier tiers look less far ahead)
+export function stepAI(car, cars, track, dtMs) {
+  const dt = dtMs / 1000;
   const spd = Math.hypot(car.vx, car.vy);
-  const lookMul = car.aiDiff?.lookAheadMul ?? 1;
-  const look = Math.max(1, Math.floor((2 + Math.floor(spd * 2.5)) * lookMul));
-  while (d < 40 + look * 8) {
-    car.aiWp = (car.aiWp + 1) % line.length;
-    wp = car.aiWp;
-    target = line[wp];
-    d = dist(car.x, car.y, target.x, target.y);
-    if (look <= 2) break;
-  }
-  const lookIdx = (car.aiWp + look) % line.length;
-  const lookPt = line[lookIdx];
+  const s = car.sPrev;
+  const halfW = track.halfW;
 
-  const desired = Math.atan2(lookPt.y - car.y, lookPt.x - car.x);
+  // Lane choice: default racing lane, dodge the car directly ahead
+  let laneTarget = car.aiLane;
+  for (const o of cars) {
+    if (o === car) continue;
+    let ds = o.sPrev - s;
+    if (ds < -track.length / 2) ds += track.length;
+    if (ds > track.length / 2) ds -= track.length;
+    if (ds > 0 && ds < 200 && Math.abs(o.lat - car.lat) < 55) {
+      laneTarget = o.lat > 0 ? -halfW * 0.45 : halfW * 0.45;
+      break;
+    }
+  }
+  car.aiLaneNow += (laneTarget - car.aiLaneNow) * Math.min(1, 2.5 * dt);
+
+  // Steering toward a look-ahead point on the chosen lane
+  const look = 150 + spd * 0.35;
+  const tp = pointAt(track, s + look);
+  const tx = tp.x + tp.nx * car.aiLaneNow, ty = tp.y + tp.ny * car.aiLaneNow;
+  const desired = Math.atan2(ty - car.y, tx - car.x);
   const err = angleDiff(car.angle, desired);
-  let steer = clamp(err * 1.8, -1, 1);
+  const steer = clamp(err * 2.6, -1, 1);
 
-  // Overtaking: if blocked ahead by slower car, offset target laterally
-  const ahead = findAhead(car, cars);
-  let accel = true;
-  let brake = false;
-  if (ahead && ahead.dist < 70) {
-    const rel = Math.hypot(ahead.car.vx, ahead.car.vy) - spd;
-    if (rel < -0.1 && ahead.dist < 50) {
-      brake = true;
-      accel = spd > 1.2;
-    }
-    // side offset
-    const side = Math.sign(err || 1) || 1;
-    const nx = -Math.sin(car.angle) * side * 36;
-    const ny = Math.cos(car.angle) * side * 36;
-    const od = Math.atan2(lookPt.y + ny - car.y, lookPt.x + nx - car.x);
-    steer = clamp(angleDiff(car.angle, od) * 1.6, -1, 1);
+  // Speed planning: fastest speed from which every upcoming corner can still be braked for
+  const decel = BRAKE * 0.55;
+  let target = car.top;
+  for (let d = 0; d <= 900; d += 60) {
+    const R = track.pts[indexAt(track, s + d)].radius;
+    const vc = cornerSpeed(R * car.aiMargin, car.top);
+    target = Math.min(target, Math.sqrt(vc * vc + 2 * decel * d));
   }
+  let accel = spd < target;
+  let brake = spd > target + 40;
+  if (Math.abs(err) > 1.2 && spd > 300) { accel = false; brake = true; }
 
-  // corner brake: large heading error
-  if (Math.abs(err) > 0.55 && spd > 1.8) {
-    brake = true;
-    accel = false;
+  // Stuck recovery: reverse briefly with opposite lock
+  if (car.aiReverse > 0) {
+    car.aiReverse -= dt;
+    return { accel: false, brake: true, steer: -Math.sign(err || 1) };
   }
-
-  // Weapons
-  car.fireCooldown = Math.max(0, car.fireCooldown - dt);
-  const fireMul = car.aiDiff?.fireMul ?? 1;
-  if (Math.random() < 0.012 * car.aiAggro * fireMul * (dt / 16)) {
-    chooseWeapon(car, cars);
-    const res = tryFire(car, weapons, cars, track);
-    if (res && sfx) sfx(res.sfx);
+  if (spd < 60) car.aiStuck += dt; else car.aiStuck = 0;
+  if (car.aiStuck > 1.2 || (Math.abs(err) > 2.2 && spd < 150)) {
+    car.aiStuck = 0;
+    car.aiReverse = 0.8;
   }
-
-  // Nitro when behind or finishing
-  const nitroMul = car.aiDiff?.nitroMul ?? 1;
-  if (car.nitroCharges > 0 && Math.random() < 0.002 * nitroMul * (dt / 16)) {
-    const place = estimatePlace(car, cars);
-    if (place > 2 || spd < 1.5) {
-      if (triggerNitro(car) && sfx) sfx('nitro');
-    }
-  }
-
-  // skill jitter (more on easier tiers)
-  const jitterMul = car.aiDiff?.jitterMul ?? 1;
-  steer += (Math.random() - 0.5) * (1 - car.aiSkill) * 0.35 * jitterMul;
-
-  return { steer: clamp(steer, -1, 1), accel, brake };
-}
-
-function findAhead(car, cars) {
-  let best = null;
-  for (const o of cars) {
-    if (o === car || o.dead) continue;
-    const dx = o.x - car.x, dy = o.y - car.y;
-    const forward = dx * Math.cos(car.angle) + dy * Math.sin(car.angle);
-    const lateral = Math.abs(-dx * Math.sin(car.angle) + dy * Math.cos(car.angle));
-    if (forward > 0 && forward < 100 && lateral < 28) {
-      if (!best || forward < best.dist) best = { car: o, dist: forward };
-    }
-  }
-  return best;
-}
-
-function chooseWeapon(car, cars) {
-  // Prefer rear if someone close behind, else front/homing
-  let behind = false, aheadEnemy = false;
-  for (const o of cars) {
-    if (o === car || o.dead) continue;
-    const dx = o.x - car.x, dy = o.y - car.y;
-    const forward = dx * Math.cos(car.angle) + dy * Math.sin(car.angle);
-    const lat = Math.abs(-dx * Math.sin(car.angle) + dy * Math.cos(car.angle));
-    if (forward < -20 && forward > -90 && lat < 30) behind = true;
-    if (forward > 40 && forward < 220 && lat < 40) aheadEnemy = true;
-  }
-  if (behind && (car.weapons.rear || 0) > 0) car.selectedWeapon = 'rear';
-  else if (aheadEnemy && (car.weapons.homing || 0) > 0 && Math.random() < 0.4) car.selectedWeapon = 'homing';
-  else if ((car.weapons.front || 0) > 0) car.selectedWeapon = 'front';
-  else if ((car.weapons.mine || 0) > 0) car.selectedWeapon = 'mine';
-}
-
-function estimatePlace(car, cars) {
-  const sorted = [...cars].sort((a, b) => b.progress - a.progress);
-  return sorted.findIndex((c) => c.id === car.id) + 1;
+  return { accel, brake, steer };
 }
