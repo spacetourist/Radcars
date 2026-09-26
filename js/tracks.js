@@ -1,54 +1,49 @@
 /**
  * Radcars core tracks.
- * Every track is a closed centreline + constant half-width, so both walls are
- * parallel to the racing line. The centreline is resampled to uniform spacing
- * and rotated so index 0 is the start/finish line; travel direction = +index.
+ * Every track is a closed C2 cubic B-spline centreline + constant half-width, so
+ * both walls are parallel to the racing line. The centreline is resampled to
+ * uniform spacing and rotated so index 0 is the start/finish line; travel
+ * direction = +index (clockwise on screen).
  */
 
 const SAMPLE = 30; // world units between resampled centreline points
 
-function angleBump(a, lo, hi) {
-  let aa = a;
-  while (aa < lo) aa += Math.PI * 2;
-  while (aa > lo + Math.PI * 2) aa -= Math.PI * 2;
-  if (aa < lo || aa > hi) return 0;
-  return Math.sin(((aa - lo) / (hi - lo)) * Math.PI);
-}
-
-/** Replace each polygon corner with a circular fillet of radius r (clamped to fit). */
-function filletLoop(corners, r, arcStep = 0.12) {
-  const n = corners.length;
+/**
+ * Closed uniform cubic B-spline through a control polygon (C2: position,
+ * tangent and curvature are continuous, so there are no kinks or cusps).
+ * Returns a finely sampled polyline.
+ */
+function bsplineLoop(ctrl, fine = 2) {
+  const n = ctrl.length;
   const out = [];
   for (let i = 0; i < n; i++) {
-    const p0 = corners[(i - 1 + n) % n], p1 = corners[i], p2 = corners[(i + 1) % n];
-    const ax = p0.x - p1.x, ay = p0.y - p1.y, bx = p2.x - p1.x, by = p2.y - p1.y;
-    const la = Math.hypot(ax, ay), lb = Math.hypot(bx, by);
-    const ux = ax / la, uy = ay / la, vx = bx / lb, vy = by / lb;
-    const cos = Math.max(-1, Math.min(1, ux * vx + uy * vy));
-    const theta = Math.acos(cos); // interior angle between the two legs
-    if (theta > Math.PI - 0.01) { out.push({ x: p1.x, y: p1.y }); continue; }
-    let d = r / Math.tan(theta / 2); // tangent distance from corner
-    const dMax = Math.min(la, lb) * 0.48;
-    let rr = r;
-    if (d > dMax) { d = dMax; rr = d * Math.tan(theta / 2); }
-    const t1 = { x: p1.x + ux * d, y: p1.y + uy * d };
-    const t2 = { x: p1.x + vx * d, y: p1.y + vy * d };
-    const bisx = ux + vx, bisy = uy + vy;
-    const bl = Math.hypot(bisx, bisy) || 1;
-    const cd = rr / Math.sin(theta / 2);
-    const c = { x: p1.x + (bisx / bl) * cd, y: p1.y + (bisy / bl) * cd };
-    let a1 = Math.atan2(t1.y - c.y, t1.x - c.x);
-    let a2 = Math.atan2(t2.y - c.y, t2.x - c.x);
-    let da = a2 - a1;
-    while (da > Math.PI) da -= Math.PI * 2;
-    while (da < -Math.PI) da += Math.PI * 2;
-    const steps = Math.max(2, Math.ceil(Math.abs(da) / arcStep));
-    for (let k = 0; k <= steps; k++) {
-      const a = a1 + da * (k / steps);
-      out.push({ x: c.x + Math.cos(a) * rr, y: c.y + Math.sin(a) * rr });
+    const P0 = ctrl[(i - 1 + n) % n], P1 = ctrl[i], P2 = ctrl[(i + 1) % n], P3 = ctrl[(i + 2) % n];
+    const per = Math.max(16, Math.ceil(Math.hypot(P2.x - P1.x, P2.y - P1.y) / fine)); // ~2 wu apart
+    for (let k = 0; k < per; k++) {
+      const t = k / per, t2 = t * t, t3 = t2 * t;
+      const b0 = (1 - t) ** 3 / 6, b1 = (3 * t3 - 6 * t2 + 4) / 6, b2 = (-3 * t3 + 3 * t2 + 3 * t + 1) / 6, b3 = t3 / 6;
+      out.push({ x: b0 * P0.x + b1 * P1.x + b2 * P2.x + b3 * P3.x, y: b0 * P0.y + b1 * P1.y + b2 * P2.y + b3 * P3.y });
     }
   }
   return out;
+}
+
+/** Insert evenly spaced points on long control-polygon edges so straights stay straight. */
+function densify(poly, step) {
+  const out = [];
+  const n = poly.length;
+  for (let i = 0; i < n; i++) {
+    const a = poly[i], b = poly[(i + 1) % n];
+    const k = Math.max(1, Math.round(Math.hypot(b.x - a.x, b.y - a.y) / step));
+    for (let j = 0; j < k; j++) out.push({ x: a.x + (b.x - a.x) * (j / k), y: a.y + (b.y - a.y) * (j / k) });
+  }
+  return out;
+}
+
+/** Control points are authored in 100-wu units: [x, y] pairs, or '|' strings mark nothing. */
+function ctrlPts(list, unit = 100, step = 0) {
+  const pts = list.map(([x, y]) => ({ x: x * unit, y: y * unit }));
+  return step > 0 ? densify(pts, step * unit) : pts;
 }
 
 /** Uniformly resample a closed polyline. */
@@ -76,19 +71,6 @@ function resampleLoop(pts, step) {
   return out;
 }
 
-/** Laplacian smoothing on a closed loop (removes kinks so walls stay parallel). */
-function smoothLoop(pts, iterations = 0) {
-  let cur = pts;
-  const n = pts.length;
-  for (let it = 0; it < iterations; it++) {
-    cur = cur.map((p, i) => {
-      const a = cur[(i - 1 + n) % n], b = cur[(i + 1) % n];
-      return { x: p.x * 0.5 + (a.x + b.x) * 0.25, y: p.y * 0.5 + (a.y + b.y) * 0.25 };
-    });
-  }
-  return cur;
-}
-
 function nearestIndex(pts, x, y) {
   let best = 0, bd = Infinity;
   for (let i = 0; i < pts.length; i++) {
@@ -98,13 +80,25 @@ function nearestIndex(pts, x, y) {
   return best;
 }
 
+/** Signed area (screen coords, +Y down): > 0 means clockwise on screen. */
+function signedArea(pts) {
+  let a = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i], q = pts[(i + 1) % pts.length];
+    a += p.x * q.y - q.x * p.y;
+  }
+  return a / 2;
+}
+
 /**
- * Finalise a track: resample, rotate so index 0 = start, derive tangents,
- * normals, arc length and both wall polylines.
+ * Finalise a track: B-spline the control polygon, resample uniformly, rotate
+ * so index 0 = start, derive tangents, normals, arc length and both walls.
  * `startNear` = world point closest to the desired start/finish line.
+ * Travel direction is always clockwise on screen (+index).
  */
-function buildTrack(def, rawLine, halfW, startNear, smooth = 12) {
-  let line = resampleLoop(smoothLoop(resampleLoop(rawLine, SAMPLE), smooth), SAMPLE);
+function buildTrack(def, ctrl, halfW, startNear) {
+  let line = resampleLoop(bsplineLoop(ctrl), SAMPLE);
+  if (signedArea(line) < 0) line.reverse();
   const si = nearestIndex(line, startNear.x, startNear.y);
   line = line.slice(si).concat(line.slice(0, si));
   const n = line.length;
@@ -143,6 +137,7 @@ function buildTrack(def, rawLine, halfW, startNear, smooth = 12) {
   return {
     ...def,
     halfW,
+    ctrl,
     pts,
     length,
     left,
@@ -152,80 +147,60 @@ function buildTrack(def, rawLine, halfW, startNear, smooth = 12) {
   };
 }
 
-/* ---------------- track definitions ---------------- */
+/* ---------------- track definitions (control polygons in 100-wu units) ---------------- */
 
+/* DEFS-BEGIN */
 function neonLoop() {
-  const cx = 2300, cy = 1650, n = 192, baseRx = 1750, baseRy = 980;
-  const line = [];
-  for (let i = 0; i < n; i++) {
-    const a = (i / n) * Math.PI * 2;
-    const breath = 1 + 0.03 * Math.cos(2 * a);
-    let x = cx + Math.cos(a) * baseRx * breath;
-    let y = cy + Math.sin(a) * baseRy * breath;
-    const tx = -Math.sin(a), ty = Math.cos(a);
-    const kink = angleBump(a, Math.PI * 1.12, Math.PI * 1.36);
-    x += tx * 70 * kink; y += ty * 70 * kink;
-    const side = (angleBump(a, Math.PI * 0.32, Math.PI * 0.52) - angleBump(a, Math.PI * 0.52, Math.PI * 0.72)) * 95;
-    x += tx * side; y += ty * side;
-    const pit = angleBump(a, Math.PI * 1.38, Math.PI * 1.62);
-    x += Math.cos(a) * 55 * pit; y += Math.sin(a) * 70 * pit;
-    line.push({ x, y });
-  }
-  // Clockwise on screen (angle increasing, +Y down); start mid top straight heading +X.
+  // Wide flowing loop: long top straight, fast east sweeper, a hairpin "bite"
+  // tucked into the south side, rolling S-bends along the bottom, west sweeper.
+  const ctrl = ctrlPts([
+    [12, 5], [26, 4], [40, 4], [54, 5], [66, 7], [74, 13], [76, 22], [72, 30],
+    [64, 34], [56, 32], [50, 26], [45, 19], [39, 17], [34, 21], [32, 29], [26, 35],
+    [18, 37], [10, 35], [4, 28], [4, 17], [7, 9]
+  ]);
   return buildTrack({
     id: 'neon_loop', name: 'Neon Loop', difficulty: 1,
     ground: '#16301f', asphalt: '#34343c', wall: '#00e8ff', accent: '#ff2bd6'
-  }, line, 270, { x: cx, y: cy - baseRy * 1.03 - 70 });
+  }, ctrl, 270, { x: 3300, y: 400 });
 }
 
 function gridlock() {
-  const cx = 2000, cy = 1400, rw = 1560, rh = 950, rr = 350;
-  const corners = [
-    { x: cx - rw, y: cy - rh }, { x: cx + rw, y: cy - rh },
-    { x: cx + rw, y: cy + rh }, { x: cx - rw, y: cy + rh }
-  ];
-  let line = resampleLoop(filletLoop(corners, rr), 20);
-  // Pit bay bulge on the north straight and a tightened SE corner (both walls move together)
-  line = line.map((p) => {
-    let { x, y } = p;
-    if (y < cy - rh + 40 && x > cx - 360 && x < cx + 360) y -= 72 * (1 - Math.abs(x - cx) / 360);
-    const dx = x - (cx + rw * 0.67), dy = y - (cy + rh * 0.68), d = Math.hypot(dx, dy);
-    if (d < 420) { const u = 1 - d / 420; x -= dx * 0.12 * u; y -= dy * 0.12 * u; }
-    return { x, y };
-  });
+  // City blocks: right-angle street corners, a U-shaped inlet, a chicane on the back street.
+  const ctrl = ctrlPts([
+    [3, 4], [54, 4], [54, 16], [66, 16], [66, 44], [51, 44], [51, 31], [37, 31], [37, 44],
+    [26, 44], [21.5, 40.5], [17.5, 40.5], [13, 44], [3, 44], [3, 34], [8, 30], [8, 19], [3, 15]
+  ], 100, 11);
   return buildTrack({
     id: 'gridlock', name: 'Gridlock Circuit', difficulty: 2,
     ground: '#26282e', asphalt: '#3a3a42', wall: '#b8ff00', accent: '#ff8a00'
-  }, line, 190, { x: cx - 700, y: cy - rh });
+  }, ctrl, 190, { x: 2000, y: 400 });
 }
 
 function razorHairpin() {
-  const S = 1.7, cx = 900 * S, cy = 600 * S, n = 160;
-  const line = [];
-  for (let i = 0; i < n; i++) {
-    const a = (i / n) * Math.PI * 2;
-    const lobe = 1 + 0.4 * Math.cos(2 * a);
-    const waist = 1 - 0.07 * (1 + Math.cos(4 * a));
-    line.push({ x: cx + Math.cos(a) * 595 * S * lobe * waist, y: cy + Math.sin(a) * 340 * S * waist });
-  }
+  // Paperclip: stacked straights joined by razor hairpins, big east sweeper.
+  const ctrl = ctrlPts([
+    [34, 30], [24, 30], [16, 30], [10, 30], [4, 29.5], [1, 25], [4, 20.5], [10, 20], [18, 20],
+    [24, 19.5], [27, 15], [24, 10.5], [18, 10], [10, 10], [4, 9.5], [1, 5], [4, 0.5], [10, 0],
+    [16, 0], [24, 0], [34, 0], [41, 2], [46, 8], [44, 15], [46, 22], [41, 28.5]
+  ]);
   return buildTrack({
     id: 'razor_hairpin', name: 'Razor Hairpin', difficulty: 3,
     ground: '#2a1f30', asphalt: '#3a3040', wall: '#ff2bd6', accent: '#00e8ff'
-  }, line, 175, { x: cx, y: cy + 340 * S * 0.82 });
+  }, ctrl, 175, { x: 2400, y: 3000 });
 }
 
 function cargoDock() {
-  const S = 1.7;
-  const corners = [
-    { x: 160, y: 160 }, { x: 1040, y: 110 }, { x: 1495, y: 150 },
-    { x: 1495, y: 935 }, { x: 1100, y: 940 }, { x: 1020, y: 700 },
-    { x: 1000, y: 530 }, { x: 180, y: 510 }
-  ].map((p) => ({ x: p.x * S, y: p.y * S }));
+  // Container port: long quay straights, a dock notch, a container chicane.
+  const ctrl = ctrlPts([
+    [2, 2], [40, 2], [50, 4], [52, 15], [32, 15], [32, 25], [52, 25], [52, 36], [34, 36],
+    [29, 32.5], [23, 32.5], [18, 36], [2, 36], [2, 24], [7, 18], [2, 12]
+  ], 100, 9);
   return buildTrack({
     id: 'cargo_dock', name: 'Cargo Dock', difficulty: 2,
     ground: '#1d2a33', asphalt: '#383c40', wall: '#ffe600', accent: '#00e8ff'
-  }, filletLoop(corners, 260), 160, { x: 600 * S, y: 140 * S });
+  }, ctrl, 160, { x: 1500, y: 150 });
 }
+/* DEFS-END */
 
 export const TRACKS = [neonLoop(), gridlock(), razorHairpin(), cargoDock()];
 

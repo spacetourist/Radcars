@@ -87,40 +87,74 @@ export function createRenderer(canvas) {
     ctx.restore();
   }
 
+  /**
+   * Procedural top-down car. Local frame: +X = nose = car.angle (the physics
+   * heading, which equals atan2(vy, vx) when gripping), +Y = the car's right.
+   * The body is LONG along X and narrow along Y, the nose tapers, wheels are
+   * elongated along X, a racing stripe runs nose-to-tail, the windscreen sits
+   * ahead of the roof and the red tail-lights mark the back, so the direction
+   * of travel reads unambiguously even at the far chase-cam zoom.
+   */
   function drawCar(car, zoom) {
-    // keep cars readable when the chase cam pulls far out (min ~30px long on screen)
-    const s = Math.max(1, 30 / (CAR_LEN * zoom));
-    const L = CAR_LEN * s, Wd = CAR_WID * s;
+    // keep cars readable when the chase cam pulls far out (min ~34px long on screen)
+    const s = Math.max(1, 34 / (CAR_LEN * zoom));
+    const L = CAR_LEN * s, Wd = CAR_WID * 0.88 * s;
+    const hl = L / 2, hw = Wd / 2;
     ctx.save();
     ctx.translate(car.x, car.y);
     ctx.rotate(car.angle);
+    if (debugCars) {
+      const m = ctx.getTransform();
+      debugCars.push({ id: car.id, isPlayer: car.isPlayer, x: car.x, y: car.y, vx: car.vx, vy: car.vy, angle: car.angle, L, W: Wd,
+        // screen-space images of the local length axis (+X, nose) and width axis (+Y)
+        lenAxis: { x: m.a * hl, y: m.b * hl }, widAxis: { x: m.c * hw, y: m.d * hw }, origin: { x: m.e, y: m.f } });
+    }
     // shadow
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    roundRect(-L / 2 + 3 * s, -Wd / 2 + 4 * s, L, Wd, 8 * s);
+    bodyPath(hl, hw, 3 * s, 4 * s);
     ctx.fill();
-    // body (nose points +X = heading)
+    // wheels: dark blocks elongated along the direction of travel, poking out of the body sides
+    ctx.fillStyle = '#0b0b0e';
+    const wl = L * 0.2, ww = Wd * 0.2;
+    for (const fx of [hl * 0.56, -hl * 0.6]) {
+      ctx.fillRect(fx - wl / 2, -hw - ww * 0.35, wl, ww);
+      ctx.fillRect(fx - wl / 2, hw - ww * 0.65, wl, ww);
+    }
+    // body (tapered towards the nose at +X)
     ctx.fillStyle = car.color;
-    roundRect(-L / 2, -Wd / 2, L, Wd, 8 * s);
+    bodyPath(hl, hw, 0, 0);
     ctx.fill();
-    ctx.lineWidth = (car.isPlayer ? 4 : 2) * s;
-    ctx.strokeStyle = car.isPlayer ? '#ffffff' : 'rgba(0,0,0,0.6)';
+    ctx.lineWidth = (car.isPlayer ? 3.5 : 1.8) * s;
+    ctx.strokeStyle = car.isPlayer ? '#ffffff' : 'rgba(0,0,0,0.65)';
     ctx.stroke();
-    // windscreen (towards the nose) and rear window
+    // racing stripe nose-to-tail
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.fillRect(-hl + 3 * s, -Wd * 0.07, L - 6 * s, Wd * 0.14);
+    // cabin: windscreen (front, wide trapezoid), roof, rear window
     ctx.fillStyle = '#0d1a26';
-    roundRect(L * 0.06, -Wd * 0.36, L * 0.2, Wd * 0.72, 4 * s);
+    ctx.beginPath();
+    ctx.moveTo(L * 0.02, -hw * 0.78);
+    ctx.lineTo(L * 0.2, -hw * 0.58);
+    ctx.lineTo(L * 0.2, hw * 0.58);
+    ctx.lineTo(L * 0.02, hw * 0.78);
+    ctx.closePath();
     ctx.fill();
-    ctx.fillStyle = 'rgba(13,26,38,0.75)';
-    roundRect(-L * 0.36, -Wd * 0.3, L * 0.12, Wd * 0.6, 3 * s);
-    ctx.fill();
-    // headlights
+    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    ctx.fillRect(-L * 0.24, -hw * 0.74, L * 0.26, hw * 1.48);
+    ctx.fillStyle = 'rgba(13,26,38,0.8)';
+    ctx.fillRect(-L * 0.33, -hw * 0.62, L * 0.08, hw * 1.24);
+    // headlights at the nose, tail-lights at the back
     ctx.fillStyle = '#fff6c0';
-    ctx.fillRect(L / 2 - 5 * s, -Wd / 2 + 3 * s, 4 * s, 6 * s);
-    ctx.fillRect(L / 2 - 5 * s, Wd / 2 - 9 * s, 4 * s, 6 * s);
+    ctx.fillRect(hl - 6 * s, -hw * 0.62, 4 * s, hw * 0.4);
+    ctx.fillRect(hl - 6 * s, hw * 0.22, 4 * s, hw * 0.4);
+    ctx.fillStyle = '#ff2020';
+    ctx.fillRect(-hl + 1 * s, -hw * 0.8, 3 * s, hw * 0.45);
+    ctx.fillRect(-hl + 1 * s, hw * 0.35, 3 * s, hw * 0.45);
     ctx.restore();
     if (car.isPlayer) {
       // marker above the player's car
       ctx.save();
-      ctx.translate(car.x, car.y - (Wd / 2 + 26 * s));
+      ctx.translate(car.x, car.y - (L / 2 + 22 * s));
       ctx.fillStyle = '#ffffff';
       ctx.beginPath();
       ctx.moveTo(-9 * s, -12 * s); ctx.lineTo(9 * s, -12 * s); ctx.lineTo(0, 0);
@@ -128,6 +162,21 @@ export function createRenderer(canvas) {
       ctx.fill();
       ctx.restore();
     }
+  }
+
+  /** Car body outline: square-ish tail at -X, tapered rounded nose at +X. */
+  function bodyPath(hl, hw, ox, oy) {
+    const r = hw * 0.45;
+    ctx.beginPath();
+    ctx.moveTo(-hl + r + ox, -hw + oy);
+    ctx.lineTo(hl * 0.45 + ox, -hw + oy);
+    ctx.quadraticCurveTo(hl + ox, -hw * 0.8 + oy, hl + ox, oy);
+    ctx.quadraticCurveTo(hl + ox, hw * 0.8 + oy, hl * 0.45 + ox, hw + oy);
+    ctx.lineTo(-hl + r + ox, hw + oy);
+    ctx.quadraticCurveTo(-hl + ox, hw + oy, -hl + ox, hw - r + oy);
+    ctx.lineTo(-hl + ox, -hw + r + oy);
+    ctx.quadraticCurveTo(-hl + ox, -hw + oy, -hl + r + ox, -hw + oy);
+    ctx.closePath();
   }
 
   function roundRect(x, y, w, h, r) {
@@ -140,8 +189,11 @@ export function createRenderer(canvas) {
     ctx.closePath();
   }
 
+  let debugCars = null;
+
   function draw(world) {
     const { track, cars, cam } = world;
+    debugCars = (typeof window !== 'undefined' && window.__RAD_DEBUG__) ? [] : null;
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     ctx.fillStyle = track.ground;
     ctx.fillRect(0, 0, W, H);
@@ -154,13 +206,16 @@ export function createRenderer(canvas) {
     drawCar(world.player, cam.zoom);
     ctx.restore();
     drawMinimap(world);
+    if (debugCars) window.__RAD_DEBUG__.frame = { cars: debugCars, cam: { ...cam }, W, H, DPR };
   }
 
   function drawMinimap(world) {
     const { track, cars } = world;
     const b = track.bounds;
-    const mw = Math.min(180, W * 0.22);
-    const sc = mw / (b.maxX - b.minX);
+    // fit the whole layout inside a box of at most 190 × 130 px (bigger tracks shrink to fit)
+    const boxW = Math.min(190, W * 0.24), boxH = Math.min(130, H * 0.24);
+    const sc = Math.min(boxW / (b.maxX - b.minX), boxH / (b.maxY - b.minY));
+    const mw = (b.maxX - b.minX) * sc;
     const mh = (b.maxY - b.minY) * sc;
     const x0 = W - mw - 14, y0 = 66; // top-right, under the timer (clear of touch buttons)
     ctx.save();
@@ -169,7 +224,7 @@ export function createRenderer(canvas) {
     ctx.translate(x0 - b.minX * sc, y0 - b.minY * sc);
     ctx.scale(sc, sc);
     ctx.strokeStyle = 'rgba(255,255,255,0.55)';
-    ctx.lineWidth = track.halfW * 1.2;
+    ctx.lineWidth = Math.max(track.halfW * 1.2, 3 / sc);
     ctx.stroke(trackPaths(track).centre);
     for (const c of cars) {
       ctx.fillStyle = c.color;

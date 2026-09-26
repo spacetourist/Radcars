@@ -104,6 +104,8 @@ export function createGame(canvas, input) {
 
   function updateCamera(dt) {
     const { player: p, cam, race } = world;
+    const ov = window.__RAD_CAM__; // verification hook: fixed camera {x, y, zoom}
+    if (ov) { cam.x = ov.x; cam.y = ov.y; cam.zoom = ov.zoom; return; }
     const k = 1 - Math.exp(-dt / 180);
     if (race.countdown > 0) {
       cam.zoom += (ZOOM_GRID - cam.zoom) * k;
@@ -176,7 +178,9 @@ export function createGame(canvas, input) {
 
     const allDone = cars.every((c) => c.finished);
     const timeout = race.time > race.totalLaps * 120000;
-    if ((player.finished && race.time - player.finishTime > 10000) || allDone || timeout) finishRace();
+    // once the player is home, give the field about one more lap (min 15s) to finish on the longer circuits
+    const grace = Math.max(15000, (player.bestLapMs || 0) * 1.1);
+    if ((player.finished && race.time - player.finishTime > grace) || allDone || timeout) finishRace();
   }
 
   function finishRace() {
