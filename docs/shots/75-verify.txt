@@ -1,0 +1,166 @@
+Radcars radcars-v47-boost boost verification Sun Sep 27 2026 14:54:47 GMT+0100 (British Summer Time)
+URL http://localhost:4173/
+
+RACES (menus, 3 laps, 5 AI Normal, bot steering; boost via Shift)
+  neon      PASS  P1 55.05s best lap 17.45s  laps 0→1→2→3  standings You 55.0 > Echo 58.0 > Nyx 58.3 > Blaze 60.1 > Razor 60.5 > Volt 63.2  free boosts 5  charged 2  fps 60.0  errors 0
+  gridlock  PASS  P1 57.73s best lap 18.18s  laps 0→1→2→3  standings You 57.7 > Echo 65.4 > Nyx 65.6 > Blaze 67.0 > Razor 67.5 > Volt 68.9  free boosts 4  charged 2  fps 60.0  errors 0
+  razor     PASS  P1 50.85s best lap 15.53s  laps 0→1→2→3  standings You 50.8 > Nyx 53.8 > Razor 55.0 > Echo 55.2 > Blaze 55.2 > Volt 56.9  free boosts 7  charged 2  fps 60.0  errors 0
+  cargo     PASS  P1 54.66s best lap 16.98s  laps 0→1→2→3  standings You 54.7 > Nyx 61.9 > Razor 63.1 > Blaze 63.3 > Echo 63.4 > Volt 65.1  free boosts 5  charged 2  fps 60.0  errors 0
+
+BOOST SPEED
+  neon      unboosted top 1004  boosted peaks 1400/1400  best +40%
+  gridlock  unboosted top 1000  boosted peaks 1400/1400  best +40%
+  razor     unboosted top 1000  boosted peaks 1400/1400  best +40%
+  cargo     unboosted top 1000  boosted peaks 1400/1385  best +40%
+
+MOBILE TOUCH
+  neon      touch slide boost verified; errors 0
+  razor     touch slide boost verified; errors 0
+
+OVERALL: PASS
+
+DETAIL
+
+=== NEON (desktop, Shift key) ===
+  menu: Normal · 3 laps · 5 rivals
+    [ok] Shift during countdown ignored; charge given at race start: charge=1 active=0
+    [ok] idled 4 s at GO -> player last: last=true speed=0
+    shot docs/shots/75-neon-last-unlimited.png
+    shot docs/shots/75-neon-last-active.png
+    [ok] LAST: 5 back-to-back Shift presses while last each fired a free boost (charge stayed 1): fired@0, fired@1398, fired@1398, fired@1396, fired@1399
+    [ok] player clear of last place (P1/6) at t=21.7s lap=1
+    shot docs/shots/75-neon-ready.png
+    [ok] lap 2 (P1): Shift -> boost ACTIVE, charge 1 -> 0, source=key
+    shot docs/shots/75-neon-active.png
+    shot docs/shots/75-neon-active-car.png
+    [ok] second Shift mid-boost does not extend/restart it (remaining 800 -> 717 ms)
+    [ok] same lap, not last (P1): Shift after the boost ended does nothing (active=0, charge=0)
+    shot docs/shots/75-neon-used.png
+    [ok] charge refilled on the lap crossing: lap 1->2 charge 0->1
+    [ok] Shift pressed while paused is dropped on resume (active=0, charge=1)
+    [ok] lap 3: refilled charge fires again (charge 0, active 1900 ms)
+    [ok] pause freezes the boost timer: 1183 ms left at pause, 1183 ms after 1.5 s paused
+    [ok] boost continues after resume and runs out (1192 ms of race time later)
+    [ok] no stacking: max charge 1; crossings (charge before->after) L1:1->1 L2:0->1 L3:0->1
+    hard wall hits per second: boosting 0.00 (14.4 s sampled) vs not boosting 0.00
+  speed trace per lap-charge boost (wu/s; unboosted reference top 1004):
+    lap 2: at press 1017 -> +1s 1399 -> +2s 1396 (peak 1400 = 40% over ref top) -> +3.5s 1007 -> +5s 1000; max |dv/dt| 654 wu/s²
+    lap 3: at press 1011 -> +1s 1399 -> +2s 1396 (peak 1400 = 40% over ref top) -> +3.5s 1007 -> +5s 1000; max |dv/dt| 654 wu/s²
+    [ok] speed clearly rises during boost (best peak +40% over unboosted top 1004)
+    [ok] speed returns to normal after the boost (+5 s speeds 1000, 1000)
+    [ok] AI never boosted (no AI boost level / raised top)
+    [ok] race: results=true laps 0→1→2→3 allAIfinished=true errors=0 rAF≈60.0fps
+
+=== GRIDLOCK (desktop, Shift key) ===
+  menu: Normal · 3 laps · 5 rivals
+    [ok] Shift during countdown ignored; charge given at race start: charge=1 active=0
+    [ok] idled 4 s at GO -> player last: last=true speed=0
+    [ok] LAST: 4 back-to-back Shift presses while last each fired a free boost (charge stayed 1): fired@0, fired@1398, fired@1396, fired@1399
+    [ok] player clear of last place (P1/6) at t=12.7s lap=0
+    [ok] lap 2 (P1): Shift -> boost ACTIVE, charge 1 -> 0, source=key
+    shot docs/shots/75-gridlock-active.png
+    shot docs/shots/75-gridlock-active-car.png
+    [ok] second Shift mid-boost does not extend/restart it (remaining 833 -> 750 ms)
+    [ok] same lap, not last (P1): Shift after the boost ended does nothing (active=0, charge=0)
+    [ok] charge refilled on the lap crossing: lap 1->2 charge 0->1
+    [ok] Shift pressed while paused is dropped on resume (active=0, charge=1)
+    [ok] lap 3: refilled charge fires again (charge 0, active 1883 ms)
+    [ok] pause freezes the boost timer: 1183 ms left at pause, 1183 ms after 1.5 s paused
+    [ok] boost continues after resume and runs out (1191 ms of race time later)
+    [ok] no stacking: max charge 1; crossings (charge before->after) L1:1->1 L2:0->1 L3:0->1
+    hard wall hits per second: boosting 0.00 (12.4 s sampled) vs not boosting 0.00
+  speed trace per lap-charge boost (wu/s; unboosted reference top 1000):
+    lap 2: at press 1005 -> +1s 1400 -> +2s 1400 (peak 1400 = 40% over ref top) -> +3.5s 1008 -> +5s 1000; max |dv/dt| 1681 wu/s²
+    lap 3: at press 1011 -> +1s 1399 -> +2s 1390 (peak 1400 = 40% over ref top) -> +3.5s 1006 -> +5s 1000; max |dv/dt| 642 wu/s²
+    [ok] speed clearly rises during boost (best peak +40% over unboosted top 1000)
+    [ok] speed returns to normal after the boost (+5 s speeds 1000, 1000)
+    [ok] AI never boosted (no AI boost level / raised top)
+    [ok] race: results=true laps 0→1→2→3 allAIfinished=true errors=0 rAF≈60.0fps
+
+=== RAZOR (desktop, Shift key) ===
+  menu: Normal · 3 laps · 5 rivals
+    [ok] Shift during countdown ignored; charge given at race start: charge=1 active=0
+    [ok] idled 4 s at GO -> player last: last=true speed=0
+    shot docs/shots/75-razor-last-unlimited.png
+    shot docs/shots/75-razor-last-active.png
+    [ok] LAST: 7 back-to-back Shift presses while last each fired a free boost (charge stayed 1): fired@0, fired@1399, fired@1004, fired@576, fired@1214, fired@1398, fired@1396
+    [ok] player clear of last place (P1/6) at t=20.5s lap=1
+    shot docs/shots/75-razor-ready.png
+    [ok] lap 2 (P1): Shift -> boost ACTIVE, charge 1 -> 0, source=key
+    shot docs/shots/75-razor-active.png
+    shot docs/shots/75-razor-active-car.png
+    [ok] second Shift mid-boost does not extend/restart it (remaining 850 -> 767 ms)
+    [ok] same lap, not last (P1): Shift after the boost ended does nothing (active=0, charge=0)
+    shot docs/shots/75-razor-used.png
+    [ok] charge refilled on the lap crossing: lap 1->2 charge 0->1
+    [ok] Shift pressed while paused is dropped on resume (active=0, charge=1)
+    [ok] lap 3: refilled charge fires again (charge 0, active 1900 ms)
+    [ok] pause freezes the boost timer: 1167 ms left at pause, 1167 ms after 1.5 s paused
+    [ok] boost continues after resume and runs out (1174 ms of race time later)
+    [ok] no stacking: max charge 1; crossings (charge before->after) L1:1->1 L2:0->1 L3:0->1
+    hard wall hits per second: boosting 0.11 (18.4 s sampled) vs not boosting 0.00
+  speed trace per lap-charge boost (wu/s; unboosted reference top 1000):
+    lap 2: at press 1011 -> +1s 1400 -> +2s 1398 (peak 1400 = 40% over ref top) -> +3.5s 1008 -> +5s 1000; max |dv/dt| 642 wu/s²
+    lap 3: at press 1017 -> +1s 1274 -> +2s 1295 (peak 1400 = 40% over ref top) -> +3.5s 832 -> +5s 1000; max |dv/dt| 2308 wu/s²
+    [ok] speed clearly rises during boost (best peak +40% over unboosted top 1000)
+    [ok] speed returns to normal after the boost (+5 s speeds 1000, 1000)
+    [ok] AI never boosted (no AI boost level / raised top)
+    [ok] race: results=true laps 0→1→2→3 allAIfinished=true errors=0 rAF≈60.0fps
+
+=== CARGO (desktop, Shift key) ===
+  menu: Normal · 3 laps · 5 rivals
+    [ok] Shift during countdown ignored; charge given at race start: charge=1 active=0
+    [ok] idled 4 s at GO -> player last: last=true speed=0
+    [ok] LAST: 5 back-to-back Shift presses while last each fired a free boost (charge stayed 1): fired@0, fired@1399, fired@1054, fired@738, fired@1232
+    [ok] player clear of last place (P3/6) at t=14.7s lap=0
+    [ok] lap 2 (P1): Shift -> boost ACTIVE, charge 1 -> 0, source=key
+    shot docs/shots/75-cargo-active.png
+    shot docs/shots/75-cargo-active-car.png
+    [ok] second Shift mid-boost does not extend/restart it (remaining 817 -> 733 ms)
+    [ok] same lap, not last (P1): Shift after the boost ended does nothing (active=0, charge=0)
+    [ok] charge refilled on the lap crossing: lap 1->2 charge 0->1
+    [ok] Shift pressed while paused is dropped on resume (active=0, charge=1)
+    [ok] lap 3: refilled charge fires again (charge 0, active 1900 ms)
+    [ok] pause freezes the boost timer: 1183 ms left at pause, 1183 ms after 1.5 s paused
+    [ok] boost continues after resume and runs out (1190 ms of race time later)
+    [ok] no stacking: max charge 1; crossings (charge before->after) L1:1->1 L2:0->1 L3:0->1
+    hard wall hits per second: boosting 0.07 (14.3 s sampled) vs not boosting 0.00
+  speed trace per lap-charge boost (wu/s; unboosted reference top 1000):
+    lap 2: at press 1017 -> +1s 1306 -> +2s 1140 (peak 1400 = 40% over ref top) -> +3.5s 1000 -> +5s 1000; max |dv/dt| 3986 wu/s²
+    lap 3: at press 1011 -> +1s 1129 -> +2s 1250 (peak 1385 = 38% over ref top) -> +3.5s 1000 -> +5s 940; max |dv/dt| 3105 wu/s²
+    [ok] speed clearly rises during boost (best peak +40% over unboosted top 1000)
+    [ok] speed returns to normal after the boost (+5 s speeds 1000, 940)
+    [ok] AI never boosted (no AI boost level / raised top)
+    [ok] race: results=true laps 0→1→2→3 allAIfinished=true errors=0 rAF≈60.0fps
+    [ok] Race again -> fresh boost state (charge 1, uses 0, free 0, active 0)
+
+=== NEON (mobile 844×390, touch) ===
+  GAS centre (786,336) 88px; STEER pad centre (62,330) 100px
+    [ok] GAS touch-hold (with ±8px jitter) = throttle as before, no boost (accel=true, speed 683)
+    [ok] 60 px upward slide on GAS fired a boost (free, player last; source=slide); GAS still held (accel=true)
+    shot docs/shots/75-mobile-neon-slide-active.png
+    [ok] steering stayed active through and after the slide (aimActive every tick, accel=true); car heading vs STEER aim median 3.5° in the 2 s after the slide vs 2.6° during the plain GAS hold before it
+    [ok] touch-driven car clear of last place (P1/6) at t=5.2s lap 0
+    [ok] slide while not last (P1 at press) used the lap charge (charge 1 -> 0; active=1833 free=false last=false P1 accel=true)
+    [ok] thumb back on GAS after the slide: throttle still held (accel=true)
+    [ok] second slide on the same lap, not last (P1), does nothing (active=0, uses 1->1)
+    [ok] sliding off GAS sideways releases the throttle as before (accel=false)
+    [ok] all touches lifted -> no throttle, no aim
+    [ok] cars drawn along their velocity (render transform) max err 0.9°
+
+=== RAZOR (mobile 844×390, touch) ===
+  GAS centre (786,336) 88px; STEER pad centre (62,330) 100px
+    [ok] GAS touch-hold (with ±8px jitter) = throttle as before, no boost (accel=true, speed 680)
+    [ok] 60 px upward slide on GAS fired a boost (free, player last; source=slide); GAS still held (accel=true)
+    [ok] steering stayed active through and after the slide (aimActive every tick, accel=true); car heading vs STEER aim median 6.0° in the 2 s after the slide vs 3.0° during the plain GAS hold before it
+    [ok] touch-driven car clear of last place (P2/6) at t=4.3s lap 0
+    [ok] slide while not last (P3 at press) used the lap charge (charge 1 -> 0; active=1850 free=false last=false P3 accel=true)
+    shot docs/shots/75-mobile-razor-slide-active.png
+    [ok] thumb back on GAS after the slide: throttle still held (accel=true)
+    [ok] second slide on the same lap, not last (P1), does nothing (active=0, uses 1->1)
+    [ok] sliding off GAS sideways releases the throttle as before (accel=false)
+    [ok] all touches lifted -> no throttle, no aim
+    [ok] cars drawn along their velocity (render transform) max err 0.2°
+    [ok] mobile console errors: 0 []
+    [ok] fps during a boost (1280×720 headless): 60.5
+    [ok] desktop console errors/warnings: 0 []

@@ -1,4 +1,4 @@
-const CACHE = 'radcars-v46-long-aligned';
+const CACHE = 'radcars-v47-boost';
 const ASSETS = [
   './',
   './index.html',

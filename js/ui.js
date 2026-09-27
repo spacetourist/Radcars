@@ -98,8 +98,8 @@ export function createUI(root, api) {
           <button class="btn" data-k="laps" data-d="1">+</button></div></div>
       </div>
       <p class="muted" style="margin-top:12px;text-align:center">
-        Keyboard: ↑/W accelerate · ↓/S brake/reverse · ←→/AD steer · P pause<br/>
-        Touch: drag the ring to point the car · GAS / BRK buttons
+        Keyboard: ↑/W accelerate · ↓/S brake/reverse · ←→/AD steer · Shift boost · P pause<br/>
+        Touch: drag the ring to point the car · GAS / BRK buttons · slide up from GAS to boost
       </p>
       <div class="row" style="margin-top:14px"><button class="btn" data-act="back">Back</button></div>`);
     const lim = { difficulty: [0, DIFFICULTIES.length - 1], aiCount: [1, 7], laps: [1, 10] };

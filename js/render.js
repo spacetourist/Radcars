@@ -203,10 +203,103 @@ export function createRenderer(canvas) {
     ctx.translate(-cam.x, -cam.y);
     drawTrack(track);
     for (const c of cars) if (!c.isPlayer) drawCar(c, cam.zoom);
+    if (world.player.boostLevel > 0.02) drawBoostFlame(world.player, cam.zoom, world.race.time);
     drawCar(world.player, cam.zoom);
     ctx.restore();
     drawMinimap(world);
     if (debugCars) window.__RAD_DEBUG__.frame = { cars: debugCars, cam: { ...cam }, W, H, DPR };
+  }
+
+  /**
+   * Boost cue behind the player's car (drawn before the car so it sits underneath):
+   * a flickering orange/yellow exhaust flame from the tail plus a few speed streaks.
+   * Sized with the same readability scale as drawCar; the car itself is not changed.
+   */
+  function drawBoostFlame(car, zoom, tMs) {
+    const lvl = car.boostLevel;
+    const s = Math.max(1, 34 / (CAR_LEN * zoom));
+    const hl = CAR_LEN * s / 2, hw = CAR_WID * 0.88 * s / 2;
+    const fl = 0.85 + 0.15 * Math.sin(tMs * 0.047) + 0.08 * Math.sin(tMs * 0.113);
+    const len = (26 + 34 * lvl) * s * fl;
+    ctx.save();
+    ctx.translate(car.x, car.y);
+    ctx.rotate(car.angle);
+    ctx.globalAlpha = Math.min(1, lvl * 1.4);
+    // speed streaks (behind and beside the body)
+    ctx.strokeStyle = 'rgba(255,190,90,0.55)';
+    ctx.lineWidth = 2.2 * s;
+    ctx.lineCap = 'round';
+    for (const [dy, k] of [[-hw * 1.35, 1], [hw * 1.35, 0.8], [-hw * 0.7, 0.55], [hw * 0.7, 0.65]]) {
+      const ph = ((tMs * 0.004 + k * 3.1) % 1);
+      const x0 = -hl - 10 * s - ph * 30 * s;
+      ctx.beginPath(); ctx.moveTo(x0, dy); ctx.lineTo(x0 - (30 + 40 * k) * s * lvl, dy); ctx.stroke();
+    }
+    // two exhaust flames at the tail: outer orange, inner hot yellow
+    for (const side of [-1, 1]) {
+      const y = side * hw * 0.42;
+      ctx.fillStyle = 'rgba(255,90,20,0.9)';
+      ctx.beginPath();
+      ctx.moveTo(-hl + 2 * s, y - 6.5 * s);
+      ctx.quadraticCurveTo(-hl - len * 0.55, y - 5 * s, -hl - len, y);
+      ctx.quadraticCurveTo(-hl - len * 0.55, y + 5 * s, -hl + 2 * s, y + 6.5 * s);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = 'rgba(255,205,40,0.95)';
+      ctx.beginPath();
+      ctx.moveTo(-hl + 2 * s, y - 3.5 * s);
+      ctx.quadraticCurveTo(-hl - len * 0.35, y - 2.5 * s, -hl - len * 0.6, y);
+      ctx.quadraticCurveTo(-hl - len * 0.35, y + 2.5 * s, -hl + 2 * s, y + 3.5 * s);
+      ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  /**
+   * Boost indicator above the GAS button: READY / ACTIVE (+ countdown bar) / USED,
+   * and a distinct magenta "∞ LAST: UNLIMITED" state while the player is last.
+   */
+  function drawBoostHud(b, anchor, countdown) {
+    if (!b) return;
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    const bw = anchor ? Math.max(118, anchor.w + 14) : 130, bh = 40;
+    const cx = anchor ? anchor.x + anchor.w / 2 : W - 80;
+    let x = Math.round(cx - bw / 2), y = Math.round((anchor ? anchor.y : H - 150) - bh - 10);
+    x = Math.max(6, Math.min(W - bw - 6, x));
+    const active = b.activeMs > 0;
+    let label, sub, col, frac = 0;
+    if (active) {
+      label = b.free ? '∞ BOOST' : 'BOOST'; col = b.free ? '#ff4fd8' : '#ff9a1f';
+      frac = b.activeMs / 2000; sub = null;
+    } else if (b.last && !countdown) {
+      label = '∞ LAST'; sub = 'UNLIMITED'; col = '#ff4fd8';
+    } else if (b.charge > 0) {
+      label = 'BOOST READY'; sub = '▲ slide GAS · Shift'; col = '#b8ff00';
+    } else {
+      label = 'BOOST USED'; sub = 'refills at the line'; col = '#7c8494';
+    }
+    ctx.save();
+    ctx.globalAlpha = countdown ? 0.6 : 1;
+    ctx.fillStyle = 'rgba(8,10,16,0.78)';
+    roundRect(x, y, bw, bh, 7); ctx.fill();
+    ctx.lineWidth = active ? 2.5 : 1.5;
+    ctx.strokeStyle = col;
+    ctx.stroke();
+    ctx.fillStyle = col;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = 'bold 13px "Russo One", Impact, sans-serif';
+    ctx.fillText(label, x + bw / 2, y + (active ? 14 : 14));
+    if (active) {
+      const px = x + 9, pw = bw - 18, py = y + 25, ph = 8;
+      ctx.fillStyle = 'rgba(255,255,255,0.14)';
+      ctx.fillRect(px, py, pw, ph);
+      ctx.fillStyle = col;
+      ctx.fillRect(px, py, pw * frac, ph);
+    } else if (sub) {
+      ctx.font = '10px "Russo One", Impact, sans-serif';
+      ctx.fillStyle = b.charge > 0 || b.last ? 'rgba(255,255,255,0.78)' : 'rgba(255,255,255,0.5)';
+      ctx.fillText(sub, x + bw / 2, y + 29);
+    }
+    ctx.restore();
   }
 
   function drawMinimap(world) {
@@ -249,5 +342,5 @@ export function createRenderer(canvas) {
     ctx.restore();
   }
 
-  return { resize, draw, drawCountdown, ctx };
+  return { resize, draw, drawCountdown, drawBoostHud, ctx };
 }

@@ -14,6 +14,9 @@ const ROLL = 140;            // coast deceleration
 const GRIP = 7.5;            // lateral velocity decay rate (1/s) — lower = more slide
 const WALL_BOUNCE = 0.25;
 const WALL_SCRUB = 0.94;
+/** Boost (player only, v47): at full boost level the top-speed cap is +40% and thrust +70%. */
+export const BOOST_TOP_MUL = 0.40;
+export const BOOST_ACCEL_MUL = 0.70;
 
 /** Place a car on the track and initialise its progress tracking. */
 export function initCarOnTrack(car, track, s) {
@@ -25,7 +28,9 @@ export function initCarOnTrack(car, track, s) {
 }
 
 /**
- * ctl: { accel:bool, brake:bool, steer:-1..1, aimAngle?:radians, noReverse?:bool }
+ * ctl: { accel:bool, brake:bool, steer:-1..1, aimAngle?:radians, noReverse?:bool, boost?:0..1 }
+ * boost is a smoothed level (0 = none); it only raises the top-speed cap and thrust.
+ * Steering, grip and braking are untouched (turn rate still scales with the base car.top).
  */
 export function stepCar(car, ctl, dtMs, track) {
   const dt = Math.min(0.05, dtMs / 1000);
@@ -45,9 +50,12 @@ export function stepCar(car, ctl, dtMs, track) {
   car.angle = normalizeAngle(car.angle + steer * turn * Math.sign(vF || 1) * dt);
 
   // Throttle / brake along the (new) heading
+  const b = clamp(ctl.boost || 0, 0, 1);
+  const top = car.top * (1 + BOOST_TOP_MUL * b);
+  const accel = car.accel * (1 + BOOST_ACCEL_MUL * b);
   if (ctl.accel && !ctl.brake) {
     if (vF < 0) vF += BRAKE * dt;
-    else if (vF < car.top) vF = Math.min(car.top, vF + car.accel * dt * (1 - 0.55 * vF / car.top));
+    else if (vF < top) vF = Math.min(top, vF + accel * dt * (1 - 0.55 * vF / top));
   } else if (ctl.brake) {
     if (vF > 0) vF = Math.max(0, vF - BRAKE * dt);
     else if (!ctl.noReverse) vF = Math.max(-REVERSE_TOP, vF - REVERSE_ACCEL * dt);
@@ -55,7 +63,8 @@ export function stepCar(car, ctl, dtMs, track) {
     const r = ROLL * dt;
     vF = Math.abs(vF) <= r ? 0 : vF - Math.sign(vF) * r;
   }
-  if (vF > car.top) vF += (car.top - vF) * Math.min(1, 3 * dt);
+  // over the cap (e.g. boost winding down): ease back towards it rather than snapping
+  if (vF > top) vF += (top - vF) * Math.min(1, 3 * dt);
   vL *= Math.exp(-GRIP * dt);
 
   fx = Math.cos(car.angle); fy = Math.sin(car.angle);

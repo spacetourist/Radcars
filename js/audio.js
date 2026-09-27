@@ -41,6 +41,7 @@ export function sfx(name) {
     case 'wall': beep(110, 0.07, 'square', 0.035, -50); break;
     case 'lap': beep(520, 0.08, 'sine', 0.04); setTimeout(() => beep(680, 0.1, 'sine', 0.04), 90); break;
     case 'finish': beep(440, 0.1, 'sine', 0.05); setTimeout(() => beep(554, 0.1, 'sine', 0.05), 100); setTimeout(() => beep(659, 0.18, 'sine', 0.06), 200); break;
+    case 'boost': beep(180, 0.35, 'sawtooth', 0.035, 420); setTimeout(() => beep(420, 0.25, 'triangle', 0.03, 300), 60); break;
     case 'click': beep(300, 0.04, 'square', 0.025); break;
     case 'countdown': beep(380, 0.12, 'square', 0.05); break;
     case 'countdownGo': beep(520, 0.1, 'square', 0.06); setTimeout(() => beep(780, 0.22, 'sawtooth', 0.05), 80); break;
