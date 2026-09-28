@@ -1,0 +1,66 @@
+Radcars v49 verification Mon Sep 28 2026 16:03:24 GMT+0100 (British Summer Time)
+URL http://localhost:4173/
+
+TURN at 1000 wu/s: MAX_TURN 3.3, R 530.5 → 466.2 wu (12.1% tighter)
+CAMERA: look-ahead clamped so player AABB stays in view with ~10% of shorter side margin (countdown / early race / low speed)
+
+RACES (3 laps, 5 AI Normal)
+  neon      P1 53.21s best 17.15s  fps≈65.7  You 53.2 > Echo 56.1 > Nyx 57.0 > Razor 57.7 > Blaze 57.7 > Volt 61.1
+  gridlock  P1 56.83s best 18.20s  fps≈65.3  You 56.8 > Nyx 61.9 > Echo 62.2 > Razor 62.8 > Blaze 63.1 > Volt 65.7
+  razor     P1 47.18s best 15.10s  fps≈72.5  You 47.2 > Echo 50.9 > Nyx 50.9 > Razor 52.3 > Blaze 52.6 > Volt 54.0
+  cargo     P1 52.03s best 16.70s  fps≈69.6  You 52.0 > Nyx 57.5 > Echo 58.9 > Blaze 59.3 > Razor 59.4 > Volt 61.2
+
+OVERALL: PASS
+
+DETAIL
+    [ok] menu build=v49 · turn-cam, tag "v49 · turn-cam", Update button=true
+    [ok] turn at 1000 wu/s: MAX_TURN 3.3, ω=2.145 rad/s, R 530.5→466.2 wu (12.1% tighter)
+
+=== NEON ===
+    [ok] countdown: car fully in view with ≥8% margin (box 532..587 × 347..377 in 1280×720, look=95, zoom=0.85)
+    shot docs/shots/77-neon-countdown.png
+    [ok] countdown mid: car in view (cy=362 of 720)
+    [ok] GO: car fully in view with margin (box 523..578 × 347..377, look=104)
+    shot docs/shots/77-neon-go.png
+    [ok] first ~1.6 s of race: player stayed fully on screen
+    [ok] features intact: pads=4, missile charge=1, boost charge=1, brake state absent=true, no BRK btn
+    [ok] race: P1 53.21s best 17.15s all AI finish=true fps≈65.7
+
+=== GRIDLOCK ===
+    [ok] countdown: car fully in view with ≥8% margin (box 544..598 × 346..374 in 1280×720, look=81, zoom=0.85)
+    shot docs/shots/77-gridlock-countdown.png
+    [ok] countdown mid: car in view (cy=360 of 720)
+    [ok] GO: car fully in view with margin (box 522..578 × 345..375, look=104)
+    shot docs/shots/77-gridlock-go.png
+    [ok] first ~1.6 s of race: player stayed fully on screen
+    [ok] features intact: pads=3, missile charge=1, boost charge=1, brake state absent=true, no BRK btn
+    [ok] race: P1 56.83s best 18.20s all AI finish=true fps≈65.3
+
+=== RAZOR ===
+    [ok] countdown: car fully in view with ≥8% margin (box 682..737 × 345..374 in 1280×720, look=81, zoom=0.85)
+    shot docs/shots/77-razor-countdown.png
+    [ok] countdown mid: car in view (cy=359 of 720)
+    [ok] GO: car fully in view with margin (box 705..760 × 344..374, look=107)
+    shot docs/shots/77-razor-go.png
+    [ok] first ~1.6 s of race: player stayed fully on screen
+    shot docs/shots/77-razor-hairpin.png
+    [ok] features intact: pads=3, missile charge=1, boost charge=1, brake state absent=true, no BRK btn
+    [ok] race: P1 47.18s best 15.10s all AI finish=true fps≈72.5
+
+=== CARGO ===
+    [ok] countdown: car fully in view with ≥8% margin (box 544..598 × 346..375 in 1280×720, look=81, zoom=0.85)
+    shot docs/shots/77-cargo-countdown.png
+    [ok] countdown mid: car in view (cy=360 of 720)
+    [ok] GO: car fully in view with margin (box 520..575 × 345..375, look=107)
+    shot docs/shots/77-cargo-go.png
+    [ok] first ~1.6 s of race: player stayed fully on screen
+    shot docs/shots/77-cargo-hairpin.png
+    [ok] features intact: pads=3, missile charge=1, boost charge=1, brake state absent=true, no BRK btn
+    [ok] race: P1 52.03s best 16.70s all AI finish=true fps≈69.6
+
+=== MOBILE 844×390 countdown (the short-viewport bug) ===
+    [ok] mobile menu tag "v49 · turn-cam"
+    [ok] mobile countdown: car in view with margin (y 182..212 of 390, look=109, zoom=0.85), no BRK
+    shot docs/shots/77-mobile-neon-countdown.png
+    [ok] mobile errors: 0
+    [ok] desktop errors: 0 []

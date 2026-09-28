@@ -6,7 +6,7 @@ export const CAR_LEN = 64;
 export const CAR_WID = 34;
 export const CAR_R = 20;
 
-export const MAX_TURN = 2.9;        // rad/s at moderate speed
+export const MAX_TURN = 3.3;        // rad/s at moderate speed (v49: ~12% tighter circle at race speed)
 export const BRAKE = 1500;          // wu/s² when braking forward motion
 const REVERSE_ACCEL = 450;
 const REVERSE_TOP = 260;

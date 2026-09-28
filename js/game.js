@@ -1,6 +1,6 @@
 import { getTrack, buildStartingGrid } from './tracks.js';
 import { createCar, CAR_COLORS, AI_NAMES } from './cars.js';
-import { stepCar, initCarOnTrack, resolveCarCollisions, BOOST_TOP_MUL } from './physics.js';
+import { stepCar, initCarOnTrack, resolveCarCollisions, BOOST_TOP_MUL, CAR_LEN, CAR_WID } from './physics.js';
 import { stepAI } from './ai.js';
 import { createRenderer } from './render.js';
 import { sfx } from './audio.js';
@@ -139,27 +139,69 @@ export function createGame(canvas, input) {
     return { x: r.left - c.left, y: r.top - c.top, w: r.width, h: r.height };
   }
 
+  /**
+   * Chase camera with a keep-in-view clamp (v49).
+   * Bug we fixed: the countdown used a fixed 200 wu look-ahead at ZOOM_GRID (0.85). On a short
+   * viewport (e.g. mobile landscape height ~390 → half-height ≈ 229 wu) that put the car near or
+   * past the edge until it had driven a bit. We now pick look-ahead / zoom as before for the
+   * high-speed chase, then clamp look so the player's AABB stays inside the view with ~10% of
+   * the shorter screen side as margin, and hard-correct after smoothing if anything slips.
+   */
   function updateCamera(dt) {
     const { player: p, cam, race } = world;
     const ov = window.__RAD_CAM__; // verification hook: fixed camera {x, y, zoom}
     if (ov) { cam.x = ov.x; cam.y = ov.y; cam.zoom = ov.zoom; return; }
-    const k = 1 - Math.exp(-dt / 180);
-    if (race.countdown > 0) {
-      cam.zoom += (ZOOM_GRID - cam.zoom) * k;
-      cam.x += (p.x + Math.cos(p.angle) * 200 - cam.x) * k;
-      cam.y += (p.y + Math.sin(p.angle) * 200 - cam.y) * k;
-      return;
-    }
+
+    const vw = canvas.clientWidth || innerWidth;
+    const vh = canvas.clientHeight || innerHeight;
+    const short = Math.min(vw, vh);
+    const margin = short * 0.10; // ~8–12% of the shorter side
+    const carPad = Math.hypot(CAR_LEN / 2, CAR_WID / 2) + 8; // AABB half-diagonal + pad
+
     const spd = Math.hypot(p.vx, p.vy);
-    const t = clamp(spd / PLAYER_TOP, 0, 1);
-    const eased = 1 - (1 - t) * (1 - t);
-    const zoom = ZOOM_NEAR + (ZOOM_FAR - ZOOM_NEAR) * eased;
-    const look = 60 + (LOOKAHEAD_MAX - 60) * eased;
-    // look ahead along the direction of travel (falls back to heading when slow)
-    const dir = spd > 80 ? Math.atan2(p.vy, p.vx) : p.angle;
+    const counting = race.countdown > 0;
+    let zoom, look, dir;
+    if (counting) {
+      // grid framing: slight look-ahead so the car sits lower-middle, then clamp below
+      zoom = ZOOM_GRID;
+      look = 120;
+      dir = p.angle;
+    } else {
+      const t = clamp(spd / PLAYER_TOP, 0, 1);
+      const eased = 1 - (1 - t) * (1 - t);
+      zoom = ZOOM_NEAR + (ZOOM_FAR - ZOOM_NEAR) * eased;
+      look = 60 + (LOOKAHEAD_MAX - 60) * eased;
+      dir = spd > 80 ? Math.atan2(p.vy, p.vx) : p.angle;
+      // first moments of the race: don't let look race ahead of the zoom pull-out
+      if (race.time < 2500) look = Math.min(look, 140);
+    }
+
+    // Max look that keeps the whole car inside the short viewport axis with the margin.
+    // At high speed zoom is small → maxLook is huge → chase cam is unchanged.
+    const half = short / 2 - margin;
+    const maxLook = Math.max(0, half / Math.max(0.05, zoom) - carPad);
+    look = Math.min(look, maxLook);
+
+    const k = 1 - Math.exp(-dt / 180);
+    const zk = counting ? k : (1 - Math.exp(-dt / 400));
     cam.x += (p.x + Math.cos(dir) * look - cam.x) * k;
     cam.y += (p.y + Math.sin(dir) * look - cam.y) * k;
-    cam.zoom += (zoom - cam.zoom) * (1 - Math.exp(-dt / 400));
+    cam.zoom += (zoom - cam.zoom) * zk;
+    keepPlayerInView(cam, p, vw, vh, margin, carPad);
+  }
+
+  /** Hard safety: if the smoothed cam still puts any part of the car outside the safe rect, shift it. */
+  function keepPlayerInView(cam, p, vw, vh, margin, carPad) {
+    const z = Math.max(0.05, cam.zoom);
+    const pad = carPad * z;
+    const sx = (p.x - cam.x) * z + vw / 2;
+    const sy = (p.y - cam.y) * z + vh / 2;
+    let dx = 0, dy = 0;
+    if (sx - pad < margin) dx = (sx - pad - margin) / z;
+    else if (sx + pad > vw - margin) dx = (sx + pad - (vw - margin)) / z;
+    if (sy - pad < margin) dy = (sy - pad - margin) / z;
+    else if (sy + pad > vh - margin) dy = (sy + pad - (vh - margin)) / z;
+    cam.x += dx; cam.y += dy;
   }
 
   function update(dt) {

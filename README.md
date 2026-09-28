@@ -1,6 +1,6 @@
 # Radcars
 
-Top-down arcade racer (PWA). **v48-missile**: just the cars, the racetrack and the gameplay — plain Canvas 2D, no image assets on the runtime path, no WebGL/Pixi. v47 added a once-per-lap **boost**; v48 removes the brake, adds a once-per-lap **seeker missile** and **boost pads** on every track. Handling, track layouts and cars are unchanged.
+Top-down arcade racer (PWA). **v49-turn-cam**: just the cars, the racetrack and the gameplay — plain Canvas 2D, no image assets on the runtime path, no WebGL/Pixi. v47 added a once-per-lap **boost**; v48 removed the brake and added a seeker missile + boost pads; **v49** tightens the turn radius by ~12% at race speed and keeps the player car fully on screen during countdown / race start. Tracks, missile, boost, pads and car drawing are unchanged.
 
 ## Quick start
 
@@ -49,6 +49,11 @@ Open `http://localhost:4173` (landscape recommended). Live: https://spacetourist
 ### Updates (PWA)
 
 - The service worker activates new builds immediately (`skipWaiting` + `clients.claim`) and fetches same-origin files network-first with `cache: 'no-store'` (Cache Storage is only the offline fallback); `js/version.js` is the single source of truth for the build (`v48 · missile`, cache `radcars-v48-missile`): `index.html` always fetches it fresh, and it writes the stylesheet, an import map and the main module with `?b=<build>` on every URL, so no cache can mix old and new modules. The title screen shows the build and an **Update / hard refresh** button (unregisters all service workers, deletes all caches, re-downloads the files and reloads with `?r=<timestamp>`). The page checks for an update on load and whenever it becomes visible again, and when a new worker takes over it reloads once — but never mid-race: the reload waits for the menu or results screen. `node docs/verify-sw-update.mjs` checks this end-to-end (a v47 tab moving to v48 without closing it, mid-race deferral, instant reload on the menu).
+
+### Tighter turn + camera (v49)
+
+- **Turn:** `MAX_TURN` raised from 2.9 → 3.3 rad/s. At 1000 wu/s the kinematic circle shrinks from ~530 wu to ~466 wu (~12% tighter). Grip and top speed are unchanged.
+- **Camera:** countdown / low-speed look-ahead is clamped so the player's AABB stays inside the view with ~10% of the shorter screen side as margin (hard-corrected after smoothing). High-speed chase pull-out is unchanged. Fixes the bug where a short viewport (mobile landscape) could leave the car off-screen at the start.
 
 ## Gameplay
 
