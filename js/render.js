@@ -66,7 +66,37 @@ export function createRenderer(canvas) {
     ctx.lineWidth = 6;
     ctx.stroke(centre);
     ctx.setLineDash([]);
+    drawPads(track);
     drawStartLine(track);
+  }
+
+  /** Boost pads: amber chevrons on the asphalt pointing in the direction of travel. */
+  function drawPads(track) {
+    for (const pad of track.pads || []) {
+      const hw = pad.halfW, L = pad.len;
+      ctx.save();
+      ctx.translate(pad.x, pad.y);
+      ctx.rotate(pad.angle);
+      ctx.fillStyle = 'rgba(255,176,0,0.16)';
+      ctx.fillRect(0, -hw, L, hw * 2);
+      ctx.strokeStyle = 'rgba(255,176,0,0.55)';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(0, -hw, L, hw * 2);
+      ctx.fillStyle = 'rgba(255,176,0,0.8)';
+      const cw = Math.min(26, L / 5), tip = Math.min(42, hw * 0.5);
+      for (const x0 of [L * 0.12, L * 0.42, L * 0.72]) {
+        ctx.beginPath();
+        ctx.moveTo(x0, -hw * 0.82);
+        ctx.lineTo(x0 + tip, 0);
+        ctx.lineTo(x0, hw * 0.82);
+        ctx.lineTo(x0 - cw, hw * 0.82);
+        ctx.lineTo(x0 + tip - cw, 0);
+        ctx.lineTo(x0 - cw, -hw * 0.82);
+        ctx.closePath();
+        ctx.fill();
+      }
+      ctx.restore();
+    }
   }
 
   function drawStartLine(track) {
@@ -102,10 +132,11 @@ export function createRenderer(canvas) {
     const hl = L / 2, hw = Wd / 2;
     ctx.save();
     ctx.translate(car.x, car.y);
-    ctx.rotate(car.angle);
+    ctx.rotate(car.angle + (car.spinVis || 0)); // spinVis: v48 missile-hit 360° spin (0 otherwise)
     if (debugCars) {
       const m = ctx.getTransform();
       debugCars.push({ id: car.id, isPlayer: car.isPlayer, x: car.x, y: car.y, vx: car.vx, vy: car.vy, angle: car.angle, L, W: Wd,
+        spinning: car.spinMs > 0, spinVis: car.spinVis || 0,
         // screen-space images of the local length axis (+X, nose) and width axis (+Y)
         lenAxis: { x: m.a * hl, y: m.b * hl }, widAxis: { x: m.c * hw, y: m.d * hw }, origin: { x: m.e, y: m.f } });
     }
@@ -202,9 +233,16 @@ export function createRenderer(canvas) {
     ctx.scale(cam.zoom, cam.zoom);
     ctx.translate(-cam.x, -cam.y);
     drawTrack(track);
-    for (const c of cars) if (!c.isPlayer) drawCar(c, cam.zoom);
+    for (const m of world.missiles || []) drawTrail(m, cam.zoom);
+    for (const c of cars) {
+      if (c.isPlayer) continue;
+      if (c.boostLevel > 0.02) drawBoostFlame(c, cam.zoom, world.race.time + c.id * 97);
+      drawCar(c, cam.zoom);
+    }
     if (world.player.boostLevel > 0.02) drawBoostFlame(world.player, cam.zoom, world.race.time);
     drawCar(world.player, cam.zoom);
+    for (const m of world.missiles || []) if (!m.dead) drawMissile(m, cam.zoom);
+    for (const f of world.fx || []) drawFx(f, cam.zoom);
     ctx.restore();
     drawMinimap(world);
     if (debugCars) window.__RAD_DEBUG__.frame = { cars: debugCars, cam: { ...cam }, W, H, DPR };
@@ -217,6 +255,7 @@ export function createRenderer(canvas) {
    */
   function drawBoostFlame(car, zoom, tMs) {
     const lvl = car.boostLevel;
+    if (car.spinMs > 0) return;
     const s = Math.max(1, 34 / (CAR_LEN * zoom));
     const hl = CAR_LEN * s / 2, hw = CAR_WID * 0.88 * s / 2;
     const fl = 0.85 + 0.15 * Math.sin(tMs * 0.047) + 0.08 * Math.sin(tMs * 0.113);
@@ -250,6 +289,103 @@ export function createRenderer(canvas) {
       ctx.quadraticCurveTo(-hl - len * 0.35, y + 2.5 * s, -hl + 2 * s, y + 3.5 * s);
       ctx.closePath(); ctx.fill();
     }
+    ctx.restore();
+  }
+
+  /** Seeker missile: white body, red nose, fins, small exhaust flame (+X = direction of flight). */
+  function drawMissile(m, zoom) {
+    const s = Math.max(1, 18 / (26 * zoom));
+    ctx.save();
+    ctx.translate(m.x, m.y);
+    ctx.rotate(m.angle);
+    ctx.scale(s, s);
+    ctx.fillStyle = 'rgba(255,150,40,0.9)';
+    ctx.beginPath(); ctx.moveTo(-12, -3); ctx.lineTo(-22 - Math.random() * 6, 0); ctx.lineTo(-12, 3); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#c9ccd6';
+    ctx.beginPath(); ctx.moveTo(-9, -3.5); ctx.lineTo(-14, -8); ctx.lineTo(-14, 8); ctx.lineTo(-9, 3.5); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#f4f4f8';
+    ctx.fillRect(-12, -3.5, 20, 7);
+    ctx.fillStyle = '#ff2a2a';
+    ctx.beginPath(); ctx.moveTo(8, -3.5); ctx.quadraticCurveTo(15, -2, 16, 0); ctx.quadraticCurveTo(15, 2, 8, 3.5); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 1;
+    ctx.strokeRect(-12, -3.5, 20, 7);
+    ctx.restore();
+  }
+
+  /** Smoke trail: grey puffs that grow and fade. */
+  function drawTrail(m, zoom) {
+    const s = Math.max(1, 18 / (26 * zoom));
+    for (const t of m.trail) {
+      const k = t.ms / 650;
+      ctx.fillStyle = `rgba(210,212,220,${(0.55 * (1 - k)).toFixed(3)})`;
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, (4 + 14 * k) * s, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  /** Explosion (hit) or small puff (wall / expired). */
+  function drawFx(f, zoom) {
+    const s = Math.max(1, 34 / (64 * zoom));
+    const k = f.ms / f.max;
+    ctx.save();
+    if (f.big) {
+      ctx.fillStyle = `rgba(120,120,128,${(0.5 * (1 - k)).toFixed(3)})`;
+      ctx.beginPath(); ctx.arc(f.x, f.y, (26 + 60 * k) * s, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = `rgba(255,120,20,${(0.95 * (1 - k)).toFixed(3)})`;
+      ctx.beginPath(); ctx.arc(f.x, f.y, (16 + 40 * Math.sqrt(k)) * s, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = `rgba(255,236,120,${Math.max(0, 1 - k * 1.6).toFixed(3)})`;
+      ctx.beginPath(); ctx.arc(f.x, f.y, (10 + 22 * Math.sqrt(k)) * s, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = `rgba(255,255,255,${Math.max(0, 0.8 - k).toFixed(3)})`;
+      ctx.lineWidth = 3 * s;
+      for (let i = 0; i < 8; i++) {
+        const a = i * Math.PI / 4 + 0.3, r0 = (20 + 30 * k) * s, r1 = (34 + 60 * k) * s;
+        ctx.beginPath(); ctx.moveTo(f.x + Math.cos(a) * r0, f.y + Math.sin(a) * r0); ctx.lineTo(f.x + Math.cos(a) * r1, f.y + Math.sin(a) * r1); ctx.stroke();
+      }
+    } else {
+      ctx.fillStyle = `rgba(200,200,208,${(0.7 * (1 - k)).toFixed(3)})`;
+      ctx.beginPath(); ctx.arc(f.x, f.y, (8 + 26 * k) * s, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = `rgba(255,150,40,${Math.max(0, 0.8 - k * 1.5).toFixed(3)})`;
+      ctx.beginPath(); ctx.arc(f.x, f.y, (5 + 10 * k) * s, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  /** BOOST + MISSILE panels side by side above the GAS button. */
+  function drawWeaponHud(b, ms, anchor, countdown) {
+    const bw = anchor ? Math.max(118, anchor.w + 14) : 130;
+    const box = drawBoostHud(b, anchor, countdown);
+    if (box && ms) drawMissileHud(ms, box.x - bw - 8, box.y, bw, box.h, countdown);
+  }
+
+  function drawMissileHud(ms, x, y, bw, bh, countdown) {
+    x = Math.max(6, x);
+    let label, sub, col;
+    if (ms.flash) {
+      label = ms.flash.text;
+      col = ms.flash.kind === 'hit' ? '#b8ff00' : ms.flash.kind === 'miss' ? '#ff6a6a' : '#ffb000';
+      sub = ms.flash.kind === 'none' ? 'no car ahead' : ms.flash.kind === 'hit' ? 'spun out!' : 'missile lost';
+    } else if (ms.inFlight) {
+      label = 'MISSILE'; sub = 'IN FLIGHT'; col = '#ff9a1f';
+    } else if (ms.charge > 0) {
+      label = 'MISSILE READY'; sub = '◀ slide GAS · Space'; col = '#ff4d5e';
+    } else {
+      label = 'MISSILE USED'; sub = 'refills at the line'; col = '#7c8494';
+    }
+    ctx.save();
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    ctx.globalAlpha = countdown ? 0.6 : 1;
+    ctx.fillStyle = 'rgba(8,10,16,0.78)';
+    roundRect(x, y, bw, bh, 7); ctx.fill();
+    ctx.lineWidth = ms.flash || ms.inFlight ? 2.5 : 1.5;
+    ctx.strokeStyle = col; ctx.stroke();
+    ctx.fillStyle = col;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = `bold ${ms.flash ? 15 : 13}px "Russo One", Impact, sans-serif`;
+    ctx.fillText(label, x + bw / 2, y + 14);
+    ctx.font = '10px "Russo One", Impact, sans-serif';
+    ctx.fillStyle = ms.charge > 0 || ms.flash || ms.inFlight ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.5)';
+    ctx.fillText(sub, x + bw / 2, y + 29);
     ctx.restore();
   }
 
@@ -287,7 +423,7 @@ export function createRenderer(canvas) {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.font = 'bold 13px "Russo One", Impact, sans-serif';
-    ctx.fillText(label, x + bw / 2, y + (active ? 14 : 14));
+    ctx.fillText(label, x + bw / 2, y + 14);
     if (active) {
       const px = x + 9, pw = bw - 18, py = y + 25, ph = 8;
       ctx.fillStyle = 'rgba(255,255,255,0.14)';
@@ -300,6 +436,7 @@ export function createRenderer(canvas) {
       ctx.fillText(sub, x + bw / 2, y + 29);
     }
     ctx.restore();
+    return { x, y, h: bh };
   }
 
   function drawMinimap(world) {
@@ -342,5 +479,5 @@ export function createRenderer(canvas) {
     ctx.restore();
   }
 
-  return { resize, draw, drawCountdown, drawBoostHud, ctx };
+  return { resize, draw, drawCountdown, drawBoostHud, drawWeaponHud, ctx };
 }

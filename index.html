@@ -15,7 +15,9 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Russo+One&display=swap" rel="stylesheet" />
   <title>Radcars</title>
-  <link rel="stylesheet" href="css/style.css" />
+  <!-- js/version.js is the single source of truth for the build; always fetched fresh, it writes the stylesheet, an
+       import map and the main module with ?b=<build> so no browser cache can mix old and new files. -->
+  <script>document.write('<script src="js/version.js?t=' + Date.now() + '"><\/script>');</script>
 </head>
 <body>
   <div id="app">
@@ -28,13 +30,11 @@
         <div class="tc-aim-knob" id="aim-knob"></div>
         <div class="tc-aim-label">STEER</div>
       </div>
-      <div class="tc-right" aria-label="Throttle and brake">
-        <button type="button" id="btn-accel" class="tc-btn tc-accel" data-action="accel">GAS</button>
-        <button type="button" id="btn-brake" class="tc-btn tc-brake" data-action="brake">BRK</button>
+      <div class="tc-right" aria-label="Throttle: hold GAS, slide up to boost, slide left to fire a missile">
+        <button type="button" id="btn-accel" class="tc-btn tc-accel" data-action="accel">GAS<span class="tc-hint">▲ boost · ◀ missile</span></button>
       </div>
       <button type="button" id="btn-pause" class="tc-btn tc-pause" data-action="pause">❚❚</button>
     </div>
   </div>
-  <script type="module" src="js/main.js"></script>
 </body>
 </html>

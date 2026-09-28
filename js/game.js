@@ -1,10 +1,12 @@
 import { getTrack, buildStartingGrid } from './tracks.js';
 import { createCar, CAR_COLORS, AI_NAMES } from './cars.js';
-import { stepCar, initCarOnTrack, resolveCarCollisions } from './physics.js';
+import { stepCar, initCarOnTrack, resolveCarCollisions, BOOST_TOP_MUL } from './physics.js';
 import { stepAI } from './ai.js';
 import { createRenderer } from './render.js';
 import { sfx } from './audio.js';
-import { clamp } from './util.js';
+import { clamp, angleDiff } from './util.js';
+import { pointAt } from './tracks.js';
+import { newMissileState, pickTarget, launchMissile, stepMissiles, stepSpin, stepPads } from './weapons.js';
 
 /** Chase camera: tight at the grid, pulls out and looks ahead with speed. */
 const ZOOM_GRID = 0.85;
@@ -30,6 +32,11 @@ const PLAYER_ACCEL = 640;
 export const BOOST_MS = 2000;
 const BOOST_RAMP_IN_MS = 220;
 const BOOST_RAMP_OUT_MS = 450;
+
+/** Player auto-unstick (no brake since v48): gas held, near-zero speed for UNSTICK_AFTER_MS → reverse. */
+const UNSTICK_AFTER_MS = 1500;
+const UNSTICK_REVERSE_MS = 900;
+const MISSILE_FLASH_MS = 1400;
 
 function newBoost() {
   return { charge: 1, activeMs: 0, level: 0, free: false, uses: 0, freeUses: 0, lastTriggerMs: -1, source: null };
@@ -82,6 +89,10 @@ export function createGame(canvas, input) {
       race: { trackIndex, totalLaps: laps, time: 0, countdown: COUNTDOWN_MS, goFlash: 0, over: false, placesAssigned: 0, lapFlashMs: 0, lapFlashLast: 0, lapFlashBest: 0 }
     };
     world.boost = newBoost();
+    world.missile = newMissileState();
+    world.missiles = [];
+    world.fx = [];
+    world.unstick = { stuckMs: 0, reverseMs: 0, count: 0 };
     input.clearBoost && input.clearBoost();
     lastDigit = null;
     running = true;
@@ -108,7 +119,7 @@ export function createGame(canvas, input) {
     }
     updateCamera(dt);
     renderer.draw(world);
-    if (!world.race.over && !world.player.finished) renderer.drawBoostHud(world.boost, boostAnchor(), world.race.countdown > 0);
+    if (!world.race.over && !world.player.finished) renderer.drawWeaponHud(world.boost, world.missile, boostAnchor(), world.race.countdown > 0);
     const race = world.race;
     if (race.countdown > 0) {
       const c = race.countdown;
@@ -168,15 +179,29 @@ export function createGame(canvas, input) {
     if (race.over) return;
     race.time += dt;
     updateBoost(flags, dt);
+    updateMissile(flags, dt);
 
     for (const c of cars) {
       let ctl;
+      const spinning = stepSpin(c, dt);
       if (c.finished) ctl = { accel: false, brake: true, noReverse: true, steer: 0 };
-      else if (c.isPlayer) ctl = { accel: flags.accel, brake: flags.brake, steer: flags.steer, aimAngle: flags.aimAngle, boost: world.boost.level };
-      else ctl = stepAI(c, cars, track, dt);
+      else if (spinning) ctl = { accel: false, brake: false, steer: 0 }; // hit by a missile: no drive, no steering
+      else if (c.isPlayer) ctl = playerControl(flags, dt);
+      else {
+        // pad boost: let the AI plan with its boosted top speed while it lasts
+        const top = c.top;
+        if (c.boostLevel > 0) c.top = top * (1 + BOOST_TOP_MUL * c.boostLevel);
+        ctl = stepAI(c, cars, track, dt);
+        c.top = top;
+      }
+      rampBoost(c, dt);
+      ctl.boost = c.boostLevel || 0;
+      c.drive = ctl.accel || !!ctl.steer; // last frame's drive input (read by the verify scripts)
       stepCar(c, ctl, dt, track);
+      if (!c.finished) stepPads(world, c);
     }
     resolveCarCollisions(cars, track);
+    stepMissiles(world, dt, onMissileEnd);
     if (player.wallHit > 250 && race.time - (race.lastWallSfx || 0) > 300) { race.lastWallSfx = race.time; sfx('wall'); }
 
     const L = track.length;
@@ -191,6 +216,7 @@ export function createGame(canvas, input) {
         c.lapStartMs = race.time;
         if (c.isPlayer) {
           world.boost.charge = 1; // lap crossing refills the boost charge (max 1)
+          world.missile.charge = 1; // …and the missile charge (max 1)
           race.lapFlashMs = 2800; race.lapFlashLast = lapMs; race.lapFlashBest = c.bestLapMs;
           if (c.lap < race.totalLaps) sfx('lap');
         }
@@ -238,10 +264,53 @@ export function createGame(canvas, input) {
     }
     if (b.activeMs > 0) b.activeMs = Math.max(0, b.activeMs - dt);
     if (p.finished) b.activeMs = 0;
-    const target = b.activeMs > 0 ? 1 : 0;
-    const rate = target > b.level ? dt / BOOST_RAMP_IN_MS : dt / BOOST_RAMP_OUT_MS;
-    b.level = target > b.level ? Math.min(1, b.level + rate) : Math.max(0, b.level - rate);
-    p.boostLevel = b.level;
+  }
+
+  /** Smoothed boost level per car: lap boost (player) or a boost pad (anyone). */
+  function rampBoost(c, dt) {
+    if (c.padMs > 0) c.padMs = Math.max(0, c.padMs - dt);
+    const on = (c.isPlayer && world.boost.activeMs > 0) || c.padMs > 0;
+    const lvl = c.boostLevel || 0;
+    const target = on && !c.finished ? 1 : 0;
+    c.boostLevel = target > lvl ? Math.min(1, lvl + dt / BOOST_RAMP_IN_MS) : Math.max(0, lvl - dt / BOOST_RAMP_OUT_MS);
+    if (c.isPlayer) world.boost.level = c.boostLevel;
+  }
+
+  /** Player controls: gas + steer only (no brake since v48), with an automatic unstick reverse. */
+  function playerControl(flags, dt) {
+    const p = world.player, u = world.unstick;
+    const spd = Math.hypot(p.vx, p.vy);
+    if (u.reverseMs > 0) {
+      u.reverseMs -= dt;
+      // back away from the wall, turning the nose towards the direction of the road
+      const tp = pointAt(world.track, p.sPrev + 200);
+      const err = angleDiff(p.angle, Math.atan2(tp.y - p.y, tp.x - p.x));
+      return { accel: false, brake: true, steer: -Math.sign(err || 1) };
+    }
+    if (flags.accel && spd < 60) u.stuckMs += dt; else u.stuckMs = 0;
+    if (u.stuckMs > UNSTICK_AFTER_MS) { u.stuckMs = 0; u.reverseMs = UNSTICK_REVERSE_MS; u.count++; }
+    return { accel: flags.accel, brake: false, steer: flags.steer, aimAngle: flags.aimAngle };
+  }
+
+  /** Space / left slide on GAS: fire the seeker missile at the car ahead (one per lap). */
+  function updateMissile(flags, dt) {
+    const ms = world.missile, p = world.player;
+    if (ms.flash) { ms.flash.ms -= dt; if (ms.flash.ms <= 0) ms.flash = null; }
+    ms.inFlight = world.missiles.some((m) => !m.dead);
+    if (!flags.missile || p.finished || ms.charge < 1) return;
+    const target = pickTarget(world, standings());
+    if (!target) { ms.refused++; ms.flash = { text: 'NO TARGET', ms: MISSILE_FLASH_MS, kind: 'none' }; return; }
+    ms.charge = 0; ms.shots++; ms.lastSource = flags.missileSource;
+    launchMissile(world, target);
+    ms.inFlight = true;
+    sfx('missile');
+  }
+
+  function onMissileEnd(m) {
+    const ms = world.missile;
+    ms.log.push(m.rec);
+    if (m.result === 'hit') { ms.hits++; ms.flash = { text: 'HIT!', ms: MISSILE_FLASH_MS, kind: 'hit' }; sfx('hit'); }
+    else { ms.flash = { text: 'MISS', ms: MISSILE_FLASH_MS, kind: 'miss' }; sfx('miss'); }
   }
 
   function finishRace() {

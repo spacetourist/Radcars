@@ -47,7 +47,12 @@ export function createUI(root, api) {
       <div class="menu-btns">
         <button class="btn primary" data-act="race">Race</button>
         <button class="btn" data-act="options">Options</button>
+      </div>
+      <div class="build-row">
+        <span class="build-tag" id="build-tag">${(self.RADCARS_BUILD && self.RADCARS_BUILD.label) || 'dev'}</span>
+        <button class="btn btn-mini" id="hard-refresh" title="Clear the offline cache and reload the latest version">Update / hard refresh</button>
       </div>`);
+    el.querySelector('#hard-refresh').onclick = (e) => { e.currentTarget.disabled = true; e.currentTarget.textContent = 'Updating…'; api.onHardRefresh && api.onHardRefresh(); };
     el.querySelectorAll('[data-act]').forEach((b) => {
       b.onclick = () => { sfx('click'); api.onMenu(b.dataset.act); };
     });
@@ -98,8 +103,8 @@ export function createUI(root, api) {
           <button class="btn" data-k="laps" data-d="1">+</button></div></div>
       </div>
       <p class="muted" style="margin-top:12px;text-align:center">
-        Keyboard: ↑/W accelerate · ↓/S brake/reverse · ←→/AD steer · Shift boost · P pause<br/>
-        Touch: drag the ring to point the car · GAS / BRK buttons · slide up from GAS to boost
+        Keyboard: ↑/W accelerate (lift off to slow) · ←→/AD steer · Shift boost · Space missile · P pause<br/>
+        Touch: drag the ring to point the car · hold GAS · slide up from GAS to boost · slide left from GAS to fire a missile<br/>Chevron pads on the track give any car a free 0.5 s boost
       </p>
       <div class="row" style="margin-top:14px"><button class="btn" data-act="back">Back</button></div>`);
     const lim = { difficulty: [0, DIFFICULTIES.length - 1], aiCount: [1, 7], laps: [1, 10] };

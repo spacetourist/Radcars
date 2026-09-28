@@ -1,0 +1,23 @@
+SW update test — Mon Sep 28 2026 13:15:29 GMT+0100 (British Summer Time)
+
+1) v47 tab (git 1f18a78, cache radcars-v47-boost)
+  [ok] tab is controlled by the v47 worker (caches ["radcars-v47-boost"], BRK button present, no v48 page code)
+
+2) deploy v48 (working tree, cache radcars-v48-missile) under the open tab; the user refreshes / returns to it once
+  [ok] same tab now runs v48: caches ["radcars-v48-missile"], v48 page code=true, BRK gone=true; navigations 2 (1 refresh + 1 automatic reload when the v48 worker took control)
+
+3) next deploy while MID-RACE: update found on visibilitychange, reload deferred until the menu
+  [ok] new worker (radcars-v48-missile-next1) took control during the race: reload pending=true, navigations during the race 0, race still running=true
+  [ok] after quitting to the menu the tab reloaded once onto radcars-v48-missile-next1 (navigations 1, caches ["radcars-v48-missile-next1"])
+
+4) next deploy while on the MENU: reloads straight away
+  [ok] menu tab reloaded exactly once onto radcars-v48-missile-next1-next2 (navigations 1)
+
+5) menu "Update / hard refresh" button (a newer build is on the server but the tab hasn't looked for it)
+    before: tag "v48 · missile-next1-next2", caches ["radcars-v48-missile-next1-next2","radcars-stale-marker"], registrations 1
+  [ok] tapping the button in a mobile viewport (844×390 touch) reloads onto "v48 · missile-next1-next2-next3" too
+  [ok] button wiped the caches (stale marker + radcars-v48-missile-next1-next2 gone) and reloaded via /?r=1790597743291
+  [ok] reload landed on the current build: tag "v48 · missile-next1-next2-next3", caches ["radcars-v48-missile-next1-next2-next3"], fresh worker in control, 1 registration, address bar tidied to /
+  [ok] page errors: 0 []
+
+OVERALL: PASS

@@ -17,7 +17,7 @@
  * B. Mobile 844×390 touch: GAS held by touch, STEER ring driven by a second touch; small GAS jitter
  *    must not boost, an upward 60 px slide on GAS must boost (free when last, charged when not),
  *    throttle must stay on and steering must keep working through the slide; sliding off sideways
- *    still releases GAS (old behaviour).
+ *    still releases GAS (right-hand side since v48; left = missile).
  * Screenshots: docs/shots/75-*.png, report: docs/shots/75-verify.txt
  */
 import puppeteer from '../node_modules/puppeteer-core/lib/esm/puppeteer/puppeteer-core.js';
@@ -57,7 +57,8 @@ async function installRecorder(page, withBot) {
       window.__rec.push({ t: w.race.time, cd: w.race.countdown, spd: Math.hypot(p.vx, p.vy), lap: p.lap, fin: p.finished,
         act: b.activeMs, lvl: b.level, ch: b.charge, last: !!b.last, free: b.free, uses: b.uses, freeUses: b.freeUses,
         radius: w.track.pts[p.seg]?.radius ?? 0, paused: g.isPaused(), wall: p.wallHit || 0,
-        aiBoost: w.cars.slice(1).some((c) => c.boostLevel > 0 || (c.top > 1100)) });
+        // v48: AI may boost only from boost pads (padMs), never with the lap boost / a raised top
+        aiBoost: w.cars.slice(1).some((c) => c.top > 1100 || (c.boostLevel > 0.999 && !(c.padMs > 0))) });
     }, 50);
     if (!withBot) return;
     const held = new Set();
@@ -69,9 +70,9 @@ async function installRecorder(page, withBot) {
       if (window.__botMode === 'idle') { ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].forEach((k) => set(k, false)); return; }
       const tp = pointAt(w.track, p.sPrev + 150 + spd * 0.35);
       const err = angleDiff(p.angle, Math.atan2(tp.y - p.y, tp.x - p.x));
-      set('ArrowUp', true);
+      // v48: no brake — lift off the gas when badly off line instead
+      set('ArrowUp', !(Math.abs(err) > 0.7 && spd > 500));
       set('ArrowRight', err > 0.05); set('ArrowLeft', err < -0.05);
-      set('ArrowDown', Math.abs(err) > 0.7 && spd > 500);
     }, 30);
     window.__botStop = () => { clearInterval(window.__bot); ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].forEach((k) => set(k, false)); };
   }, withBot);
@@ -260,7 +261,7 @@ for (const name of deskTracks) {
   const bestGain = Math.max(...detail.map((d) => d.peak / baseTop - 1));
   check(detail.length >= 2 && bestGain > 0.25, `speed clearly rises during boost (best peak +${(bestGain * 100).toFixed(0)}% over unboosted top ${baseTop.toFixed(0)})`);
   check(detail.every((d) => d.v5 < d.peak - 80 || d.v5 < baseTop * 1.05), `speed returns to normal after the boost (+5 s speeds ${detail.map((d) => d.v5.toFixed(0)).join(', ')})`);
-  check(!rec.some((r) => r.aiBoost), 'AI never boosted (no AI boost level / raised top)');
+  check(!rec.some((r) => r.aiBoost), 'AI never got the lap boost (AI boost only while on a v48 boost pad; no raised top)');
   const orientErr = await Promise.resolve([]);
   const aiAll = fin.cars.slice(1).every((c) => c.finished && !c.dnf && c.lap === 3);
   const e = errs.length - errStart;
@@ -379,11 +380,11 @@ for (const name of mobTracks) {
     else log(`    [info] second-slide check skipped (lap changed or last again)`);
     await slideBack();
   }
-  // 4. sliding off GAS sideways still releases the throttle (unchanged behaviour)
-  const tgt = { id: 0, x: rects.gas.x - rects.gas.w, y: rects.gas.y };
+  // 4. sliding off GAS to the right still releases the throttle (left is the v48 missile slide)
+  const tgt = { id: 0, x: Math.min(843, rects.gas.x + rects.gas.w / 2 + 8), y: rects.gas.y };
   gas = tgt; await touch('touchMove', [steer, gas]); await sleep(120);
   inp = await mob.evaluate(() => ({ ...window.__RAD_INPUT__.state }));
-  check(!inp.accel, `sliding off GAS sideways releases the throttle as before (accel=${inp.accel})`);
+  check(!inp.accel, `sliding off GAS to the right releases the throttle as before (accel=${inp.accel})`);
   await touch('touchEnd', []);
   await sleep(200);
   inp = await mob.evaluate(() => ({ ...window.__RAD_INPUT__.state }));

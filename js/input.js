@@ -2,7 +2,6 @@ export function createInput() {
   const state = {
     steer: 0,
     accel: false,
-    brake: false,
     pausePressed: false,
     left: false,
     right: false,
@@ -14,10 +13,13 @@ export function createInput() {
     /** Boost request (edge-triggered: Shift key or an upward slide that starts on GAS) */
     boostPressed: false,
     /** How the last boost request was made ('key' | 'slide'), for the HUD/debug */
-    boostSource: null
+    boostSource: null,
+    /** Missile request (edge-triggered: Space or a left slide that starts on GAS) */
+    missilePressed: false,
+    missileSource: null
   };
-  /** Upward travel (CSS px) from the GAS touch-down point that counts as a boost slide. */
-  const BOOST_SLIDE_PX = 40;
+  /** Travel (CSS px) from the GAS touch-down point that counts as a slide: up = boost, left = missile. */
+  const SLIDE_PX = 40;
 
   const keys = new Set();
 
@@ -38,11 +40,12 @@ export function createInput() {
 
   function onKeyDown(e) {
     keys.add(norm(e.key));
-    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'a', 'A', 'd', 'D', 'w', 'W', 's', 'S'].includes(e.key)) {
+    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'a', 'A', 'd', 'D', 'w', 'W', ' '].includes(e.key)) {
       e.preventDefault();
     }
     if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') state.accel = true;
-    if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') state.brake = true;
+    // v48: no brake / reverse keys — lift off the gas to slow down
+    if (e.key === ' ' && !e.repeat) { state.missilePressed = true; state.missileSource = 'key'; }
     if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') { if (!e.repeat) state.pausePressed = true; }
     if (e.key === 'Shift' && !e.repeat) { state.boostPressed = true; state.boostSource = 'key'; }
     syncSteer();
@@ -50,8 +53,7 @@ export function createInput() {
 
   function onKeyUp(e) {
     keys.delete(norm(e.key));
-    if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') state.accel = keys.has('ArrowUp') || keys.has('w') || keys.has('W');
-    if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') state.brake = keys.has('ArrowDown') || keys.has('s') || keys.has('S');
+    if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') state.accel = keys.has('ArrowUp') || keys.has('w');
     syncSteer();
   }
 
@@ -88,7 +90,6 @@ export function createInput() {
       case 'left': state.left = down; syncSteer(); break;
       case 'right': state.right = down; syncSteer(); break;
       case 'accel': state.accel = down; break;
-      case 'brake': state.brake = down; break;
       case 'pause':
         if (down) state.pausePressed = true;
         break;
@@ -179,14 +180,16 @@ export function createInput() {
   }
 
   /**
-   * GAS button: press-and-hold = throttle, exactly as before (press on, release off,
-   * sliding off the button sideways/down releases it). New in v47: sliding the finger
-   * UP by BOOST_SLIDE_PX or more from where it landed requests a boost; the throttle stays
-   * held while the finger is in that upward slide, even if it leaves the top of the button.
-   * One request per slide: bring the thumb back down (or lift and press again) to re-arm.
+   * GAS button: press-and-hold = throttle (press on, release off). Slides that start on GAS:
+   *   up   ≥ SLIDE_PX → boost    (v47)
+   *   left ≥ SLIDE_PX → missile  (v48)
+   * The dominant axis decides, so a diagonal slide fires only one of them. One request per
+   * slide: bring the thumb back near where it landed (or lift and press again) to re-arm.
+   * The throttle stays held during an up/left slide even outside the button; sliding off to
+   * the right or downwards releases it as before.
    */
   function bindGas(el) {
-    let pid = null, startY = 0, slid = false, gasOn = false;
+    let pid = null, startX = 0, startY = 0, fired = false, gasOn = false;
     const release = () => {
       if (gasOn) { gasOn = false; held.set('accel', false); applyAction('accel', false); }
       el.classList.remove('active');
@@ -194,7 +197,7 @@ export function createInput() {
     el.addEventListener('pointerdown', (ev) => {
       ev.preventDefault();
       if (pid != null) return;
-      pid = ev.pointerId; startY = ev.clientY; slid = false; gasOn = true;
+      pid = ev.pointerId; startX = ev.clientX; startY = ev.clientY; fired = false; gasOn = true;
       try { el.setPointerCapture(pid); } catch (_) {}
       held.set('accel', true);
       applyAction('accel', true);
@@ -203,20 +206,19 @@ export function createInput() {
     el.addEventListener('pointermove', (ev) => {
       if (ev.pointerId !== pid) return;
       ev.preventDefault();
-      const dy = ev.clientY - startY;
-      if (!slid && dy <= -BOOST_SLIDE_PX) {
-        slid = true;
-        state.boostPressed = true;
-        state.boostSource = 'slide';
-      } else if (slid && dy > -BOOST_SLIDE_PX / 2) {
-        slid = false; // thumb came back down: the next upward slide can request again
+      const dx = ev.clientX - startX, dy = ev.clientY - startY;
+      if (!fired) {
+        if (-dy >= SLIDE_PX && -dy >= Math.abs(dx)) { fired = true; state.boostPressed = true; state.boostSource = 'slide'; }
+        else if (-dx >= SLIDE_PX && -dx > Math.abs(dy)) { fired = true; state.missilePressed = true; state.missileSource = 'slide'; }
+      } else if (Math.hypot(dx, dy) < SLIDE_PX / 2) {
+        fired = false; // thumb came back: the next slide can request again
       }
       if (!gasOn) return;
-      // keep the old "slide off the button releases gas" behaviour, except for the upward boost slide
       const r = el.getBoundingClientRect();
       const inside = ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
-      const upSlide = ev.clientY < r.top && ev.clientX >= r.left - 40 && ev.clientX <= r.right + 40;
-      if (!inside && !upSlide) release();
+      const upSlide = ev.clientY < r.top && ev.clientX >= r.left - 60 && ev.clientX <= r.right + 40;
+      const leftSlide = ev.clientX < r.left && ev.clientY >= r.top - 60 && ev.clientY <= r.bottom + 40;
+      if (!inside && !upSlide && !leftSlide) release();
     });
     const up = (ev) => {
       if (ev.pointerId !== pid) return;
@@ -248,18 +250,20 @@ export function createInput() {
       steer: state.steer,
       aimAngle: state.aimActive ? state.aimAngle : null,
       accel: state.accel,
-      brake: state.brake,
       pause: state.pausePressed,
       boost: state.boostPressed,
-      boostSource: state.boostSource
+      boostSource: state.boostSource,
+      missile: state.missilePressed,
+      missileSource: state.missileSource
     };
     state.pausePressed = false;
     state.boostPressed = false;
+    state.missilePressed = false;
     return out;
   }
 
-  /** Drop any queued boost request (new race / resume from pause). */
-  function clearBoost() { state.boostPressed = false; }
+  /** Drop any queued boost / missile request (new race / resume from pause). */
+  function clearBoost() { state.boostPressed = false; state.missilePressed = false; }
 
   function showTouch(show) {
     const el = document.getElementById('touch-controls');

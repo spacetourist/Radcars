@@ -7,6 +7,7 @@
  */
 
 const SAMPLE = 30; // world units between resampled centreline points
+export const PAD_LEN = 150; // boost pad length along the road (wu)
 
 /**
  * Closed uniform cubic B-spline through a control polygon (C2: position,
@@ -134,8 +135,16 @@ function buildTrack(def, ctrl, halfW, startNear) {
     pts[i].radius = m;
   }
   const startHeading = Math.atan2(pts[0].ty, pts[0].tx);
+  const track = { pts, length, halfW };
+  // Boost pads (v48): [arc length s, lateral centre as a fraction of halfW]; each pad covers
+  // 80% of the half-width either side of its centre (≈40% of the road) over PAD_LEN along the road.
+  const pads = (def.pads || []).map(([ps, c]) => {
+    const p = pointAt(track, ps);
+    return { s: ps, lat: c * halfW, halfW: halfW * 0.4, len: PAD_LEN, x: p.x + p.nx * c * halfW, y: p.y + p.ny * c * halfW, angle: Math.atan2(p.ty, p.tx) };
+  });
   return {
     ...def,
+    pads,
     halfW,
     ctrl,
     pts,
@@ -160,6 +169,7 @@ function neonLoop() {
   ]);
   return buildTrack({
     id: 'neon_loop', name: 'Neon Loop', difficulty: 1,
+    pads: [[17500, 0], [1400, 0.3], [10900, -0.25], [14900, 0.25]],
     ground: '#16301f', asphalt: '#34343c', wall: '#00e8ff', accent: '#ff2bd6'
   }, ctrl, 270, { x: 3300, y: 400 });
 }
@@ -172,6 +182,7 @@ function gridlock() {
   ], 100, 11);
   return buildTrack({
     id: 'gridlock', name: 'Gridlock Circuit', difficulty: 2,
+    pads: [[19700, 0], [1100, 0.3], [5750, -0.2]],
     ground: '#26282e', asphalt: '#3a3a42', wall: '#b8ff00', accent: '#ff8a00'
   }, ctrl, 190, { x: 2000, y: 400 });
 }
@@ -185,6 +196,7 @@ function razorHairpin() {
   ]);
   return buildTrack({
     id: 'razor_hairpin', name: 'Razor Hairpin', difficulty: 3,
+    pads: [[15800, 0], [9250, 0.3], [10800, -0.3]],
     ground: '#2a1f30', asphalt: '#3a3040', wall: '#ff2bd6', accent: '#00e8ff'
   }, ctrl, 175, { x: 2400, y: 3000 });
 }
@@ -197,6 +209,7 @@ function cargoDock() {
   ], 100, 9);
   return buildTrack({
     id: 'cargo_dock', name: 'Cargo Dock', difficulty: 2,
+    pads: [[18000, 0], [1200, 0.3], [10100, -0.25]],
     ground: '#1d2a33', asphalt: '#383c40', wall: '#ffe600', accent: '#00e8ff'
   }, ctrl, 160, { x: 1500, y: 150 });
 }

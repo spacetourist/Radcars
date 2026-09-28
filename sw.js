@@ -1,48 +1,42 @@
-const CACHE = 'radcars-v47-boost';
-const ASSETS = [
-  './',
-  './index.html',
-  './css/style.css',
-  './manifest.webmanifest',
-  './icons/icon.svg',
-  './icons/icon-192.png',
-  './icons/icon-512.png',
-  './js/main.js',
-  './js/game.js',
-  './js/physics.js',
-  './js/tracks.js',
-  './js/cars.js',
-  './js/ai.js',
-  './js/input.js',
-  './js/career.js',
-  './js/audio.js',
-  './js/render.js',
-  './js/ui.js',
-  './js/util.js'
-];
+importScripts('./js/version.js');
+const CACHE = self.RADCARS_BUILD.cache; // e.g. 'radcars-v48-missile' (js/version.js is the single source of truth)
+const ASSETS = self.RADCARS_BUILD.assets;
 
+// Updates: the new worker activates at once (skipWaiting + clients.claim) and the page reloads itself when it isn't mid-race
+// (js/main.js). Same-origin requests go network-first with cache:'no-store' so the browser's HTTP cache can never serve an
+// old build; the Cache Storage copy is only the offline fallback.
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  e.waitUntil(
+    caches.open(CACHE)
+      .then((c) => c.addAll(ASSETS.map((u) => new Request(u, { cache: 'reload' }))))
+      .catch(() => {})
+      .then(() => self.skipWaiting())
+  );
 });
 
 self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
-    ).then(() => self.clients.claim())
+    caches.keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
 });
 
-// Network-first so a new deploy is picked up immediately; cache is the offline fallback.
 self.addEventListener('fetch', (e) => {
-  if (e.request.method !== 'GET') return;
+  const req = e.request;
+  if (req.method !== 'GET') return;
+  const url = new URL(req.url);
+  const same = url.origin === self.location.origin;
+  const net = req.mode === 'navigate' ? fetch(url.href, { cache: 'no-store', credentials: 'same-origin' })
+    : same ? fetch(req, req.cache === 'reload' ? undefined : { cache: 'no-store' }) // 'reload' = hard refresh re-priming the HTTP cache
+    : fetch(req);
   e.respondWith(
-    fetch(e.request).then((res) => {
-      if (res.ok && new URL(e.request.url).origin === self.location.origin) {
+    net.then((res) => {
+      if (same && res.ok) {
         const copy = res.clone();
-        caches.open(CACHE).then((c) => c.put(e.request, copy));
+        caches.open(CACHE).then((c) => c.put(req, copy));
       }
       return res;
-    }).catch(() => caches.match(e.request))
+    }).catch(() => caches.match(req, { ignoreSearch: true }).then((r) => r || (req.mode === 'navigate' ? caches.match('./index.html') : undefined)))
   );
 });

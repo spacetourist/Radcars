@@ -551,7 +551,7 @@ html, body {
   text-transform: uppercase;
 }
 
-/* Right-thumb cluster (landscape): GAS lower-right, BRK inward.
+/* Right-thumb cluster (landscape): GAS lower-right (no brake since v48; slide up = boost, left = missile).
 */
 .tc-right {
   pointer-events: none;
@@ -572,20 +572,27 @@ html, body {
   font-size: 1rem;
   box-shadow: 0 4px 18px rgba(0,0,0,0.5), 0 0 16px rgba(184, 255, 0, 0.18), inset 0 1px 0 rgba(255,255,255,0.12);
 }
+.tc-accel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.tc-hint {
+  display: block;
+  margin-top: 5px;
+  font-family: system-ui, sans-serif;
+  font-size: 0.5rem;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: rgba(232, 244, 255, 0.62);
+  pointer-events: none;
+  white-space: nowrap;
+}
 .tc-accel.active, .tc-accel:active {
   background: rgba(120, 200, 0, 0.55);
   border-color: var(--lime);
   box-shadow: 0 0 20px rgba(184, 255, 0, 0.45);
-}
-.tc-brake {
-  width: 58px; height: 58px;
-  right: calc(14px + env(safe-area-inset-right, 0px) + 122px);
-  bottom: max(22px, env(safe-area-inset-bottom, 0px));
-  border-radius: 50%;
-  border-color: rgba(255, 34, 68, 0.55);
-  color: #ffb0b8;
-  font-size: 0.7rem;
-  opacity: 0.92;
 }
 .tc-pause {
   top: max(10px, env(safe-area-inset-top, 0px));
@@ -615,10 +622,6 @@ html, body {
   .tc-accel {
     width: 96px; height: 96px;
   }
-  .tc-brake {
-    width: 52px; height: 52px;
-    right: calc(12px + env(safe-area-inset-right, 0px) + 108px);
-  }
 }
 
 /* Short landscape: pull cluster in so it stays in thumb zone, clear of HUD */
@@ -631,11 +634,6 @@ html, body {
   .tc-accel {
     width: 88px; height: 88px;
     bottom: 10px;
-  }
-  .tc-brake {
-    width: 48px; height: 48px;
-    bottom: 14px;
-    right: calc(12px + env(safe-area-inset-right, 0px) + 100px);
   }
 }
 
@@ -687,3 +685,8 @@ html, body {
 }
 
 .hidden { display: none !important; }
+
+/* v48: build label + hard refresh on the title screen */
+.build-row { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+.build-tag { font: 600 12px/1 'Russo One', system-ui, sans-serif; letter-spacing: 0.06em; color: rgba(255, 255, 255, 0.55); padding: 5px 8px; border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 6px; }
+.btn.btn-mini { font-size: 12px; padding: 7px 12px; min-height: 0; min-width: 0; letter-spacing: 0.04em; }

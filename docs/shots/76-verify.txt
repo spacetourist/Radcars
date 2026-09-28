@@ -1,0 +1,174 @@
+Radcars v48 verification Mon Sep 28 2026 12:59:53 GMT+0100 (British Summer Time)
+URL http://localhost:4173/
+
+MISSILE speed 2000 wu/s, turn 3 rad/s (min radius 667 wu), life 3500 ms, hit radius 34 wu, dies on wall contact; spin 1000 ms, speed kept 30%; pad boost 500 ms
+
+RULE RACES (menus, 3 laps, 5 AI Normal, no brake)
+  neon      PASS  P1 54.84s best lap 17.19s  laps 0→1→2→3  You 54.8 > Razor 57.6 > Nyx 57.7 > Blaze 58.7 > Echo 58.9 > Volt 61.5  shots hit,hit  spins 2  fps 60.0  errors 0
+  gridlock  PASS  P1 58.12s best lap 18.22s  laps 0→1→2→3  You 58.1 > Razor 65.4 > Echo 65.5 > Nyx 65.6 > Blaze 65.9 > Volt 67.6  shots hit  spins 1  fps 60.0  errors 0
+  razor     PASS  P1 50.79s best lap 15.77s  laps 0→1→2→3  You 50.8 > Nyx 53.0 > Blaze 53.9 > Razor 53.9 > Echo 54.1 > Volt 55.8  shots hit,hit  spins 2  fps 60.0  errors 0
+  cargo     PASS  P1 53.29s best lap 16.49s  laps 0→1→2→3  You 53.3 > Razor 61.6 > Blaze 61.7 > Echo 61.8 > Nyx 61.9 > Volt 63.7  shots hit  spins 1  fps 60.0  errors 0
+
+HIT-RATE TRIAL (targets 80–1500 wu ahead)
+  neon      8/16 = 50% (intended target 8)  {"hit":8,"overshot":6,"wall":2}  80-500: 2/8  500-1000: 5/7  1000-1500: 1/1
+  gridlock  4/5 = 80% (intended target 4)  {"hit":4,"overshot":1}  80-500: 4/5  500-1000: 0/0  1000-1500: 0/0
+  razor     5/8 = 63% (intended target 4)  {"hit":5,"overshot":2,"wall":1}  80-500: 3/4  500-1000: 1/2  1000-1500: 1/2
+  cargo     13/18 = 72% (intended target 12)  {"hit":13,"overshot":4,"wall":1}  80-500: 5/6  500-1000: 6/10  1000-1500: 2/2
+  overall  30/47 = 64%
+
+SPINS
+  neon      car #3 1000 ms, 360°, speed 1026→308 at hit, 165 at recovery, drive frames 0
+  neon      car #5 1000 ms, 360°, speed 1005→301 at hit, 191 at recovery, drive frames 0
+  gridlock  car #5 1000 ms, 360°, speed 1006→302 at hit, 171 at recovery, drive frames 0
+  razor     car #3 1000 ms, 360°, speed 983→295 at hit, 391 at recovery, drive frames 0
+  razor     car #5 1000 ms, 360°, speed 1010→303 at hit, 172 at recovery, drive frames 0
+  cargo     car #5 1050 ms, 360°, speed 1013→304 at hit, 180 at recovery, drive frames 0
+
+PADS
+  neon      4 pads; triggers player 12, AI 7/12/10/6/12
+  gridlock  3 pads; triggers player 9, AI 6/9/9/7/8
+  razor     3 pads; triggers player 6, AI 7/9/6/7/9
+  cargo     3 pads; triggers player 9, AI 6/9/9/9/8
+
+OVERALL: PASS
+
+DETAIL
+    [ok] no BRK control in the DOM (btn-brake / data-action=brake / .tc-brake): absent
+
+=== NEON — rule race (desktop, Space) ===
+  menu: Normal · 3 laps · 5 rivals
+    [ok] Space in the countdown ignored; missile charge available at GO (charge=1, shots=0)
+  pads: 4 at s=17500, 1400, 10900, 14900 (width 216 wu of 540 wu road)
+    [ok] lap 1: target in range (car #5, 853 wu ahead, P6)
+    shot docs/shots/76-neon-hud-ready.png
+    [ok] Space fired the missile: charge 1→0, in flight=true (false = already landed), source=key
+    shot docs/shots/76-neon-hud-inflight.png
+    shot docs/shots/76-neon-missile-flight.png
+    shot docs/shots/76-neon-hit-explosion.png
+    shot docs/shots/76-neon-target-spin.png  (spinMs left 767, drawn rotation 148°)
+    result: hit (target #5, hit #5, 921 wu ahead at launch, flight 867 ms)
+    shot docs/shots/76-neon-hud-flash.png
+    [ok] 2nd Space on the same lap does nothing (shots 1→1, charge 0)
+    shot docs/shots/76-neon-pad.png
+    [ok] missile charge refilled at the line (lap 1, charge 1)
+    [ok] Space pressed while paused is dropped on resume (shots 1, charge 1)
+    shot docs/shots/76-neon-target-spin-2.png  (spinMs left 733, drawn rotation 166°)
+    lap 2 shot: hit (108 wu ahead)
+    [ok] P1 (no car ahead): Space is refused with a NO TARGET flash and the charge is kept (charge 1, flash NO TARGET)
+    shot docs/shots/76-neon-ai-pad-flames.png
+    [ok] missile charge never above 1 (max 1)
+    [ok] spin car #3: drawn rotation rose monotonically to 360° over 1000 ms; hit cut speed 1026→308 (30%), next frame 305, 165 at recovery; throttle/steer input frames during spin 0
+    [ok] spin car #5: drawn rotation rose monotonically to 360° over 1000 ms; hit cut speed 1005→301 (30%), next frame 297, 191 at recovery; throttle/steer input frames during spin 0
+    [ok] boost pads triggered: player 12×, AI 7/12/10/6/12×
+    [ok] no stuck cars: longest time below 30 wu/s (excl. countdown/spin/finish, after 4.5 s) per car 0.0/0.0/0.0/0.0/0.0/0.0 s; player auto-unstick used 0×
+    [ok] race: results=true laps 0→1→2→3 all AI finished=true errors=0 rAF≈60.0fps
+
+=== GRIDLOCK — rule race (desktop, Space) ===
+  menu: Normal · 3 laps · 5 rivals
+    [ok] Space in the countdown ignored; missile charge available at GO (charge=1, shots=0)
+  pads: 3 at s=19700, 1100, 5750 (width 152 wu of 380 wu road)
+    [ok] lap 1: target in range (car #5, 872 wu ahead, P6)
+    [ok] Space fired the missile: charge 1→0, in flight=true (false = already landed), source=key
+    shot docs/shots/76-gridlock-target-spin-3.png  (spinMs left 867, drawn rotation 90°)
+    result: hit (target #5, hit #5, 845 wu ahead at launch, flight 783 ms)
+    [ok] 2nd Space on the same lap does nothing (shots 1→1, charge 0)
+    shot docs/shots/76-gridlock-pad.png
+    [ok] missile charge refilled at the line (lap 1, charge 1)
+    [ok] Space pressed while paused is dropped on resume (shots 1, charge 1)
+    [ok] P1 (no car ahead): Space is refused with a NO TARGET flash and the charge is kept (charge 1, flash NO TARGET)
+    shot docs/shots/76-gridlock-hud-notarget.png
+    shot docs/shots/76-gridlock-player-pad-flames.png
+    shot docs/shots/76-gridlock-player-pad-flames.png
+    [ok] missile charge never above 1 (max 1)
+    [ok] spin car #5: drawn rotation rose monotonically to 360° over 1000 ms; hit cut speed 1006→302 (30%), next frame 299, 171 at recovery; throttle/steer input frames during spin 0
+    [ok] boost pads triggered: player 9×, AI 6/9/9/7/8×
+    [ok] no stuck cars: longest time below 30 wu/s (excl. countdown/spin/finish, after 4.5 s) per car 0.0/0.0/0.0/0.0/0.0/0.0 s; player auto-unstick used 0×
+    [ok] race: results=true laps 0→1→2→3 all AI finished=true errors=0 rAF≈60.0fps
+
+=== RAZOR — rule race (desktop, Space) ===
+  menu: Normal · 3 laps · 5 rivals
+    [ok] Space in the countdown ignored; missile charge available at GO (charge=1, shots=0)
+  pads: 3 at s=15800, 9250, 10800 (width 140 wu of 350 wu road)
+    [ok] lap 1: target in range (car #5, 860 wu ahead, P6)
+    shot docs/shots/76-razor-hud-ready.png
+    [ok] Space fired the missile: charge 1→0, in flight=true (false = already landed), source=key
+    shot docs/shots/76-razor-missile-flight.png
+    shot docs/shots/76-razor-hit-explosion.png
+    result: hit (target #5, hit #5, 928 wu ahead at launch, flight 883 ms)
+    shot docs/shots/76-razor-hud-flash.png
+    [ok] 2nd Space on the same lap does nothing (shots 1→1, charge 0)
+    shot docs/shots/76-razor-pad.png
+    [ok] missile charge refilled at the line (lap 1, charge 1)
+    [ok] Space pressed while paused is dropped on resume (shots 1, charge 1)
+    shot docs/shots/76-razor-hit-explosion.png
+    lap 2 shot: hit (184 wu ahead)
+    [ok] P1 (no car ahead): Space is refused with a NO TARGET flash and the charge is kept (charge 1, flash NO TARGET)
+    shot docs/shots/76-razor-ai-pad-flames.png
+    [ok] missile charge never above 1 (max 1)
+    [ok] spin car #3: drawn rotation rose monotonically to 360° over 1000 ms; hit cut speed 983→295 (30%), next frame 292, 391 at recovery; throttle/steer input frames during spin 0 (speed jump of 419 wu/s during the spin = rammed by another car)
+    [ok] spin car #5: drawn rotation rose monotonically to 360° over 1000 ms; hit cut speed 1010→303 (30%), next frame 301, 172 at recovery; throttle/steer input frames during spin 0
+    [ok] boost pads triggered: player 6×, AI 7/9/6/7/9×
+    [ok] no stuck cars: longest time below 30 wu/s (excl. countdown/spin/finish, after 4.5 s) per car 0.0/0.0/0.0/0.0/0.0/0.0 s; player auto-unstick used 0×
+    [ok] race: results=true laps 0→1→2→3 all AI finished=true errors=0 rAF≈60.0fps
+
+=== CARGO — rule race (desktop, Space) ===
+  menu: Normal · 3 laps · 5 rivals
+    [ok] Space in the countdown ignored; missile charge available at GO (charge=1, shots=0)
+  pads: 3 at s=18000, 1200, 10100 (width 128 wu of 320 wu road)
+    [ok] lap 1: target in range (car #5, 876 wu ahead, P6)
+    [ok] Space fired the missile: charge 1→0, in flight=true (false = already landed), source=key
+    shot docs/shots/76-cargo-hud-inflight.png
+    result: hit (target #5, hit #5, 837 wu ahead at launch, flight 767 ms)
+    [ok] 2nd Space on the same lap does nothing (shots 1→1, charge 0)
+    shot docs/shots/76-cargo-pad.png
+    [ok] missile charge refilled at the line (lap 1, charge 1)
+    [ok] Space pressed while paused is dropped on resume (shots 1, charge 1)
+    [ok] P1 (no car ahead): Space is refused with a NO TARGET flash and the charge is kept (charge 1, flash NO TARGET)
+    [ok] missile charge never above 1 (max 1)
+    [ok] spin car #5: drawn rotation rose monotonically to 360° over 1050 ms; hit cut speed 1013→304 (30%), next frame 304, 180 at recovery; throttle/steer input frames during spin 0
+    [ok] boost pads triggered: player 9×, AI 6/9/9/9/8×
+    [ok] no stuck cars: longest time below 30 wu/s (excl. countdown/spin/finish, after 4.5 s) per car 0.0/0.0/0.0/0.0/0.0/0.0 s; player auto-unstick used 0×
+    [ok] race: results=true laps 0→1→2→3 all AI finished=true errors=0 rAF≈60.0fps
+
+=== NEON — hit-rate trial (100s; player top 760, charge refilled after each missile) ===
+  shots 16: hits 8 (50%, the intended target 8) {"hit":8,"overshot":6,"wall":2}  by distance 80-500: 2/8  500-1000: 5/7  1000-1500: 1/1
+
+=== GRIDLOCK — hit-rate trial (100s; player top 760, charge refilled after each missile) ===
+  shots 5: hits 4 (80%, the intended target 4) {"hit":4,"overshot":1}  by distance 80-500: 4/5  500-1000: 0/0  1000-1500: 0/0
+
+=== RAZOR — hit-rate trial (100s; player top 760, charge refilled after each missile) ===
+  shots 8: hits 5 (63%, the intended target 4) {"hit":5,"overshot":2,"wall":1}  by distance 80-500: 3/4  500-1000: 1/2  1000-1500: 1/2
+
+=== CARGO — hit-rate trial (100s; player top 760, charge refilled after each missile) ===
+  shots 18: hits 13 (72%, the intended target 12) {"hit":13,"overshot":4,"wall":1}  by distance 80-500: 5/6  500-1000: 6/10  1000-1500: 2/2
+    [ok] overall hit rate at 80–1500 wu: 30/47 = 64% (intended target 28, 60%)
+
+=== BRAKE REMOVED + AUTO-UNSTICK (Cargo) ===
+    [ok] holding ArrowDown (gas off, still steering) does not brake or reverse: 1142→1050 wu/s in 0.60 s = 153 wu/s² (coasting; the old brake was 1500), input.state.brake=absent
+    [ok] holding s (gas off, still steering) does not brake or reverse: 1012→927 wu/s in 0.60 s = 142 wu/s² (coasting; the old brake was 1500), input.state.brake=absent
+    shot docs/shots/76-cargo-stuck-wall.png
+    [ok] nose-first against a wall with gas held: auto-reverse after 1567 ms (1×), then driving off at 1004 wu/s, heading 2° off the road direction
+    [ok] desktop console errors/warnings: 0 []
+
+=== NEON — mobile 844×390 touch ===
+    [ok] touch controls: btn-accel, btn-pause — no BRK button
+    [ok] GAS hold drives as before (accel=true, speed 541), no boost/missile
+    [ok] target in range for the touch test (car #5, 92 wu ahead)
+    [ok] diagonal slide (dx −38, dy −58, up dominant) fired the BOOST only (boost uses 0→1, missiles 0→0)
+    [ok] diagonal slide (dx −58, dy −38, left dominant) fired the MISSILE only (missiles 0→1, boost uses 1→1, source slide); GAS still held=true
+    shot docs/shots/76-mobile-neon-missile.png  (speed 131, missile in flight true)
+    touch missile result: wall (117 wu ahead)
+    [ok] 2nd left slide on the same lap does nothing (missiles 1→1)
+    auto-unstick used 0× during the touch test
+
+=== CARGO — mobile 844×390 touch ===
+    [ok] touch controls: btn-accel, btn-pause — no BRK button
+    [ok] GAS hold drives as before (accel=true, speed 555), no boost/missile
+    [ok] target in range for the touch test (car #5, 93 wu ahead)
+    [ok] diagonal slide (dx −38, dy −58, up dominant) fired the BOOST only (boost uses 0→1, missiles 0→0)
+    [ok] diagonal slide (dx −58, dy −38, left dominant) fired the MISSILE only (missiles 0→1, boost uses 1→1, source slide); GAS still held=true
+    touch missile result: wall (147 wu ahead)
+    [ok] 2nd left slide on the same lap does nothing (missiles 1→1)
+    shot docs/shots/76-mobile-cargo-layout.png
+    auto-unstick used 0× during the touch test
+    [ok] mobile console errors: 0 []

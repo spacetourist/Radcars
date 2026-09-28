@@ -63,6 +63,7 @@ async function sampleFrame() {
       const dAng = (a, b) => { let d = a - b; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; };
       const out = [];
       for (const dc of f.cars) {
+        if (dc.spinning) continue; // v48: a missile-hit car is deliberately drawn rotating for ~1 s
         const car = w.cars.find((c) => c.id === dc.id);
         const spd = Math.hypot(dc.vx, dc.vy);
         const va = Math.atan2(dc.vy, dc.vx);
@@ -76,8 +77,10 @@ async function sampleFrame() {
         const clearWall = (Math.abs(car.lat) * zoomPx + reg) < (tr.halfW - 18) * zoomPx;
         const clearCars = w.cars.every((o) => o === car || Math.hypot(o.x - car.x, o.y - car.y) * zoomPx > lenPx * 1.6);
         const colDist = Math.hypot(col[0] - wall[0], col[1] - wall[1], col[2] - wall[2]);
+        // v48: amber boost pads and boost flames (yellow core ≈ headlight colour) would pollute the colour sampling
+        const clearFx = !(car.boostLevel > 0.01) && !(w.track.pads || []).some((pd) => Math.hypot(pd.x - car.x, pd.y - car.y) < pd.len + 90);
         const ox = dc.origin.x, oy = dc.origin.y;
-        if (spd > 150 && clearWall && clearCars && colDist > 90 && ox > reg && oy > reg && ox < cv.width - reg && oy < cv.height - reg && !(ox > cv.width - 230 && oy < 230)) {
+        if (spd > 150 && clearWall && clearCars && clearFx && colDist > 90 && ox > reg && oy > reg && ox < cv.width - reg && oy < cv.height - reg && !(ox > cv.width - 230 && oy < 230)) {
           const x0 = Math.floor(ox - reg), y0 = Math.floor(oy - reg), sz = Math.ceil(reg * 2);
           const img = ctx.getImageData(x0, y0, sz, sz).data;
           let n = 0, sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0, hn = 0, hx = 0, hy = 0;
@@ -139,10 +142,9 @@ for (let ti = 0; ti < 4; ti++) {
       const tp = pointAt(w.track, p.sPrev + 150 + spd * 0.35);
       const err = angleDiff(p.angle, Math.atan2(tp.y - p.y, tp.x - p.x));
       set('ArrowRight', err > 0.05); set('ArrowLeft', err < -0.05);
-      set('ArrowDown', Math.abs(err) > 0.7 && spd > 500);
+      set('ArrowUp', !(Math.abs(err) > 0.7 && spd > 500)); // v48: no brake — lift off instead
     }, 30);
   });
-  await page.keyboard.down('ArrowUp'); // hold throttle through countdown and race
   const t0 = Date.now();
   let done = false, shots = { overview: false, straight: false, corner: false };
   const samples = []; const lapSeen = [0]; const frames0 = await page.evaluate(() => window.__frames);
@@ -178,10 +180,9 @@ for (let ti = 0; ti < 4; ti++) {
       shots.corner = true;
     }
   }
-  await page.keyboard.up('ArrowUp');
   const fin = await page.evaluate(() => {
     clearInterval(window.__bot); cancelAnimationFrame(window.__fr);
-    ['ArrowLeft', 'ArrowRight', 'ArrowDown'].forEach((k) => window.dispatchEvent(new KeyboardEvent('keyup', { key: k })));
+    ['ArrowLeft', 'ArrowRight', 'ArrowUp'].forEach((k) => window.dispatchEvent(new KeyboardEvent('keyup', { key: k })));
     const w = window.__RAD_GAME__.world;
     return { res: window.__RAD_LAST_RESULT__, frames: window.__frames, raceMs: w.race.time, cars: w.cars.map((c) => ({ name: c.name, lap: c.lap, finished: c.finished, dnf: !!c.dnf, best: c.bestLapMs, dist: c.dist })), L: w.track.length };
   });
