@@ -46,6 +46,10 @@ export function sfx(name) {
     case 'hit': beep(90, 0.35, 'sawtooth', 0.06, -50); setTimeout(() => beep(60, 0.3, 'square', 0.04, -30), 50); setTimeout(() => beep(660, 0.12, 'sine', 0.035), 160); break;
     case 'miss': beep(200, 0.18, 'triangle', 0.03, -80); break;
     case 'click': beep(300, 0.04, 'square', 0.025); break;
+    case 'bonus': beep(660, 0.07, 'square', 0.035); setTimeout(() => beep(880, 0.07, 'square', 0.035), 70); setTimeout(() => beep(1320, 0.12, 'sine', 0.04), 140); break;
+    case 'power': beep(300, 0.25, 'sawtooth', 0.035, 600); break;
+    case 'autopilot': setTimeout(() => { beep(740, 0.12, 'sine', 0.04); setTimeout(() => beep(990, 0.18, 'sine', 0.04), 120); }, 120); break;
+    case 'powerEnd': beep(700, 0.12, 'triangle', 0.035, -300); setTimeout(() => beep(420, 0.14, 'triangle', 0.03), 110); break;
     case 'countdown': beep(380, 0.12, 'square', 0.05); break;
     case 'countdownGo': beep(520, 0.1, 'square', 0.06); setTimeout(() => beep(780, 0.22, 'sawtooth', 0.05), 80); break;
     default: break;

@@ -103,8 +103,8 @@ export function createUI(root, api) {
           <button class="btn" data-k="laps" data-d="1">+</button></div></div>
       </div>
       <p class="muted" style="margin-top:12px;text-align:center">
-        Keyboard: ↑/W accelerate (lift off to slow) · ←→/AD steer · Shift boost · Space missile · P pause<br/>
-        Touch: drag the ring to point the car · hold GAS · slide up from GAS to boost · slide left from GAS to fire a missile<br/>Chevron pads on the track give any car a free 0.5 s boost
+        Keyboard: ↑/W accelerate (lift off to slow) · ←→/AD steer · Shift boost · Space missile · E power-up · P pause<br/>
+        Touch: drag the ring to point the car · hold GAS · slide up from GAS to boost · slide left from GAS to fire a missile · tap POWER to use a power-up<br/>Chevron pads on the track give any car a free 0.5 s boost · drive through a ? box for a power-up (rocket, lap boost, autopilot)
       </p>
       <div class="row" style="margin-top:14px"><button class="btn" data-act="back">Back</button></div>`);
     const lim = { difficulty: [0, DIFFICULTIES.length - 1], aiCount: [1, 7], laps: [1, 10] };

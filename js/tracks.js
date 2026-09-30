@@ -8,6 +8,7 @@
 
 const SAMPLE = 30; // world units between resampled centreline points
 export const PAD_LEN = 150; // boost pad length along the road (wu)
+export const BONUS_HALF = 26; // bonus '?' box half-size (wu)
 
 /**
  * Closed uniform cubic B-spline through a control polygon (C2: position,
@@ -142,9 +143,21 @@ function buildTrack(def, ctrl, halfW, startNear) {
     const p = pointAt(track, ps);
     return { s: ps, lat: c * halfW, halfW: halfW * 0.4, len: PAD_LEN, x: p.x + p.nx * c * halfW, y: p.y + p.ny * c * halfW, angle: Math.atan2(p.ty, p.tx) };
   });
+  // Bonus boxes (v50): one row of 2–3 '?' boxes across the road at arc length s, spread evenly.
+  let bonus = null;
+  if (def.bonus) {
+    const [bs, count] = def.bonus;
+    const p = pointAt(track, bs);
+    const fr = count === 3 ? [-0.55, 0, 0.55] : [-0.42, 0.42];
+    bonus = {
+      s: bs, half: BONUS_HALF, angle: Math.atan2(p.ty, p.tx),
+      boxes: fr.map((f, i) => ({ i, lat: f * halfW, x: p.x + p.nx * f * halfW, y: p.y + p.ny * f * halfW }))
+    };
+  }
   return {
     ...def,
     pads,
+    bonus,
     halfW,
     ctrl,
     pts,
@@ -170,6 +183,7 @@ function neonLoop() {
   return buildTrack({
     id: 'neon_loop', name: 'Neon Loop', difficulty: 1,
     pads: [[17500, 0], [1400, 0.3], [10900, -0.25], [14900, 0.25]],
+    bonus: [2400, 3],
     ground: '#16301f', asphalt: '#34343c', wall: '#00e8ff', accent: '#ff2bd6'
   }, ctrl, 270, { x: 3300, y: 400 });
 }
@@ -183,6 +197,7 @@ function gridlock() {
   return buildTrack({
     id: 'gridlock', name: 'Gridlock Circuit', difficulty: 2,
     pads: [[19700, 0], [1100, 0.3], [5750, -0.2]],
+    bonus: [1850, 3],
     ground: '#26282e', asphalt: '#3a3a42', wall: '#b8ff00', accent: '#ff8a00'
   }, ctrl, 190, { x: 2000, y: 400 });
 }
@@ -197,6 +212,7 @@ function razorHairpin() {
   return buildTrack({
     id: 'razor_hairpin', name: 'Razor Hairpin', difficulty: 3,
     pads: [[15800, 0], [9250, 0.3], [10800, -0.3]],
+    bonus: [10000, 2],
     ground: '#2a1f30', asphalt: '#3a3040', wall: '#ff2bd6', accent: '#00e8ff'
   }, ctrl, 175, { x: 2400, y: 3000 });
 }
@@ -210,6 +226,7 @@ function cargoDock() {
   return buildTrack({
     id: 'cargo_dock', name: 'Cargo Dock', difficulty: 2,
     pads: [[18000, 0], [1200, 0.3], [10100, -0.25]],
+    bonus: [2000, 2],
     ground: '#1d2a33', asphalt: '#383c40', wall: '#ffe600', accent: '#00e8ff'
   }, ctrl, 160, { x: 1500, y: 150 });
 }

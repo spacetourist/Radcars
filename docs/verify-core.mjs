@@ -69,7 +69,7 @@ async function sampleFrame() {
         const va = Math.atan2(dc.vy, dc.vx);
         const lenAng = Math.atan2(dc.lenAxis.y, dc.lenAxis.x);
         const lenPx = Math.hypot(dc.lenAxis.x, dc.lenAxis.y) * 2, widPx = Math.hypot(dc.widAxis.x, dc.widAxis.y) * 2;
-        const rec = { id: dc.id, isPlayer: dc.isPlayer, spd, xformErr: Math.abs(dAng(lenAng, va)) * 180 / Math.PI, lenPx, widPx, radius: tr.pts[car.seg]?.radius ?? 0, lat: car.lat, px: null };
+        const rec = { id: dc.id, isPlayer: dc.isPlayer, spd, xformErr: Math.abs(dAng(lenAng, va)) * 180 / Math.PI, lenPx, widPx, radius: tr.pts[car.seg]?.radius ?? 0, lat: car.lat, s: Math.round(car.sPrev), t: Math.round(w.race.time), px: null };
         // pixel check, only where the car is clear of walls/kerbs and other cars and its colour differs from the wall
         const col = hex(car.color);
         const reg = lenPx * 0.62;
@@ -78,7 +78,9 @@ async function sampleFrame() {
         const clearCars = w.cars.every((o) => o === car || Math.hypot(o.x - car.x, o.y - car.y) * zoomPx > lenPx * 1.6);
         const colDist = Math.hypot(col[0] - wall[0], col[1] - wall[1], col[2] - wall[2]);
         // v48: amber boost pads and boost flames (yellow core ≈ headlight colour) would pollute the colour sampling
-        const clearFx = !(car.boostLevel > 0.01) && !(w.track.pads || []).some((pd) => Math.hypot(pd.x - car.x, pd.y - car.y) < pd.len + 90);
+        const clearFx = !(car.boostLevel > 0.01) && !(w.track.pads || []).some((pd) => Math.hypot(pd.x - car.x, pd.y - car.y) < pd.len + 90)
+          && !((w.track.bonus && w.track.bonus.boxes) || []).some((bx) => Math.hypot(bx.x - car.x, bx.y - car.y) < 120) // v50: gold-rimmed ? boxes too
+          && !(w.race.goFlash > 0); // the big GO overlay is drawn over the cars for ~0.8 s after the start
         const ox = dc.origin.x, oy = dc.origin.y;
         if (spd > 150 && clearWall && clearCars && clearFx && colDist > 90 && ox > reg && oy > reg && ox < cv.width - reg && oy < cv.height - reg && !(ox > cv.width - 230 && oy < 230)) {
           const x0 = Math.floor(ox - reg), y0 = Math.floor(oy - reg), sz = Math.ceil(reg * 2);
@@ -199,6 +201,8 @@ for (let ti = 0; ti < 4; ti++) {
   const pxAxisP95 = [...axErr].sort((a, b) => a - b)[Math.floor(axErr.length * 0.95)] ?? NaN;
   const pxNoseMax = Math.max(...noseErr), pxElongMin = Math.min(...elong);
   const pxNoseBad = noseErr.filter((e) => e > 60).length;
+  const worstEl = px.reduce((a, c) => (!a || c.px.elong < a.px.elong ? c : a), null);
+  if (worstEl) logLines.push(`worst pixel elongation ${worstEl.px.elong.toFixed(2)}: car ${worstEl.id} s=${worstEl.s} lat=${Math.round(worstEl.lat)} t=${worstEl.t} spd=${Math.round(worstEl.spd)} n=${worstEl.px.n}`);
   const orientOk = xfP95 < 12 && lenRatio > 1.8 && px.length >= 20 && pxAxisP95 < 15 && pxNoseBad === 0 && pxElongMin > 1.3;
   orientLines.push(`  ${names[ti].padEnd(9)} ${orientOk ? 'PASS' : 'FAIL'}  render-transform: carSamples=${moving.length} lengthAxis-vs-velocity mean=${xfMean.toFixed(1)}° p95=${xfP95.toFixed(1)}° max=${xfMax.toFixed(1)}°  drawn length/width≥${lenRatio.toFixed(2)}  |  pixels: carSamples=${px.length} bodyPrincipalAxis-vs-velocity mean=${pxAxisMean.toFixed(1)}° p95=${pxAxisP95.toFixed(1)}°  nose(headlights)-vs-velocity max=${pxNoseMax.toFixed(1)}° (>60°: ${pxNoseBad})  body elongation≥${pxElongMin.toFixed(2)}`);
   // race stats

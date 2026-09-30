@@ -7,6 +7,7 @@ import { sfx } from './audio.js';
 import { clamp, angleDiff } from './util.js';
 import { pointAt } from './tracks.js';
 import { newMissileState, pickTarget, launchMissile, stepMissiles, stepSpin, stepPads } from './weapons.js';
+import { newPowerState, stepBonus, rocketTargets, autopilotControl, trackAutopilot, POWER_INFO, POWERS, ROCKET_COUNT, ROCKET_GAP_MS, LAPBOOST_MIN_MS, AUTOPILOT_MS, AUTOPILOT_TOP_MUL, AUTOPILOT_HANDBACK_MS, handbackAssist } from './powerups.js';
 
 /** Chase camera: tight at the grid, pulls out and looks ahead with speed. */
 const ZOOM_GRID = 0.85;
@@ -90,6 +91,7 @@ export function createGame(canvas, input) {
     };
     world.boost = newBoost();
     world.missile = newMissileState();
+    world.power = newPowerState();
     world.missiles = [];
     world.fx = [];
     world.unstick = { stuckMs: 0, reverseMs: 0, count: 0 };
@@ -119,7 +121,10 @@ export function createGame(canvas, input) {
     }
     updateCamera(dt);
     renderer.draw(world);
-    if (!world.race.over && !world.player.finished) renderer.drawWeaponHud(world.boost, world.missile, boostAnchor(), world.race.countdown > 0);
+    const showHud = !world.race.over && !world.player.finished;
+    const hud = showHud ? renderer.drawWeaponHud(world.boost, world.missile, boostAnchor(), world.race.countdown > 0) : null;
+    lastHud = hud;
+    updatePowerButton(hud);
     const race = world.race;
     if (race.countdown > 0) {
       const c = race.countdown;
@@ -128,6 +133,47 @@ export function createGame(canvas, input) {
       renderer.drawCountdown('GO');
     }
     raf = requestAnimationFrame(loop);
+  }
+
+  /** v50 POWER slot: a tappable DOM panel placed left of the MISSILE panel (touch + mouse; E on keyboard). */
+  const ICONS = {
+    rocket: '<svg viewBox="0 0 24 24"><path d="M12 2c3 2.2 4.6 6 4.6 10l-1.8 3H9.2l-1.8-3C7.4 8 9 4.2 12 2z"/><path d="M9 14.5 5.5 19l4-1.2zM15 14.5l3.5 4.5-4-1.2z"/><circle cx="12" cy="9" r="1.7" fill="#0a0c12"/></svg>',
+    lapboost: '<svg viewBox="0 0 24 24"><path d="M12.5 2c.8 3.6 5 5.8 5 11a5.5 5.5 0 0 1-11 0c0-3 1.8-4.4 2.2-7.2 1 1.9 1.9 2.6 3 3.4.4-2.6-.4-4.9.8-7.2z"/></svg>',
+    autopilot: '<svg viewBox="0 0 24 24" style="fill:none;stroke:currentColor;stroke-width:2.6"><circle cx="12" cy="12" r="8.6"/><circle cx="12" cy="12" r="2.2" fill="currentColor"/><path d="M3.6 11h6.2M14.2 11h6.2M12 14.3v6.3"/></svg>',
+    none: '<svg viewBox="0 0 24 24"><text x="12" y="18" text-anchor="middle" font-size="17" font-weight="700" fill="currentColor">?</text></svg>'
+  };
+  let powerKey = '';
+  let lastHud = null; // last drawn BOOST / MISSILE panel boxes (canvas CSS px), for layout checks
+  function updatePowerButton(hud) {
+    const el = document.getElementById('btn-power');
+    if (!el) return;
+    const pw = world.power;
+    if (!hud || !hud.missile || !running) { if (powerKey !== 'hidden') { el.style.display = 'none'; powerKey = 'hidden'; } return; }
+    const m = hud.missile;
+    const w = m.w, x = Math.max(6, m.x - w - 8);
+    let kind = pw.active || pw.held || 'none', name, sub, state, frac = null;
+    if (pw.active) {
+      state = 'active'; name = POWER_INFO[pw.active].name;
+      if (pw.active === 'autopilot') { sub = (pw.activeMs / 1000).toFixed(1) + ' s'; frac = pw.activeMs / AUTOPILOT_MS; }
+      else if (pw.active === 'lapboost') { sub = 'until the line'; frac = 1; }
+      else { sub = 'FIRING ' + Math.min(ROCKET_COUNT, ROCKET_COUNT - pw.rocketQueue.length + 1) + '/' + ROCKET_COUNT; }
+    } else if (pw.flash) {
+      state = 'flash'; name = pw.flash.text; sub = pw.flash.kind === 'got' ? 'tap · E to use' : '';
+      kind = pw.held || (pw.flash.text.startsWith('ROCKET') ? 'rocket' : kind);
+    } else if (pw.held) {
+      state = 'held'; name = POWER_INFO[pw.held].name; sub = 'tap · E';
+    } else { state = 'empty'; name = 'POWER'; sub = 'grab a ? box'; }
+    const key = [kind, state, name, sub, pw.active && pw.held ? pw.held : '', frac == null ? '' : frac.toFixed(2), x, m.y, w, m.h].join('|');
+    if (key === powerKey) return;
+    powerKey = key;
+    el.style.display = 'flex';
+    el.style.left = x + 'px'; el.style.top = m.y + 'px'; el.style.width = w + 'px'; el.style.height = m.h + 'px';
+    el.dataset.state = state; el.dataset.kind = kind;
+    el.classList.toggle('has-next', !!(pw.active && pw.held));
+    el.style.setProperty('--pw', kind === 'none' ? '#7c8494' : POWER_INFO[kind].color);
+    el.innerHTML = `<span class="pw-icon">${ICONS[kind]}</span><span class="pw-text"><span class="pw-name">${name}</span><span class="pw-sub">${sub}</span></span>` +
+      (frac != null ? `<span class="pw-bar"><span style="width:${(frac * 100).toFixed(0)}%"></span></span>` : '') +
+      (pw.active && pw.held ? `<span class="pw-next" style="color:${POWER_INFO[pw.held].color}" title="next: ${POWER_INFO[pw.held].name}">${ICONS[pw.held]}</span>` : ''); // held one waiting
   }
 
   /** Where to draw the boost indicator: just above the GAS button (canvas CSS px). */
@@ -222,12 +268,23 @@ export function createGame(canvas, input) {
     race.time += dt;
     updateBoost(flags, dt);
     updateMissile(flags, dt);
+    updatePower(flags, dt);
+    const autopilot = world.power.active === 'autopilot';
+    player.heavy = autopilot;
 
     for (const c of cars) {
+      let topSave = null;
       let ctl;
       const spinning = stepSpin(c, dt);
       if (c.finished) ctl = { accel: false, brake: true, noReverse: true, steer: 0 };
       else if (spinning) ctl = { accel: false, brake: false, steer: 0 }; // hit by a missile: no drive, no steering
+      else if (c.isPlayer && autopilot) { ctl = autopilotControl(world, dt); topSave = c.top; c.top = topSave * AUTOPILOT_TOP_MUL; }
+      else if (c.isPlayer && world.power.handback) {
+        // smooth handback: the +25% top eases away and the steering assist fades out (player input overrides)
+        const hb = world.power.handback, w = hb.ms / AUTOPILOT_HANDBACK_MS, e = w * w * (3 - 2 * w);
+        ctl = handbackAssist(world, dt, playerControl(flags, dt), e);
+        topSave = c.top; c.top = topSave * (1 + (AUTOPILOT_TOP_MUL - 1) * e);
+      }
       else if (c.isPlayer) ctl = playerControl(flags, dt);
       else {
         // pad boost: let the AI plan with its boosted top speed while it lasts
@@ -237,13 +294,16 @@ export function createGame(canvas, input) {
         c.top = top;
       }
       rampBoost(c, dt);
-      ctl.boost = c.boostLevel || 0;
+      ctl.boost = ctl.autopilot ? 0 : (c.boostLevel || 0); // autopilot: its own +25% top, pads/boost don't stack
       c.drive = ctl.accel || !!ctl.steer; // last frame's drive input (read by the verify scripts)
       stepCar(c, ctl, dt, track);
+      if (topSave != null) c.top = topSave;
       if (!c.finished) stepPads(world, c);
     }
     resolveCarCollisions(cars, track);
+    if (autopilot) trackAutopilot(world);
     stepMissiles(world, dt, onMissileEnd);
+    stepBonus(world, standings().indexOf(player) + 1, (pw) => { sfx('bonus'); world.power.flash = { text: POWER_INFO[pw].name + '!', ms: 1100, kind: 'got' }; });
     if (player.wallHit > 250 && race.time - (race.lastWallSfx || 0) > 300) { race.lastWallSfx = race.time; sfx('wall'); }
 
     const L = track.length;
@@ -259,6 +319,7 @@ export function createGame(canvas, input) {
         if (c.isPlayer) {
           world.boost.charge = 1; // lap crossing refills the boost charge (max 1)
           world.missile.charge = 1; // …and the missile charge (max 1)
+          world.power.collected = []; world.power.respawns++; // bonus boxes respawn at the line
           race.lapFlashMs = 2800; race.lapFlashLast = lapMs; race.lapFlashBest = c.bestLapMs;
           if (c.lap < race.totalLaps) sfx('lap');
         }
@@ -299,7 +360,8 @@ export function createGame(canvas, input) {
   function updateBoost(flags, dt) {
     const b = world.boost, p = world.player;
     b.last = playerIsLast();
-    if (flags.boost && !p.finished && b.activeMs <= 0) {
+    // autopilot already runs its own +25 % top: a boost press is ignored (charge kept)
+    if (flags.boost && !p.finished && b.activeMs <= 0 && world.power.active !== 'autopilot') {
       if (b.last) { b.activeMs = BOOST_MS; b.free = true; b.freeUses++; }
       else if (b.charge > 0) { b.charge = 0; b.activeMs = BOOST_MS; b.free = false; b.uses++; }
       if (b.activeMs > 0) { b.lastTriggerMs = world.race.time; b.source = flags.boostSource; sfx('boost'); }
@@ -311,8 +373,13 @@ export function createGame(canvas, input) {
   /** Smoothed boost level per car: lap boost (player) or a boost pad (anyone). */
   function rampBoost(c, dt) {
     if (c.padMs > 0) c.padMs = Math.max(0, c.padMs - dt);
-    const on = (c.isPlayer && world.boost.activeMs > 0) || c.padMs > 0;
+    const lapBoost = c.isPlayer && world.power.active === 'lapboost';
+    const onRail = c.isPlayer && world.power.active === 'autopilot'; // autopilot: pads don't stack (no flames either)
+    const other = !onRail && ((c.isPlayer && world.boost.activeMs > 0) || c.padMs > 0);
+    const on = other || lapBoost;
     const lvl = c.boostLevel || 0;
+    // v50: power-up lap boost burns bright green (and its ramp-out stays green unless a normal boost takes over)
+    c.boostGreen = lapBoost || (!!c.boostGreen && !other && lvl > 0);
     const target = on && !c.finished ? 1 : 0;
     c.boostLevel = target > lvl ? Math.min(1, lvl + dt / BOOST_RAMP_IN_MS) : Math.max(0, lvl - dt / BOOST_RAMP_OUT_MS);
     if (c.isPlayer) world.boost.level = c.boostLevel;
@@ -334,11 +401,93 @@ export function createGame(canvas, input) {
     return { accel: flags.accel, brake: false, steer: flags.steer, aimAngle: flags.aimAngle };
   }
 
+  /** v50 power-ups: E / POWER tap activates the held one; runs rocket salvos, lap boost and autopilot timers. */
+  function updatePower(flags, dt) {
+    const pw = world.power, p = world.player, race = world.race;
+    if (pw.flash) { pw.flash.ms -= dt; if (pw.flash.ms <= 0) pw.flash = null; }
+    if (flags.power && !p.finished) {
+      if (!pw.held) pw.ignored++;
+      else if (pw.active) pw.blocked++; // one power-up running at a time: keep holding it
+      else activatePower(pw.held, flags.powerSource || 'debug');
+    }
+    // rocket salvo
+    while (pw.rocketQueue.length && pw.rocketQueue[0].at <= race.time) {
+      const r = pw.rocketQueue.shift();
+      const m = launchMissile(world, r.target && !r.target.finished ? r.target : null, { rocket: true });
+      m.rec.salvo = r.salvo; m.rec.idx = r.idx;
+      sfx('missile');
+    }
+    if (pw.active === 'rocket' && !pw.rocketQueue.length) endPower();
+    if (pw.active === 'lapboost') {
+      pw.activeMs = race.time - pw.startMs;
+      if ((p.lap >= pw.untilLap && pw.activeMs >= LAPBOOST_MIN_MS) || p.finished) endPower();
+    }
+    if (pw.handback) {
+      const hb = pw.handback, sp = Math.hypot(p.vx, p.vy);
+      if (p.wallHit > 0) { if (!hb.inWall) hb.wall++; hb.inWall = true; } else hb.inWall = false;
+      if (dt > 0) { hb.maxDecel = Math.max(hb.maxDecel, (hb.lastSpd - sp) / (dt / 1000)); hb.lastSpd = sp; }
+      hb.ms -= dt;
+      if (hb.ms <= 0 || p.finished) { const log = pw.apLog[pw.apLog.length - 1]; if (log) Object.assign(log, { hbWall: hb.wall, hbMaxDecel: Math.round(hb.maxDecel), hbEndSpd: Math.round(sp) }); pw.handback = null; }
+    }
+    if (pw.active === 'autopilot') {
+      pw.activeMs = Math.max(0, pw.activeMs - dt);
+      if (pw.activeMs <= 0 || p.finished) endPower();
+    }
+  }
+
+  function activatePower(kind, source) {
+    const pw = world.power, p = world.player, race = world.race;
+    pw.held = null; pw.active = kind; pw.startMs = race.time;
+    const rec = { kind, t: race.time, lap: p.lap, source, spd0: Math.round(Math.hypot(p.vx, p.vy)) };
+    pw.activations.push(rec);
+    sfx('power');
+    if (kind === 'rocket') {
+      const tg = rocketTargets(world, standings());
+      const salvo = pw.activations.length;
+      pw.rocketTargets = tg.map((c) => c.id);
+      rec.targets = tg.map((c) => c.id);
+      for (let i = 0; i < ROCKET_COUNT; i++) {
+        pw.rocketQueue.push({ at: race.time + i * ROCKET_GAP_MS, target: tg.length ? tg[i % tg.length] : null, salvo, idx: i });
+      }
+      pw.activeMs = ROCKET_COUNT * ROCKET_GAP_MS;
+    } else if (kind === 'lapboost') {
+      pw.untilLap = p.lap + 1; pw.activeMs = 0;
+      const L = world.track.length; rec.untilLap = pw.untilLap; rec.distToLine = Math.round(L - (((p.dist % L) + L) % L));
+    } else if (kind === 'autopilot') {
+      pw.activeMs = AUTOPILOT_MS; pw.handback = null;
+      pw.ap = { entryLat: p.lat, wall: 0, inWall: (p.wallHit || 0) > 0, preWall: (p.wallHit || 0) > 0, devSum: 0, devN: 0, devMax: 0, spdSum: 0, spdMax: 0, rec };
+      sfx('autopilot');
+    }
+  }
+
+  function endPower() {
+    const pw = world.power, p = world.player, race = world.race;
+    const kind = pw.active;
+    const rec = pw.activations[pw.activations.length - 1];
+    if (rec) { rec.endT = race.time; rec.durMs = race.time - rec.t; rec.spd1 = Math.round(Math.hypot(p.vx, p.vy)); }
+    if (kind === 'autopilot' && pw.ap) {
+      const ap = pw.ap;
+      pw.apLog.push({ durMs: rec.durMs, wall: ap.wall, devMean: ap.devN ? ap.devSum / ap.devN : 0, devMax: ap.devMax, spdMean: ap.devN ? ap.spdSum / ap.devN : 0, spdMax: ap.spdMax, endT: race.time, endSpd: rec.spd1, wallAt: ap.wallAt || [] });
+      pw.ap = null;
+      if (!p.finished) { const sp = Math.hypot(p.vx, p.vy); pw.handback = { ms: AUTOPILOT_HANDBACK_MS, wall: 0, inWall: false, maxDecel: 0, lastSpd: sp }; }
+      sfx('powerEnd');
+    }
+    if (kind === 'lapboost') { pw.lapBoostLog.push({ durMs: rec.durMs, endLap: p.lap }); sfx('powerEnd'); }
+    pw.active = null; pw.activeMs = 0; pw.untilLap = null;
+  }
+
+  /** Debug / verification hooks. */
+  const debug = {
+    give(kind) { if (POWERS.includes(kind) && world) { world.power.held = kind; return true; } return false; },
+    forceNext(kind) { if (world) world.power.forceNext = kind; },
+    activate() { if (world) input.state.powerPressed = true; }
+  };
+
   /** Space / left slide on GAS: fire the seeker missile at the car ahead (one per lap). */
   function updateMissile(flags, dt) {
     const ms = world.missile, p = world.player;
     if (ms.flash) { ms.flash.ms -= dt; if (ms.flash.ms <= 0) ms.flash = null; }
-    ms.inFlight = world.missiles.some((m) => !m.dead);
+    ms.inFlight = world.missiles.some((m) => !m.dead && !m.rocket);
     if (!flags.missile || p.finished || ms.charge < 1) return;
     const target = pickTarget(world, standings());
     if (!target) { ms.refused++; ms.flash = { text: 'NO TARGET', ms: MISSILE_FLASH_MS, kind: 'none' }; return; }
@@ -350,6 +499,17 @@ export function createGame(canvas, input) {
 
   function onMissileEnd(m) {
     const ms = world.missile;
+    if (m.rocket) { // v50 power-up missile: its own tally, doesn't touch the lap-missile HUD
+      const pw = world.power;
+      pw.rocketLog.push(m.rec);
+      const salvo = pw.rocketLog.filter((r) => r.salvo === m.rec.salvo);
+      if (m.result === 'hit') sfx('hit'); else sfx('miss');
+      if (salvo.length === ROCKET_COUNT) {
+        const h = salvo.filter((r) => r.result === 'hit').length;
+        pw.flash = { text: `ROCKET ${h}/${ROCKET_COUNT} HIT`, ms: 1600, kind: h ? 'hit' : 'miss' };
+      }
+      return;
+    }
     ms.log.push(m.rec);
     if (m.result === 'hit') { ms.hits++; ms.flash = { text: 'HIT!', ms: MISSILE_FLASH_MS, kind: 'hit' }; sfx('hit'); }
     else { ms.flash = { text: 'MISS', ms: MISSILE_FLASH_MS, kind: 'miss' }; sfx('miss'); }
@@ -398,7 +558,9 @@ export function createGame(canvas, input) {
     isPaused: () => paused,
     setOnFinish(fn) { onFinish = fn; },
     isRunning: () => running,
+    getLastHud: () => lastHud,
     setPauseHandler(fn) { onPause = fn; },
-    get world() { return world; }
+    get world() { return world; },
+    debug
   };
 }

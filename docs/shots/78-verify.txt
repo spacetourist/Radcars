@@ -1,0 +1,197 @@
+Radcars v50 'bonus' verification Wed Sep 30 2026 12:39:39 GMT+0100 (British Summer Time)
+URL http://localhost:4173/
+
+ODDS P3 rocket/lapboost/autopilot 33.4/33.4/33.2%  P1 40.0/39.7/20.3%
+
+PER TRACK (3 laps, 5 AI Normal)
+  NEON: row of 3 at s=2400 (lat -148/0/149) · P1 46.30 s · fps 60.0 · all AI true · errors 0
+    rocket targets [5,4,3] hit/hit/hit hits 3 spins 3 gaps 250/250 ms · lap missile hit
+    lap boost 10333 ms, green true · autopilot 10000 ms wall 0 dev 8.3/20.8 wu spd 1250/1259 · handback 1250→1116→1041 decel 520 walls 0+0
+    boxes 0:1:lapboost, 1:1:autopilot, 2:1:lapboost · random roll lapboost · pads P12/AI46
+  GRIDLOCK: row of 3 at s=1850 (lat -105/0/105) · P1 51.66 s · fps 60.0 · all AI true · errors 0
+    rocket targets [5,4,3] hit/hit/hit hits 3 spins 3 gaps 250/267 ms · lap missile hit
+    lap boost 11750 ms, green true · autopilot 10000 ms wall 0 dev 11.3/25.6 wu spd 1250/1250 · handback 1250→1037→1001 decel 350 walls 0+0
+    boxes 0:1:lapboost, 1:1:autopilot, 2:1:autopilot · random roll autopilot · pads P8/AI36
+  RAZOR: row of 2 at s=10000 (lat -73/74) · P1 47.35 s · fps 60.0 · all AI true · errors 0
+    rocket targets [5,4,3] hit/wall/wall hits 1 spins 1 gaps 250/250 ms · lap missile hit
+    lap boost 4916 ms, green true · autopilot 10000 ms wall 0 dev 9.0/29.9 wu spd 1250/1250 · handback 1250→1036→1000 decel 368 walls 0+0
+    boxes 0:0:lapboost, 1:0:autopilot, 2:0:rocket · random roll rocket · pads P6/AI37
+  CARGO: row of 2 at s=2000 (lat -67/67) · P1 46.53 s · fps 60.0 · all AI true · errors 0
+    rocket targets [5,4,3] hit/hit/hit hits 3 spins 3 gaps 250/250 ms · lap missile hit
+    lap boost 11016 ms, green true · autopilot 10000 ms wall 0 dev 11.9/31.4 wu spd 1250/1256 · handback 1250→1036→1255 decel 603 walls 0+1
+    boxes 0:0:lapboost, 1:0:autopilot, 2:0:lapboost · random roll lapboost · pads P6/AI36
+
+OVERALL: PASS
+
+DETAIL
+    [ok] menu build v50 · bonus, tag "v50 · bonus", Update button true
+
+=== ROLL ODDS (30k each) ===
+    [ok] P3: rocket 33.4% lapboost 33.4% autopilot 33.2% (equal thirds)
+    [ok] P1: rocket 40.0% lapboost 39.7% autopilot 20.3% (autopilot halved → 20%)
+    constants {"ROCKET_COUNT":3,"ROCKET_GAP_MS":250,"LAPBOOST_MIN_MS":2000,"AUTOPILOT_MS":10000,"AUTOPILOT_TOP_MUL":1.25,"AUTOPILOT_HANDBACK_MS":1500}
+
+=== NEON — desktop race ===
+  menu: Normal · 3 laps · 5 rivals
+    [ok] one row of 3 boxes at s=2400 of 19093 (lat -148/0/149 of half-width 270; min radius ±600 wu 3029; pads at 17500,1400,10900,14900)
+    [ok] debug.give('rocket') → held "rocket" (place P6)
+    shot /workspace/radcars/docs/shots/78-hud-held-rocket.png
+    shot /workspace/radcars/docs/shots/78-neon-rocket-triple.png
+    (player + rockets + targets: 7 points framed)
+    shot /workspace/radcars/docs/shots/78-neon-box-row.png
+    [ok] lap 1 box collected by driving through: held lapboost, collected [false,true,false] (lap 0)
+    shot /workspace/radcars/docs/shots/78-hud-held-lapboost.png
+    [ok] ROCKET via E: 3 launches at 3 distinct targets [5,4,3] (pre-computed nearest-ahead [5,4,3]), gaps 250/250 ms
+    [ok] salvo spacing ≈250 ms: 250, 250
+    [ok] rocket results hit/hit/hit → hits 3/3, spins 3/3
+    [ok] lap missile charge untouched by the rocket (charge 1, lap-missile log 0)
+    [ok] Space lap missile: fired → hit charge 0
+    [ok] still holding LAP BOOST on lap 1 (lapboost)
+    shot /workspace/radcars/docs/shots/78-neon-lapboost-green.png
+    [ok] LAP BOOST: 207 samples, green flames on every one, boost level ≥0.96 after ramp-in (low samples []), ran 10333 ms
+    [ok] …ended at the line (lap 1, active=null, logged end lap 1)
+    [ok] boxes respawned at the line: collected [false,false,false], respawns 1
+    shot /workspace/radcars/docs/shots/78-neon-normal-boost-orange.png
+    [ok] Shift boost: used (uses 0→1), level 1.00, flames orange (green=false)
+    [ok] lap 2 box collected: held autopilot, collected [false,true,false]
+    shot /workspace/radcars/docs/shots/78-hud-held-autopilot.png
+    shot /workspace/radcars/docs/shots/78-neon-autopilot-glow.png
+    shot /workspace/radcars/docs/shots/78-neon-autopilot-hud.png
+    apLog[0] raw decel 520
+    [ok] AUTOPILOT duration 10000 ms
+    [ok] AUTOPILOT wall contacts 0
+    [ok] centreline deviation mean 8.3 wu, max 20.8 wu (half-width 270)
+    [ok] speed mean 1250 / max 1259 wu/s vs normal top 1000 (+25%)
+    [ok] handback: 1.5 s ease, speed 1250→1116→1041 wu/s (+0.1/+1.5/+2.9 s), max decel 520 wu/s², wall contacts 0 in handback (bot-driven: 0 in the 3 s from the end), max yaw 2.15 rad/s
+    [ok] lap 3: boxes respawned again (collected [false,false,false], respawns 2)
+    [ok] lap 3 box, random roll → lapboost (place P1)
+    [ok] …activated with E (lapboost)
+    [ok] one box collected per lap: 1/1/1 — 0:1:lapboost, 1:1:autopilot, 2:1:lapboost
+    [ok] pads still work: player 12, AI 46
+    [ok] race: P1 46.30 s best 13.47 s, all AI finished true, fps ≈60.0
+    [ok] console errors this race: 0 []
+    activations rocket/key, lapboost/key, autopilot/key, lapboost/key
+
+=== GRIDLOCK — desktop race ===
+  menu: Normal · 3 laps · 5 rivals
+    [ok] one row of 3 boxes at s=1850 of 20451 (lat -105/0/105 of half-width 190; min radius ±600 wu 9038; pads at 19700,1100,5750)
+    [ok] debug.give('rocket') → held "rocket" (place P6)
+    shot /workspace/radcars/docs/shots/78-gridlock-box-row.png
+    [ok] lap 1 box collected by driving through: held lapboost, collected [false,true,false] (lap 0)
+    [ok] ROCKET via E: 3 launches at 3 distinct targets [5,4,3] (pre-computed nearest-ahead [5,4,3]), gaps 250/267 ms
+    [ok] salvo spacing ≈250 ms: 250, 267
+    [ok] rocket results hit/hit/hit → hits 3/3, spins 3/3
+    [ok] lap missile charge untouched by the rocket (charge 1, lap-missile log 0)
+    [ok] Space lap missile: fired → hit charge 0
+    [ok] still holding LAP BOOST on lap 1 (lapboost)
+    shot /workspace/radcars/docs/shots/78-gridlock-lapboost-green.png
+    [ok] LAP BOOST: 235 samples, green flames on every one, boost level ≥0.96 after ramp-in (low samples []), ran 11750 ms
+    [ok] …ended at the line (lap 1, active=null, logged end lap 1)
+    [ok] boxes respawned at the line: collected [false,false,false], respawns 1
+    [ok] Shift boost: used (uses 0→1), level 1.00, flames orange (green=false)
+    [ok] lap 2 box collected: held autopilot, collected [false,true,false]
+    apLog[0] raw decel 350
+    [ok] AUTOPILOT duration 10000 ms
+    [ok] AUTOPILOT wall contacts 0
+    [ok] centreline deviation mean 11.3 wu, max 25.6 wu (half-width 190)
+    [ok] speed mean 1250 / max 1250 wu/s vs normal top 1000 (+25%)
+    [ok] handback: 1.5 s ease, speed 1250→1037→1001 wu/s (+0.1/+1.5/+2.9 s), max decel 350 wu/s², wall contacts 0 in handback (bot-driven: 0 in the 3 s from the end), max yaw 2.15 rad/s
+    [ok] lap 3: boxes respawned again (collected [false,false,false], respawns 2)
+    [ok] lap 3 box, random roll → autopilot (place P1)
+    [ok] …activated with E (autopilot)
+    [ok] one box collected per lap: 1/1/1 — 0:1:lapboost, 1:1:autopilot, 2:1:autopilot
+    [ok] pads still work: player 8, AI 36
+    [ok] race: P1 51.66 s best 16.53 s, all AI finished true, fps ≈60.0
+    [ok] console errors this race: 0 []
+    activations rocket/key, lapboost/key, autopilot/key, autopilot/key
+
+=== RAZOR — desktop race ===
+  menu: Normal · 3 laps · 5 rivals
+    [ok] one row of 2 boxes at s=10000 of 16897 (lat -73/74 of half-width 175; min radius ±600 wu 8169; pads at 15800,9250,10800)
+    [ok] debug.give('rocket') → held "rocket" (place P6)
+    shot /workspace/radcars/docs/shots/78-razor-rocket-triple.png
+    (player + rockets + targets: 7 points framed)
+    shot /workspace/radcars/docs/shots/78-razor-box-row.png
+    [ok] lap 1 box collected by driving through: held lapboost, collected [true,false] (lap 0)
+    [ok] ROCKET via E: 3 launches at 3 distinct targets [5,4,3] (pre-computed nearest-ahead [5,4,3]), gaps 250/250 ms
+    [ok] salvo spacing ≈250 ms: 250, 250
+    [ok] rocket results hit/wall/wall → hits 1/3, spins 1/1
+    [ok] lap missile charge untouched by the rocket (charge 1, lap-missile log 0)
+    [ok] Space lap missile: fired → hit charge 0
+    [ok] still holding LAP BOOST on lap 1 (lapboost)
+    [ok] LAP BOOST: 98 samples, green flames on every one, boost level ≥0.96 after ramp-in (low samples []), ran 4916 ms
+    [ok] …ended at the line (lap 1, active=null, logged end lap 1)
+    [ok] boxes respawned at the line: collected [false,false], respawns 1
+    [ok] Shift boost: used (uses 0→1), level 1.00, flames orange (green=false)
+    [ok] lap 2 box collected: held autopilot, collected [true,false]
+    shot /workspace/radcars/docs/shots/78-razor-autopilot-glow.png
+    shot /workspace/radcars/docs/shots/78-razor-autopilot-hud.png
+    apLog[0] raw decel 368
+    [ok] AUTOPILOT duration 10000 ms
+    [ok] AUTOPILOT wall contacts 0
+    [ok] centreline deviation mean 9.0 wu, max 29.9 wu (half-width 175)
+    [ok] speed mean 1250 / max 1250 wu/s vs normal top 1000 (+25%)
+    [ok] handback: 1.5 s ease, speed 1250→1036→1000 wu/s (+0.1/+1.5/+2.9 s), max decel 368 wu/s², wall contacts 0 in handback (bot-driven: 0 in the 3 s from the end), max yaw 2.16 rad/s
+    [ok] lap 3: boxes respawned again (collected [false,false], respawns 2)
+    [ok] lap 3 box, random roll → rocket (place P1)
+    [ok] …activated with E (rocket)
+    random rocket: [[null,"expired"],[null,"expired"],[null,"expired"]]
+    [ok] one box collected per lap: 1/1/1 — 0:0:lapboost, 1:0:autopilot, 2:0:rocket
+    [ok] pads still work: player 6, AI 37
+    [ok] race: P1 47.35 s best 14.17 s, all AI finished true, fps ≈60.0
+    [ok] console errors this race: 0 []
+    activations rocket/key, lapboost/key, autopilot/key, rocket/key
+
+=== CARGO — desktop race ===
+  menu: Normal · 3 laps · 5 rivals
+    [ok] one row of 2 boxes at s=2000 of 18559 (lat -67/67 of half-width 160; min radius ±600 wu 3337; pads at 18000,1200,10100)
+    [ok] debug.give('rocket') → held "rocket" (place P6)
+    shot /workspace/radcars/docs/shots/78-cargo-box-row.png
+    [ok] lap 1 box collected by driving through: held lapboost, collected [true,false] (lap 0)
+    [ok] ROCKET via E: 3 launches at 3 distinct targets [5,4,3] (pre-computed nearest-ahead [5,4,3]), gaps 250/250 ms
+    [ok] salvo spacing ≈250 ms: 250, 250
+    [ok] rocket results hit/hit/hit → hits 3/3, spins 3/3
+    [ok] lap missile charge untouched by the rocket (charge 1, lap-missile log 0)
+    [ok] Space lap missile: fired → hit charge 0
+    [ok] still holding LAP BOOST on lap 1 (lapboost)
+    [ok] LAP BOOST: 220 samples, green flames on every one, boost level ≥0.96 after ramp-in (low samples []), ran 11016 ms
+    [ok] …ended at the line (lap 1, active=null, logged end lap 1)
+    [ok] boxes respawned at the line: collected [false,false], respawns 1
+    [ok] Shift boost: used (uses 0→1), level 0.96, flames orange (green=false)
+    [ok] lap 2 box collected: held autopilot, collected [true,false]
+    apLog[0] raw decel 603
+    [ok] AUTOPILOT duration 10000 ms
+    [ok] AUTOPILOT wall contacts 0
+    [ok] centreline deviation mean 11.9 wu, max 31.4 wu (half-width 160)
+    [ok] speed mean 1250 / max 1256 wu/s vs normal top 1000 (+25%)
+    [ok] handback: 1.5 s ease, speed 1250→1036→1255 wu/s (+0.1/+1.5/+2.9 s), max decel 603 wu/s², wall contacts 0 in handback (bot-driven: 1 in the 3 s from the end), max yaw 3.72 rad/s
+    [ok] lap 3: boxes respawned again (collected [false,false], respawns 2)
+    [ok] lap 3 box, random roll → lapboost (place P1)
+    [ok] …activated with E (lapboost)
+    [ok] one box collected per lap: 1/1/1 — 0:0:lapboost, 1:0:autopilot, 2:0:lapboost
+    [ok] pads still work: player 6, AI 36
+    [ok] race: P1 46.53 s best 13.93 s, all AI finished true, fps ≈60.0
+    [ok] console errors this race: 0 []
+    activations rocket/key, lapboost/key, autopilot/key, lapboost/key
+
+=== MOBILE 844×390 touch (neon) ===
+    [ok] E with nothing held: no activation (ignored 0→1)
+    [ok] POWER button visible 118×40 at (468,242) "LAP BOOSTtap · E"
+    [ok] no overlap with GAS (742,292 88×88), STEER, pause, MISSILE/BOOST panels
+    shot /workspace/radcars/docs/shots/78-mobile-power-held.png
+    [ok] touch tap on POWER → LAP BOOST active (source 'tap')
+    [ok] tap didn't steer / slide-boost / fire (aimActive false, boost uses 0→0, missiles 0→0)
+    shot /workspace/radcars/docs/shots/78-mobile-lapboost-active.png
+    [ok] lap 1 box collected while LAP BOOST runs → held rocket
+    shot /workspace/radcars/docs/shots/78-mobile-held-while-active.png
+    [ok] tap while LAP BOOST runs: blocked (0→1), still holding rocket
+    [ok] holding rocket through the lap 2 row: box stays (collected [false,false,false]), still holding rocket, ignored touches 1→2
+    [ok] tap → rocket activated
+    shot /workspace/radcars/docs/shots/78-mobile-rocket-active.png
+    shot /workspace/radcars/docs/shots/78-mobile-autopilot-tap.png
+    [ok] lap 3: debug.give('autopilot') + tap → active
+    [ok] mobile race finished, all AI finished; activations lapboost/tap, rocket/tap, autopilot/tap
+    mobile autopilot: [{"dur":10000,"wall":0,"dev":7.2,"spd":1250,"hbWall":0}]
+    [ok] mobile console errors: 0 []
+    [ok] desktop console errors: 0
+    [ok] natural box pickups by kind: rocket 2, lapboost 6, autopilot 5

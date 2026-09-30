@@ -233,14 +233,18 @@ export function createRenderer(canvas) {
     ctx.scale(cam.zoom, cam.zoom);
     ctx.translate(-cam.x, -cam.y);
     drawTrack(track);
+    drawBonus(world, cam.zoom);
     for (const m of world.missiles || []) drawTrail(m, cam.zoom);
     for (const c of cars) {
       if (c.isPlayer) continue;
       if (c.boostLevel > 0.02) drawBoostFlame(c, cam.zoom, world.race.time + c.id * 97);
       drawCar(c, cam.zoom);
     }
+    const autopilot = world.power && world.power.active === 'autopilot';
+    if (autopilot) drawAutopilotGlow(world.player, cam.zoom, world.race.time, world.power.activeMs, false);
     if (world.player.boostLevel > 0.02) drawBoostFlame(world.player, cam.zoom, world.race.time);
     drawCar(world.player, cam.zoom);
+    if (autopilot) drawAutopilotGlow(world.player, cam.zoom, world.race.time, world.power.activeMs, true);
     for (const m of world.missiles || []) if (!m.dead) drawMissile(m, cam.zoom);
     for (const f of world.fx || []) drawFx(f, cam.zoom);
     ctx.restore();
@@ -265,7 +269,8 @@ export function createRenderer(canvas) {
     ctx.rotate(car.angle);
     ctx.globalAlpha = Math.min(1, lvl * 1.4);
     // speed streaks (behind and beside the body)
-    ctx.strokeStyle = 'rgba(255,190,90,0.55)';
+    const green = !!car.boostGreen; // v50 LAP BOOST power-up: bright green burner
+    ctx.strokeStyle = green ? 'rgba(120,255,110,0.6)' : 'rgba(255,190,90,0.55)';
     ctx.lineWidth = 2.2 * s;
     ctx.lineCap = 'round';
     for (const [dy, k] of [[-hw * 1.35, 1], [hw * 1.35, 0.8], [-hw * 0.7, 0.55], [hw * 0.7, 0.65]]) {
@@ -276,18 +281,76 @@ export function createRenderer(canvas) {
     // two exhaust flames at the tail: outer orange, inner hot yellow
     for (const side of [-1, 1]) {
       const y = side * hw * 0.42;
-      ctx.fillStyle = 'rgba(255,90,20,0.9)';
+      ctx.fillStyle = green ? 'rgba(57,255,20,0.92)' : 'rgba(255,90,20,0.9)';
       ctx.beginPath();
       ctx.moveTo(-hl + 2 * s, y - 6.5 * s);
       ctx.quadraticCurveTo(-hl - len * 0.55, y - 5 * s, -hl - len, y);
       ctx.quadraticCurveTo(-hl - len * 0.55, y + 5 * s, -hl + 2 * s, y + 6.5 * s);
       ctx.closePath(); ctx.fill();
-      ctx.fillStyle = 'rgba(255,205,40,0.95)';
+      ctx.fillStyle = green ? 'rgba(215,255,190,0.97)' : 'rgba(255,205,40,0.95)';
       ctx.beginPath();
       ctx.moveTo(-hl + 2 * s, y - 3.5 * s);
       ctx.quadraticCurveTo(-hl - len * 0.35, y - 2.5 * s, -hl - len * 0.6, y);
       ctx.quadraticCurveTo(-hl - len * 0.35, y + 2.5 * s, -hl + 2 * s, y + 3.5 * s);
       ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  /**
+   * v50 bonus boxes: a row of glowing, gently rocking '?' boxes across the road. Collected boxes
+   * are hidden until the player next crosses the line. The '?' stays upright on screen.
+   */
+  function drawBonus(world, zoom) {
+    const b = world.track.bonus;
+    if (!b) return;
+    const taken = (world.power && world.power.collected) || [];
+    const tm = (world.race.time || 0) + (world.race.countdown > 0 ? (3800 - world.race.countdown) : 0);
+    const s = Math.max(1, 20 / (b.half * 2 * zoom)); // keep ≥ ~20 px on screen at the far chase zoom
+    for (const box of b.boxes) {
+      if (taken[box.i]) continue;
+      const h = b.half * s;
+      const pulse = 0.5 + 0.5 * Math.sin(tm * 0.006 + box.i * 1.7);
+      ctx.save();
+      ctx.translate(box.x, box.y);
+      // glow
+      ctx.fillStyle = `rgba(255,214,60,${(0.16 + 0.14 * pulse).toFixed(3)})`;
+      ctx.beginPath(); ctx.arc(0, 0, h * 1.75, 0, Math.PI * 2); ctx.fill();
+      ctx.save();
+      ctx.rotate(b.angle + 0.35 * Math.sin(tm * 0.0032 + box.i)); // rocking spin
+      ctx.fillStyle = '#6a2cff';
+      roundRect(-h, -h, h * 2, h * 2, h * 0.28); ctx.fill();
+      ctx.lineWidth = Math.max(2, h * 0.16);
+      ctx.strokeStyle = `rgb(255,${Math.round(200 + 40 * pulse)},60)`;
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+      ctx.lineWidth = Math.max(1, h * 0.06);
+      roundRect(-h * 0.72, -h * 0.72, h * 1.44, h * 1.44, h * 0.18); ctx.stroke();
+      ctx.restore();
+      ctx.fillStyle = '#fff6c0';
+      ctx.font = `bold ${Math.round(h * 1.45)}px "Russo One", Impact, sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('?', 0, h * 0.06);
+      ctx.restore();
+    }
+  }
+
+  /** v50 AUTOPILOT cue: cyan halo under the car and a cyan outline ring over it (the car itself is unchanged). */
+  function drawAutopilotGlow(car, zoom, tMs, leftMs, over) {
+    const s = Math.max(1, 34 / (CAR_LEN * zoom));
+    const hl = CAR_LEN * s / 2, hw = CAR_WID * 0.88 * s / 2;
+    const pulse = 0.5 + 0.5 * Math.sin(tMs * 0.012);
+    const fade = leftMs < 1500 ? 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(tMs * 0.03)) : 1; // blink as it runs out
+    ctx.save();
+    ctx.translate(car.x, car.y);
+    ctx.rotate(car.angle);
+    if (!over) {
+      ctx.fillStyle = `rgba(0,232,255,${(0.22 * fade).toFixed(3)})`;
+      roundRect(-hl - 12 * s, -hw - 12 * s, (hl + 12 * s) * 2, (hw + 12 * s) * 2, 16 * s); ctx.fill();
+    } else {
+      ctx.strokeStyle = `rgba(0,232,255,${((0.65 + 0.35 * pulse) * fade).toFixed(3)})`;
+      ctx.lineWidth = 3 * s;
+      roundRect(-hl - 6 * s, -hw - 6 * s, (hl + 6 * s) * 2, (hw + 6 * s) * 2, 11 * s); ctx.stroke();
     }
     ctx.restore();
   }
@@ -329,6 +392,18 @@ export function createRenderer(canvas) {
     const s = Math.max(1, 34 / (64 * zoom));
     const k = f.ms / f.max;
     ctx.save();
+    if (f.kind === 'bonus') { // v50: collect sparkle
+      ctx.strokeStyle = `rgba(255,230,90,${(1 - k).toFixed(3)})`;
+      ctx.lineWidth = 3 * s;
+      ctx.beginPath(); ctx.arc(f.x, f.y, (18 + 50 * k) * s, 0, Math.PI * 2); ctx.stroke();
+      ctx.fillStyle = `rgba(255,255,255,${Math.max(0, 0.9 - k * 1.4).toFixed(3)})`;
+      for (let i = 0; i < 8; i++) {
+        const a = i * Math.PI / 4 + k * 2, r = (14 + 60 * k) * s;
+        ctx.beginPath(); ctx.arc(f.x + Math.cos(a) * r, f.y + Math.sin(a) * r, 4 * s * (1 - k), 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.restore();
+      return;
+    }
     if (f.big) {
       ctx.fillStyle = `rgba(120,120,128,${(0.5 * (1 - k)).toFixed(3)})`;
       ctx.beginPath(); ctx.arc(f.x, f.y, (26 + 60 * k) * s, 0, Math.PI * 2); ctx.fill();
@@ -355,7 +430,10 @@ export function createRenderer(canvas) {
   function drawWeaponHud(b, ms, anchor, countdown) {
     const bw = anchor ? Math.max(118, anchor.w + 14) : 130;
     const box = drawBoostHud(b, anchor, countdown);
-    if (box && ms) drawMissileHud(ms, box.x - bw - 8, box.y, bw, box.h, countdown);
+    if (!box) return null;
+    const mx = Math.max(6, box.x - bw - 8);
+    if (ms) drawMissileHud(ms, mx, box.y, bw, box.h, countdown);
+    return { boost: box, missile: { x: mx, y: box.y, w: bw, h: box.h } };
   }
 
   function drawMissileHud(ms, x, y, bw, bh, countdown) {

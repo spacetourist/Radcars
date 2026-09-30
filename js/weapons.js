@@ -51,7 +51,8 @@ export function pickTarget(world, order) {
 
 const LAUNCH_EDGE = 30; // wu inside the wall line
 
-export function launchMissile(world, target) {
+/** v50: `target` may be null (rocket with no car ahead: flies straight down the track); opts.rocket tags power-up missiles. */
+export function launchMissile(world, target, opts = {}) {
   const p = world.player, track = world.track;
   const nose = CAR_LEN / 2 + 8;
   let x = p.x + Math.cos(p.angle) * nose, y = p.y + Math.sin(p.angle) * nose;
@@ -61,9 +62,9 @@ export function launchMissile(world, target) {
   if (Math.abs(pr.lat) > lim0) { const k = pr.lat - Math.sign(pr.lat) * lim0; x -= pr.nx * k; y -= pr.ny * k; pr = project(track, x, y, pr.i); }
   const m = {
     id: (world.missileSeq = (world.missileSeq || 0) + 1),
-    x, y, angle: p.angle, seg: pr.i, life: MISSILE.lifeMs, age: 0, target, dead: false, result: null,
-    trail: [], trailT: 0,
-    rec: { t: world.race.time, lap: p.lap, targetId: target.id, dist0: Math.hypot(target.x - x, target.y - y), ahead0: aheadDist(track, pr.s, target.sPrev) }
+    x, y, angle: p.angle, seg: pr.i, life: MISSILE.lifeMs, age: 0, target: target || null, dead: false, result: null,
+    trail: [], trailT: 0, rocket: !!opts.rocket,
+    rec: { t: world.race.time, lap: p.lap, rocket: !!opts.rocket, targetId: target ? target.id : null, dist0: target ? Math.hypot(target.x - x, target.y - y) : null, ahead0: target ? aheadDist(track, pr.s, target.sPrev) : null }
   };
   world.missiles.push(m);
   return m;
@@ -104,10 +105,14 @@ export function stepMissiles(world, dtMs, onEnd) {
     const pr = project(track, m.x, m.y, m.seg);
     m.seg = pr.i;
     const tg = m.target;
-    const dist = Math.hypot(tg.x - m.x, tg.y - m.y);
-    const ahead = aheadDist(track, pr.s, tg.sPrev);
+    const dist = tg ? Math.hypot(tg.x - m.x, tg.y - m.y) : Infinity;
+    const ahead = tg ? aheadDist(track, pr.s, tg.sPrev) : Infinity;
     let ax, ay;
-    if (dist < 520 || (ahead > -150 && ahead < 560)) {
+    if (!tg) { // untargeted (v50 rocket with nobody ahead): straight down the track
+      const look = pointAt(track, pr.s + 300);
+      const lat = clamp(pr.lat * 0.5, -(track.halfW - 60), track.halfW - 60);
+      ax = look.x + look.nx * lat; ay = look.y + look.ny * lat;
+    } else if (dist < 520 || (ahead > -150 && ahead < 560)) {
       const lead = (dist / MISSILE.speed) * 0.85;
       ax = tg.x + tg.vx * lead; ay = tg.y + tg.vy * lead;
     } else {
@@ -144,7 +149,7 @@ export function stepMissiles(world, dtMs, onEnd) {
         const k = p2.lat - Math.sign(p2.lat) * (edge - 1); m.x -= p2.nx * k; m.y -= p2.ny * k;
       } else if (Math.abs(p2.lat) > edge) { m.dead = true; m.result = 'wall'; }
       else if (m.life <= 0) { m.dead = true; m.result = 'expired'; }
-      else if (aheadDist(track, p2.s, tg.sPrev) < -300) { m.dead = true; m.result = 'overshot'; } // flew past its target
+      else if (tg && aheadDist(track, p2.s, tg.sPrev) < -300) { m.dead = true; m.result = 'overshot'; } // flew past its target
     }
     m.trailT += dtMs;
     if (m.trailT >= TRAIL_EVERY_MS || m.dead) { m.trailT = 0; m.trail.push({ x: m.x - cx * 12, y: m.y - cy * 12, ms: 0 }); }
@@ -153,7 +158,7 @@ export function stepMissiles(world, dtMs, onEnd) {
       m.rec.hitTarget = m.hitCar === m.target;
       const pe = project(track, m.x, m.y, m.seg);
       m.rec.endLat = Math.round(pe.lat); m.rec.endR = Math.round(track.pts[pe.i].radius);
-      m.rec.endDist = Math.round(Math.hypot(tg.x - m.x, tg.y - m.y)); m.rec.endAhead = Math.round(aheadDist(track, pe.s, tg.sPrev));
+      if (tg) { m.rec.endDist = Math.round(Math.hypot(tg.x - m.x, tg.y - m.y)); m.rec.endAhead = Math.round(aheadDist(track, pe.s, tg.sPrev)); }
       (world.fx = world.fx || []).push({ x: m.x, y: m.y, ms: 0, max: m.result === 'hit' ? 700 : 450, big: m.result === 'hit' });
       onEnd(m);
     }

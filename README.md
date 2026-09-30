@@ -1,6 +1,6 @@
 # Radcars
 
-Top-down arcade racer (PWA). **v49-turn-cam**: just the cars, the racetrack and the gameplay — plain Canvas 2D, no image assets on the runtime path, no WebGL/Pixi. v47 added a once-per-lap **boost**; v48 removed the brake and added a seeker missile + boost pads; **v49** tightens the turn radius by ~12% at race speed and keeps the player car fully on screen during countdown / race start. Tracks, missile, boost, pads and car drawing are unchanged.
+Top-down arcade racer (PWA). **v50-bonus**: just the cars, the racetrack and the gameplay — plain Canvas 2D, no image assets on the runtime path, no WebGL/Pixi. v47 added a once-per-lap **boost**; v48 removed the brake and added a seeker missile + boost pads; **v49** tightens the turn radius by ~12% at race speed and keeps the player car fully on screen during countdown / race start; **v50** adds a row of glowing **? bonus boxes** per lap that give power-ups (ROCKET, LAP BOOST, AUTOPILOT). Tracks, handling, camera and car drawing are unchanged.
 
 ## Quick start
 
@@ -20,6 +20,7 @@ Open `http://localhost:4173` (landscape recommended). Live: https://spacetourist
 | Seeker missile | Space | slide your thumb **left** from GAS (about 40 px); keep holding for throttle |
 | Slow down | lift off the gas (there is no brake) | let go of GAS |
 | Steer | ← → / A D | drag the STEER ring toward the direction you want the car to point |
+| Use power-up (v50) | E | tap the **POWER** panel (left of MISSILE) |
 | Pause | P / Esc | ❚❚ |
 
 ### Boost
@@ -55,6 +56,15 @@ Open `http://localhost:4173` (landscape recommended). Live: https://spacetourist
 - **Turn:** `MAX_TURN` raised from 2.9 → 3.3 rad/s. At 1000 wu/s the kinematic circle shrinks from ~530 wu to ~466 wu (~12% tighter). Grip and top speed are unchanged.
 - **Camera:** countdown / low-speed look-ahead is clamped so the player's AABB stays inside the view with ~10% of the shorter screen side as margin (hard-corrected after smoothing). High-speed chase pull-out is unchanged. Fixes the bug where a short viewport (mobile landscape) could leave the car off-screen at the start.
 
+### Bonus boxes + power-ups (v50)
+
+- **Boxes:** one row of 2–3 glowing, rocking purple **?** boxes across the road per lap, on a straight clear of hairpins, pads and the line (Neon s=2400 ×3, Gridlock s=1850 ×3, Razor s=10000 ×2, Cargo s=2000 ×2). Drive through one to collect it: that box vanishes for the rest of the lap and every box respawns when you cross the line. Only you collect; AI cars drive straight through. You hold **one** power-up at a time — while holding, boxes stay put and do nothing.
+- **Roll:** ROCKET / LAP BOOST / AUTOPILOT with equal odds (autopilot is half as likely while you're P1).
+- **Use:** E or tap the **POWER** panel (it shows the held icon + name, and a timer/bar while one runs). One power-up runs at a time; a press while one is running is ignored and you keep the held one.
+- **ROCKET:** fires **3 missiles 0.25 s apart**, each at a different car ahead (the nearest three physically ahead among the cars ahead of you in race order; with fewer targets the spares double up, with none they fly straight down the track). Same homing, wall explosions and hit spin as the v48 missile; doesn't touch your lap missile charge.
+- **LAP BOOST:** the v47 boost (top +40 %, thrust +70 %) stays on until you next cross the start/finish line (at least 2 s if used just before it). Flames burn **bright green** (#39ff14); normal and pad boosts stay orange.
+- **AUTOPILOT:** for **10 s** the car drives itself along the track centreline (pure-pursuit look-ahead 90 + 0.06·speed wu, yaw ≤ 8 rad/s, no sideways slip), throttle pinned, top speed **+25 %** (1250 wu/s); your steering is ignored and rivals get shoved aside. Cyan halo + ring on the car (blinks in the last 1.5 s) and a countdown on the POWER panel. Then a **1.5 s handback**: the extra top speed eases away and the steering assist fades out (any steering input takes over at once).
+
 ## Gameplay
 
 - Menu → pick one of 4 tracks (Neon Loop, Gridlock Circuit, Razor Hairpin, Cargo Dock) → 3-2-1 countdown → race.
@@ -70,12 +80,13 @@ Open `http://localhost:4173` (landscape recommended). Live: https://spacetourist
 | `physics.js` | Arcade car model (throttle, brake/reverse for AI + auto-unstick, speed-scaled steering, lateral grip, boost level → top-speed/thrust multipliers), wall constraint via centreline offset, car–car collisions, lap progress (`dist`). |
 | `ai.js` | Centreline follower with lane offsets, corner-speed braking, overtaking dodge, stuck recovery. |
 | `game.js` | Race loop, countdown, laps/finish, standings, boost charge/timer/last-place rule, missile charge, pads, auto-unstick, chase camera, HUD info. |
-| `weapons.js` | Seeker missile (targeting, guidance, wall/hit tests, trail), spin-out state, boost-pad triggers. |
-| `render.js` | Canvas 2D: flat ground, asphalt ribbon with kerbs + walls, chequered line, procedural cars (long axis + tapered nose = heading, wheels, stripe, windscreen front, tail-lights back), minimap, boost flames (any car), boost pads, missile + smoke trail + explosions, BOOST and MISSILE panels. |
+| `weapons.js` | Seeker missile (targeting, guidance, wall/hit tests, trail; untargeted rocket missiles follow the track), spin-out state, boost-pad triggers. |
+| `powerups.js` | v50 bonus boxes + power-ups: roll odds, box pickup, rocket target choice, autopilot rail steering / handback assist, autopilot stats. |
+| `render.js` | Canvas 2D: flat ground, asphalt ribbon with kerbs + walls, chequered line, procedural cars (long axis + tapered nose = heading, wheels, stripe, windscreen front, tail-lights back), minimap, boost flames (any car), boost pads, missile + smoke trail + explosions, bonus boxes, autopilot glow, green lap-boost flames, BOOST and MISSILE panels. |
 | `ui.js`, `main.js`, `input.js`, `audio.js`, `career.js`, `cars.js`, `util.js` | Menus/HUD, wiring, keyboard + radial touch input, beeps, saved settings, car factory, maths. |
 
 ## Verification
 
-`node docs/verify-core.mjs http://localhost:4173/` drives a real race on every track in headless Chrome (holds throttle, steers via key events), checks the drawn orientation of every car (render transform + canvas pixels vs velocity), and writes `docs/shots/74-*.png` + `docs/shots/74-verify.txt`. `node docs/verify-boost.mjs http://localhost:4173/` races all 4 tracks while testing the boost (Shift + a touch slide on GAS in a mobile viewport, last-place unlimited boosts, lap charge used/refilled, pause), measures the speed gain, and writes `docs/shots/75-*.png` + `docs/shots/75-verify.txt`. `node docs/verify-v48.mjs http://localhost:4173/` races all 4 tracks (3 laps, 5 AI, Normal) checking the missile (Space + left slide on mobile, charge per lap, hit rate, 360° spin + speed loss), pads for player and AI, brake removal and auto-unstick, and writes `docs/shots/76-*.png` + `docs/shots/76-verify.txt`. `node docs/check-geometry.mjs` fails on self-intersection, wall overlap/folding, tight radii, heading or curvature jumps. Requires `puppeteer-core` in `node_modules` and Chrome at `/usr/bin/google-chrome`.
+`node docs/verify-core.mjs http://localhost:4173/` drives a real race on every track in headless Chrome (holds throttle, steers via key events), checks the drawn orientation of every car (render transform + canvas pixels vs velocity), and writes `docs/shots/74-*.png` + `docs/shots/74-verify.txt`. `node docs/verify-boost.mjs http://localhost:4173/` races all 4 tracks while testing the boost (Shift + a touch slide on GAS in a mobile viewport, last-place unlimited boosts, lap charge used/refilled, pause), measures the speed gain, and writes `docs/shots/75-*.png` + `docs/shots/75-verify.txt`. `node docs/verify-v48.mjs http://localhost:4173/` races all 4 tracks (3 laps, 5 AI, Normal) checking the missile (Space + left slide on mobile, charge per lap, hit rate, 360° spin + speed loss), pads for player and AI, brake removal and auto-unstick, and writes `docs/shots/76-*.png` + `docs/shots/76-verify.txt`. `node docs/verify-v50.mjs http://localhost:4173/` races all 4 tracks (3 laps, 5 AI, Normal) checking the bonus boxes (one row per lap, pickup, respawn at the line, hold-blocks-pickup) and each power-up forced via `__RAD_GAME__.debug.give()` and collected from a box (rocket: 3 distinct targets, hits + spins; lap boost: green until the line; autopilot: 10 s, wall contacts, centreline deviation, speed, handback), E and a touch tap on POWER in a mobile viewport, missile/boost/pads, finishes and fps; writes `docs/shots/78-*.png` + `docs/shots/78-verify.txt`. `node docs/check-geometry.mjs` fails on self-intersection, wall overlap/folding, tight radii, heading or curvature jumps. Requires `puppeteer-core` in `node_modules` and Chrome at `/usr/bin/google-chrome`.
 
 Legacy art under `assets/` and older docs are no longer used by the app.

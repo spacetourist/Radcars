@@ -16,7 +16,10 @@ export function createInput() {
     boostSource: null,
     /** Missile request (edge-triggered: Space or a left slide that starts on GAS) */
     missilePressed: false,
-    missileSource: null
+    missileSource: null,
+    /** v50 power-up activation (edge-triggered: E key or a tap on the POWER panel) */
+    powerPressed: false,
+    powerSource: null
   };
   /** Travel (CSS px) from the GAS touch-down point that counts as a slide: up = boost, left = missile. */
   const SLIDE_PX = 40;
@@ -48,6 +51,7 @@ export function createInput() {
     if (e.key === ' ' && !e.repeat) { state.missilePressed = true; state.missileSource = 'key'; }
     if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') { if (!e.repeat) state.pausePressed = true; }
     if (e.key === 'Shift' && !e.repeat) { state.boostPressed = true; state.boostSource = 'key'; }
+    if ((e.key === 'e' || e.key === 'E') && !e.repeat) { state.powerPressed = true; state.powerSource = 'key'; }
     syncSteer();
   }
 
@@ -240,6 +244,17 @@ export function createInput() {
       else bindButton(btn, act);
     });
     bindAimPad();
+    bindPower(document.getElementById('btn-power'));
+  }
+
+  /** v50 POWER panel: a tap (touch, pen or mouse) activates the held power-up. Own element, so GAS slides and steering are unaffected. */
+  function bindPower(el) {
+    if (!el) return;
+    el.addEventListener('pointerdown', (ev) => {
+      ev.preventDefault(); ev.stopPropagation();
+      state.powerPressed = true; state.powerSource = ev.pointerType === 'touch' ? 'tap' : ev.pointerType || 'tap';
+      el.classList.add('active'); setTimeout(() => el.classList.remove('active'), 140);
+    });
   }
 
   bindTouchUI();
@@ -254,16 +269,19 @@ export function createInput() {
       boost: state.boostPressed,
       boostSource: state.boostSource,
       missile: state.missilePressed,
-      missileSource: state.missileSource
+      missileSource: state.missileSource,
+      power: state.powerPressed,
+      powerSource: state.powerSource
     };
     state.pausePressed = false;
     state.boostPressed = false;
     state.missilePressed = false;
+    state.powerPressed = false;
     return out;
   }
 
   /** Drop any queued boost / missile request (new race / resume from pause). */
-  function clearBoost() { state.boostPressed = false; state.missilePressed = false; }
+  function clearBoost() { state.boostPressed = false; state.missilePressed = false; state.powerPressed = false; }
 
   function showTouch(show) {
     const el = document.getElementById('touch-controls');

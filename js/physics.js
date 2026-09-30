@@ -125,13 +125,15 @@ export function resolveCarCollisions(cars, track) {
       if (d >= min || d < 1e-6) continue;
       const nx = dx / d, ny = dy / d;
       const pen = (min - d) / 2;
-      a.x -= nx * pen; a.y -= ny * pen;
-      b.x += nx * pen; b.y += ny * pen;
+      // v50: a `heavy` car (player on autopilot) isn't moved by contact; the other car takes it all
+      const ka = a.heavy && !b.heavy ? 0 : b.heavy && !a.heavy ? 2 : 1, kb = 2 - ka;
+      a.x -= nx * pen * ka; a.y -= ny * pen * ka;
+      b.x += nx * pen * kb; b.y += ny * pen * kb;
       const rv = (b.vx - a.vx) * nx + (b.vy - a.vy) * ny;
       if (rv < 0) {
         const j2 = -(1 + 0.3) * rv / 2;
-        a.vx -= j2 * nx; a.vy -= j2 * ny;
-        b.vx += j2 * nx; b.vy += j2 * ny;
+        a.vx -= j2 * ka * nx; a.vy -= j2 * ka * ny;
+        b.vx += j2 * kb * nx; b.vy += j2 * kb * ny;
         a.carHit = b.carHit = Math.abs(rv);
       }
       constrain(a, track);
