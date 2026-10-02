@@ -1,12 +1,19 @@
-/** Plain Canvas 2D renderer: flat ground, asphalt ribbon with kerbs + walls, start line, procedural cars. */
+/**
+ * Plain Canvas 2D renderer (v51 'toys'): felt play-mat ground, a raised plastic track piece with grainy asphalt and
+ * chunky shaded kerbs, start line, and Micro Machines-style toy cars cached as offscreen sprites (js/toyart.js).
+ */
 import { CAR_LEN, CAR_WID } from './physics.js';
-import { pointAt } from './tracks.js';
+import { pointAt, buildStartingGrid } from './tracks.js';
+import { styleFor, carSprite, shadowSprite, scaleBucket, textureTile, SPRITE_W, SPRITE_H, TOY_FONT } from './toyart.js';
 
-const KERB = 16;
+const KERB = 24; // v51: chunkier kerbs (visual only; the drivable width and walls are unchanged)
 const WALL = 12;
 
-export function createRenderer(canvas) {
-  const ctx = canvas.getContext('2d', { alpha: false });
+export function createRenderer(canvas, opts = {}) {
+  // opts.hud (v51 Pixi mode): this canvas is a transparent overlay above the WebGL race view and only draws the
+  // minimap, BOOST / MISSILE panels and the countdown; the world itself is drawn by js/pixiRender.js.
+  const hudOnly = !!opts.hud;
+  const ctx = canvas.getContext('2d', { alpha: hudOnly });
   let W = 0, H = 0, DPR = 1;
   const cache = new WeakMap();
 
@@ -33,41 +40,109 @@ export function createRenderer(canvas) {
     return c;
   }
 
-  function drawTrack(track) {
+  /** Cached felt + asphalt patterns per track theme (256 px tiles built once). */
+  const tex = new WeakMap();
+  function trackTex(track) {
+    let t = tex.get(track);
+    if (t) return t;
+    const felt = ctx.createPattern(textureTile('felt', track.ground, 256), 'repeat');
+    try { felt.setTransform(new DOMMatrix([2, 0, 0, 2, 0, 0])); } catch (_) {} // 512 wu felt tile
+    const asphalt = ctx.createPattern(textureTile('asphalt', track.asphalt, 256), 'repeat');
+    t = { felt, asphalt };
+    tex.set(track, t);
+    return t;
+  }
+
+  function drawTrack(track, nCars) {
     const { centre, wallL, wallR } = trackPaths(track);
+    const t = trackTex(track);
     const w = track.halfW * 2;
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
-    // wall band (outside the asphalt edge)
-    ctx.strokeStyle = '#111217';
+    // raised plastic track piece: soft offset shadow on the mat (light from the top-left)
+    ctx.save();
+    ctx.translate(9, 13);
+    ctx.strokeStyle = 'rgba(0,0,0,0.32)';
+    ctx.lineWidth = w + WALL * 2 + 10;
+    ctx.stroke(centre);
+    ctx.restore();
+    // piece edge: dark outer rim + slightly lighter top face
+    ctx.strokeStyle = '#0b0c10';
     ctx.lineWidth = w + WALL * 2;
     ctx.stroke(centre);
-    // kerbs: red base + white dashes, then asphalt over the middle
-    ctx.strokeStyle = '#d42a2a';
+    ctx.strokeStyle = '#23262e';
+    ctx.lineWidth = w + WALL * 2 - 6;
+    ctx.stroke(centre);
+    // kerbs: red base + white blocks, a lit top face, then a dark inner side face so they read as raised
+    ctx.strokeStyle = '#e02020';
     ctx.lineWidth = w;
     ctx.stroke(centre);
-    ctx.setLineDash([60, 60]);
+    ctx.setLineDash([64, 64]);
     ctx.lineCap = 'butt';
-    ctx.strokeStyle = '#f2f2f2';
+    ctx.strokeStyle = '#e8e8e8';
     ctx.stroke(centre);
     ctx.setLineDash([]);
+    ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+    ctx.lineWidth = w - 6;
+    ctx.stroke(centre);
+    ctx.strokeStyle = 'rgba(0,0,0,0.42)';
+    ctx.lineWidth = w - KERB * 2 + 10;
+    ctx.stroke(centre);
     ctx.lineCap = 'round';
-    ctx.strokeStyle = track.asphalt;
+    // grainy asphalt
+    ctx.strokeStyle = t.asphalt;
     ctx.lineWidth = w - KERB * 2;
     ctx.stroke(centre);
-    // walls
+    // worn racing line: a faint lighter band down the middle (two soft steps, no per-frame gradient)
+    ctx.strokeStyle = 'rgba(255,255,255,0.025)';
+    ctx.lineWidth = w * 0.5;
+    ctx.stroke(centre);
+    ctx.lineWidth = w * 0.28;
+    ctx.stroke(centre);
+    // neon edge lines with a cheap glow: a wider ~15% alpha stroke underneath (no shadowBlur)
     ctx.strokeStyle = track.wall;
+    ctx.globalAlpha = 0.15;
+    ctx.lineWidth = 20;
+    ctx.stroke(wallL);
+    ctx.stroke(wallR);
+    ctx.globalAlpha = 1;
     ctx.lineWidth = 6;
     ctx.stroke(wallL);
     ctx.stroke(wallR);
     // faint centre dashes
-    ctx.setLineDash([50, 90]);
+    ctx.setLineDash([50, 78]); // 128 wu period, same as the Pixi road texture
     ctx.strokeStyle = 'rgba(255,255,255,0.14)';
     ctx.lineWidth = 6;
     ctx.stroke(centre);
     ctx.setLineDash([]);
     drawPads(track);
+    drawGridBoxes(track, nCars);
     drawStartLine(track);
+  }
+
+  /** Painted starting-grid boxes, one per car slot (same slots as buildStartingGrid). */
+  const gridCache = new WeakMap();
+  function drawGridBoxes(track, n) {
+    if (!n) return;
+    let g = gridCache.get(track);
+    if (!g || g.n !== n) {
+      const path = new Path2D();
+      for (const slot of buildStartingGrid(track, n)) {
+        const c = Math.cos(slot.angle), sn = Math.sin(slot.angle);
+        const P = (lx, ly) => [slot.x + c * lx - sn * ly, slot.y + sn * lx + c * ly];
+        const a = P(CAR_LEN * 0.62, -CAR_WID * 0.95), b = P(CAR_LEN * 0.62, CAR_WID * 0.95);
+        const a2 = P(-CAR_LEN * 0.35, -CAR_WID * 0.95), b2 = P(-CAR_LEN * 0.35, CAR_WID * 0.95);
+        path.moveTo(a2[0], a2[1]); path.lineTo(a[0], a[1]); path.lineTo(b[0], b[1]); path.lineTo(b2[0], b2[1]);
+      }
+      g = { n, path };
+      gridCache.set(track, g);
+    }
+    ctx.lineJoin = 'miter';
+    ctx.lineCap = 'butt';
+    ctx.strokeStyle = 'rgba(255,255,255,0.32)';
+    ctx.lineWidth = 4;
+    ctx.stroke(g.path);
+    ctx.lineJoin = 'round';
   }
 
   /** Boost pads: amber chevrons on the asphalt pointing in the direction of travel. */
@@ -130,57 +205,28 @@ export function createRenderer(canvas) {
     const s = Math.max(1, 34 / (CAR_LEN * zoom));
     const L = CAR_LEN * s, Wd = CAR_WID * 0.88 * s;
     const hl = L / 2, hw = Wd / 2;
+    const st = car._toy || (car._toy = styleFor(car)); // cosmetic only: variant / stripe / number by car id
+    const R = scaleBucket(s * zoom * DPR);              // sprite pixels per canonical unit
+    const ang = car.angle + (car.spinVis || 0);          // spinVis: v48 missile-hit 360° spin (0 otherwise)
+    // soft drop shadow, offset down-right in world space so it stays put while the toy turns
+    const sh = shadowSprite(st.variant, R);
+    ctx.save();
+    ctx.translate(car.x + 3.5 * s, car.y + 5 * s);
+    ctx.rotate(ang);
+    ctx.drawImage(sh, -SPRITE_W / 2 * s, -SPRITE_H / 2 * s, sh.width / R * s, sh.height / R * s);
+    ctx.restore();
     ctx.save();
     ctx.translate(car.x, car.y);
-    ctx.rotate(car.angle + (car.spinVis || 0)); // spinVis: v48 missile-hit 360° spin (0 otherwise)
+    ctx.rotate(ang);
     if (debugCars) {
       const m = ctx.getTransform();
       debugCars.push({ id: car.id, isPlayer: car.isPlayer, x: car.x, y: car.y, vx: car.vx, vy: car.vy, angle: car.angle, L, W: Wd,
-        spinning: car.spinMs > 0, spinVis: car.spinVis || 0,
+        spinning: car.spinMs > 0, spinVis: car.spinVis || 0, variant: st.variant,
         // screen-space images of the local length axis (+X, nose) and width axis (+Y)
         lenAxis: { x: m.a * hl, y: m.b * hl }, widAxis: { x: m.c * hw, y: m.d * hw }, origin: { x: m.e, y: m.f } });
     }
-    // shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    bodyPath(hl, hw, 3 * s, 4 * s);
-    ctx.fill();
-    // wheels: dark blocks elongated along the direction of travel, poking out of the body sides
-    ctx.fillStyle = '#0b0b0e';
-    const wl = L * 0.2, ww = Wd * 0.2;
-    for (const fx of [hl * 0.56, -hl * 0.6]) {
-      ctx.fillRect(fx - wl / 2, -hw - ww * 0.35, wl, ww);
-      ctx.fillRect(fx - wl / 2, hw - ww * 0.65, wl, ww);
-    }
-    // body (tapered towards the nose at +X)
-    ctx.fillStyle = car.color;
-    bodyPath(hl, hw, 0, 0);
-    ctx.fill();
-    ctx.lineWidth = (car.isPlayer ? 3.5 : 1.8) * s;
-    ctx.strokeStyle = car.isPlayer ? '#ffffff' : 'rgba(0,0,0,0.65)';
-    ctx.stroke();
-    // racing stripe nose-to-tail
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.fillRect(-hl + 3 * s, -Wd * 0.07, L - 6 * s, Wd * 0.14);
-    // cabin: windscreen (front, wide trapezoid), roof, rear window
-    ctx.fillStyle = '#0d1a26';
-    ctx.beginPath();
-    ctx.moveTo(L * 0.02, -hw * 0.78);
-    ctx.lineTo(L * 0.2, -hw * 0.58);
-    ctx.lineTo(L * 0.2, hw * 0.58);
-    ctx.lineTo(L * 0.02, hw * 0.78);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = 'rgba(0,0,0,0.18)';
-    ctx.fillRect(-L * 0.24, -hw * 0.74, L * 0.26, hw * 1.48);
-    ctx.fillStyle = 'rgba(13,26,38,0.8)';
-    ctx.fillRect(-L * 0.33, -hw * 0.62, L * 0.08, hw * 1.24);
-    // headlights at the nose, tail-lights at the back
-    ctx.fillStyle = '#fff6c0';
-    ctx.fillRect(hl - 6 * s, -hw * 0.62, 4 * s, hw * 0.4);
-    ctx.fillRect(hl - 6 * s, hw * 0.22, 4 * s, hw * 0.4);
-    ctx.fillStyle = '#ff2020';
-    ctx.fillRect(-hl + 1 * s, -hw * 0.8, 3 * s, hw * 0.45);
-    ctx.fillRect(-hl + 1 * s, hw * 0.35, 3 * s, hw * 0.45);
+    const spr = carSprite(st, car.color, car.isPlayer, R);
+    ctx.drawImage(spr, -SPRITE_W / 2 * s, -SPRITE_H / 2 * s, spr.width / R * s, spr.height / R * s);
     ctx.restore();
     if (car.isPlayer) {
       // marker above the player's car
@@ -191,23 +237,9 @@ export function createRenderer(canvas) {
       ctx.moveTo(-9 * s, -12 * s); ctx.lineTo(9 * s, -12 * s); ctx.lineTo(0, 0);
       ctx.closePath();
       ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 1.5 * s; ctx.stroke();
       ctx.restore();
     }
-  }
-
-  /** Car body outline: square-ish tail at -X, tapered rounded nose at +X. */
-  function bodyPath(hl, hw, ox, oy) {
-    const r = hw * 0.45;
-    ctx.beginPath();
-    ctx.moveTo(-hl + r + ox, -hw + oy);
-    ctx.lineTo(hl * 0.45 + ox, -hw + oy);
-    ctx.quadraticCurveTo(hl + ox, -hw * 0.8 + oy, hl + ox, oy);
-    ctx.quadraticCurveTo(hl + ox, hw * 0.8 + oy, hl * 0.45 + ox, hw + oy);
-    ctx.lineTo(-hl + r + ox, hw + oy);
-    ctx.quadraticCurveTo(-hl + ox, hw + oy, -hl + ox, hw - r + oy);
-    ctx.lineTo(-hl + ox, -hw + r + oy);
-    ctx.quadraticCurveTo(-hl + ox, -hw + oy, -hl + r + ox, -hw + oy);
-    ctx.closePath();
   }
 
   function roundRect(x, y, w, h, r) {
@@ -222,17 +254,27 @@ export function createRenderer(canvas) {
 
   let debugCars = null;
 
+  function drawHudOnly(world) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    drawMinimap(world);
+  }
+
   function draw(world) {
+    if (hudOnly) return drawHudOnly(world);
     const { track, cars, cam } = world;
     debugCars = (typeof window !== 'undefined' && window.__RAD_DEBUG__) ? [] : null;
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-    ctx.fillStyle = track.ground;
-    ctx.fillRect(0, 0, W, H);
     ctx.save();
     ctx.translate(W / 2, H / 2);
     ctx.scale(cam.zoom, cam.zoom);
     ctx.translate(-cam.x, -cam.y);
-    drawTrack(track);
+    // felt play-mat ground in world space (moves with the table)
+    const hx = W / 2 / cam.zoom + 4, hy = H / 2 / cam.zoom + 4;
+    ctx.fillStyle = trackTex(track).felt;
+    ctx.fillRect(cam.x - hx, cam.y - hy, hx * 2, hy * 2);
+    drawTrack(track, cars.length);
     drawBonus(world, cam.zoom);
     for (const m of world.missiles || []) drawTrail(m, cam.zoom);
     for (const c of cars) {
@@ -328,7 +370,7 @@ export function createRenderer(canvas) {
       roundRect(-h * 0.72, -h * 0.72, h * 1.44, h * 1.44, h * 0.18); ctx.stroke();
       ctx.restore();
       ctx.fillStyle = '#fff6c0';
-      ctx.font = `bold ${Math.round(h * 1.45)}px "Russo One", Impact, sans-serif`;
+      ctx.font = `900 ${Math.round(h * 1.3)}px ${TOY_FONT}`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText('?', 0, h * 0.06);
       ctx.restore();
@@ -453,15 +495,12 @@ export function createRenderer(canvas) {
     ctx.save();
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     ctx.globalAlpha = countdown ? 0.6 : 1;
-    ctx.fillStyle = 'rgba(8,10,16,0.78)';
-    roundRect(x, y, bw, bh, 7); ctx.fill();
-    ctx.lineWidth = ms.flash || ms.inFlight ? 2.5 : 1.5;
-    ctx.strokeStyle = col; ctx.stroke();
+    plasticPanel(x, y, bw, bh, col, ms.flash || ms.inFlight);
     ctx.fillStyle = col;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = `bold ${ms.flash ? 15 : 13}px "Russo One", Impact, sans-serif`;
+    ctx.font = `900 ${ms.flash ? 14 : 12}px ${TOY_FONT}`;
     ctx.fillText(label, x + bw / 2, y + 14);
-    ctx.font = '10px "Russo One", Impact, sans-serif';
+    ctx.font = `700 10px ${TOY_FONT}`;
     ctx.fillStyle = ms.charge > 0 || ms.flash || ms.inFlight ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.5)';
     ctx.fillText(sub, x + bw / 2, y + 29);
     ctx.restore();
@@ -492,15 +531,11 @@ export function createRenderer(canvas) {
     }
     ctx.save();
     ctx.globalAlpha = countdown ? 0.6 : 1;
-    ctx.fillStyle = 'rgba(8,10,16,0.78)';
-    roundRect(x, y, bw, bh, 7); ctx.fill();
-    ctx.lineWidth = active ? 2.5 : 1.5;
-    ctx.strokeStyle = col;
-    ctx.stroke();
+    plasticPanel(x, y, bw, bh, col, active);
     ctx.fillStyle = col;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = 'bold 13px "Russo One", Impact, sans-serif';
+    ctx.font = `900 12px ${TOY_FONT}`;
     ctx.fillText(label, x + bw / 2, y + 14);
     if (active) {
       const px = x + 9, pw = bw - 18, py = y + 25, ph = 8;
@@ -509,12 +544,12 @@ export function createRenderer(canvas) {
       ctx.fillStyle = col;
       ctx.fillRect(px, py, pw * frac, ph);
     } else if (sub) {
-      ctx.font = '10px "Russo One", Impact, sans-serif';
+      ctx.font = `700 10px ${TOY_FONT}`;
       ctx.fillStyle = b.charge > 0 || b.last ? 'rgba(255,255,255,0.78)' : 'rgba(255,255,255,0.5)';
       ctx.fillText(sub, x + bw / 2, y + 29);
     }
     ctx.restore();
-    return { x, y, h: bh };
+    return { x, y, w: bw, h: bh };
   }
 
   function drawMinimap(world) {
@@ -527,8 +562,9 @@ export function createRenderer(canvas) {
     const mh = (b.maxY - b.minY) * sc;
     const x0 = W - mw - 14, y0 = 66; // top-right, under the timer (clear of touch buttons)
     ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.45)';
-    ctx.fillRect(x0 - 6, y0 - 6, mw + 12, mh + 12);
+    ctx.fillStyle = 'rgba(12,17,40,0.62)';
+    roundRect(x0 - 7, y0 - 7, mw + 14, mh + 14, 10); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 2; ctx.stroke();
     ctx.translate(x0 - b.minX * sc, y0 - b.minY * sc);
     ctx.scale(sc, sc);
     ctx.strokeStyle = 'rgba(255,255,255,0.55)';
@@ -543,19 +579,50 @@ export function createRenderer(canvas) {
     ctx.restore();
   }
 
+  /** v51: HUD panel as a glossy plastic tray (same size and position as before) with a coloured rim. */
+  function plasticPanel(x, y, bw, bh, col, strong) {
+    ctx.fillStyle = 'rgba(4,6,16,0.55)';
+    roundRect(x + 1, y + 3, bw, bh, 11); ctx.fill();                 // thickness / drop
+    const g = ctx.createLinearGradient(0, y, 0, y + bh);
+    g.addColorStop(0, 'rgba(48,60,112,0.92)'); g.addColorStop(0.5, 'rgba(24,32,66,0.9)'); g.addColorStop(1, 'rgba(12,17,40,0.92)');
+    ctx.fillStyle = g;
+    roundRect(x, y, bw, bh, 11); ctx.fill();
+    ctx.lineWidth = strong ? 3 : 2;
+    ctx.strokeStyle = col; ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.13)';
+    roundRect(x + 4, y + 3, bw - 8, bh * 0.36, 7); ctx.fill();      // gloss
+  }
+
+  /** v51: countdown as a glossy toy traffic-light disc (3 red, 2 / 1 amber, GO green) with a chunky number. */
   function drawCountdown(text) {
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     ctx.save();
-    ctx.font = `bold ${Math.round(Math.min(W, H) * 0.22)}px "Russo One", Impact, sans-serif`;
+    const r = Math.min(W, H) * 0.12, cx = W / 2, cy = H * 0.27;
+    const col = text === 'GO' ? ['#9bff5a', '#3fb80f', '#1d5c00'] : text === '3' ? ['#ff7a6a', '#e3261c', '#6a0a04'] : ['#ffe27a', '#f0a400', '#6b4500'];
+    ctx.fillStyle = 'rgba(0,0,0,0.38)';
+    ctx.beginPath(); ctx.arc(cx + r * 0.08, cy + r * 0.14, r * 1.04, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#10142a';
+    ctx.beginPath(); ctx.arc(cx, cy, r * 1.06, 0, Math.PI * 2); ctx.fill();
+    const g = ctx.createRadialGradient(cx - r * 0.3, cy - r * 0.35, r * 0.1, cx, cy, r);
+    g.addColorStop(0, col[0]); g.addColorStop(0.7, col[1]); g.addColorStop(1, col[2]);
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cy, r * 0.92, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.32)';
+    ctx.beginPath(); ctx.ellipse(cx - r * 0.12, cy - r * 0.5, r * 0.55, r * 0.26, -0.2, 0, Math.PI * 2); ctx.fill();
+    ctx.font = `900 ${Math.round(r * (text === 'GO' ? 0.82 : 1.15))}px ${TOY_FONT}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.lineWidth = 8;
-    ctx.strokeStyle = 'rgba(0,0,0,0.8)';
-    ctx.strokeText(text, W / 2, H * 0.4);
-    ctx.fillStyle = text === 'GO' ? '#b8ff00' : '#ffffff';
-    ctx.fillText(text, W / 2, H * 0.4);
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = Math.max(4, r * 0.1);
+    ctx.strokeStyle = 'rgba(10,12,26,0.9)';
+    ctx.fillStyle = 'rgba(10,12,26,0.6)';
+    ctx.fillText(text, cx, cy + r * 0.1);
+    ctx.strokeText(text, cx, cy + r * 0.04);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(text, cx, cy + r * 0.04);
     ctx.restore();
   }
 
-  return { resize, draw, drawCountdown, drawBoostHud, drawWeaponHud, ctx };
+  const readPixels = (x, y, w, h) => ctx.getImageData(x, y, w, h).data; // verification: device-px RGBA of the race view
+  return { kind: hudOnly ? 'hud' : 'canvas', resize, draw, drawCountdown, drawBoostHud, drawWeaponHud, readPixels, ctx };
 }

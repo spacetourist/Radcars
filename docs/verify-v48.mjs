@@ -155,6 +155,7 @@ const page = await browser.newPage();
 await page.setViewport({ width: 1280, height: 720 });
 const errs = []; watchErrors(page, errs);
 await page.goto(url, { waitUntil: 'networkidle2' });
+const rendererKind = await page.evaluate(() => window.__RAD_RENDERER__); // v51: 'pixi' (default) or 'canvas' (?canvas=1 / fallback)
 await page.evaluate(() => localStorage.clear());
 await page.reload({ waitUntil: 'networkidle2' });
 const hasBrk = await page.evaluate(() => !!document.getElementById('btn-brake') || !!document.querySelector('[data-action=brake], .tc-brake'));
@@ -480,7 +481,7 @@ await browser.close();
 
 const numbers = await import('../js/weapons.js');
 const head = [
-  `Radcars v48 verification ${new Date().toString()}`, `URL ${url}`, '',
+  `Radcars v48 verification ${new Date().toString()}`, `URL ${url}  renderer=${rendererKind}`, '',
   `MISSILE speed ${numbers.MISSILE.speed} wu/s, turn ${numbers.MISSILE.turn} rad/s (min radius ${(numbers.MISSILE.speed / numbers.MISSILE.turn).toFixed(0)} wu), life ${numbers.MISSILE.lifeMs} ms, hit radius ${numbers.MISSILE.hitR} wu, dies on wall contact; spin ${numbers.SPIN_MS} ms, speed kept ${numbers.SPIN_SPEED_KEEP * 100}%; pad boost ${numbers.PAD_MS} ms`, '',
   'RULE RACES (menus, 3 laps, 5 AI Normal, no brake)', ...raceRows, '',
   'HIT-RATE TRIAL (targets 80–1500 wu ahead)', ...trialRows.map((r) => `  ${r.name.padEnd(9)} ${r.hits}/${r.n} = ${(100 * r.hits / Math.max(1, r.n)).toFixed(0)}% (intended target ${r.ht})  ${JSON.stringify(r.by)}  ${r.bins.join('  ')}`),

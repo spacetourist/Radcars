@@ -121,10 +121,11 @@ const page = await browser.newPage();
 await page.setViewport({ width: 1280, height: 720, deviceScaleFactor: 1 });
 const errs = []; watchErrors(page, errs);
 await page.goto(url, { waitUntil: 'networkidle2' });
+const rendererKind = await page.evaluate(() => window.__RAD_RENDERER__); // v51: 'pixi' (default) or 'canvas' (?canvas=1 / fallback)
 await page.evaluate(() => localStorage.clear());
 await page.reload({ waitUntil: 'networkidle2' });
 const build = await page.evaluate(() => ({ ...self.RADCARS_BUILD, btn: !!document.getElementById('hard-refresh'), tag: document.getElementById('build-tag')?.textContent }));
-check(build.version === 'v50' && build.name === 'bonus' && build.btn && build.tag === 'v50 · bonus', `menu build ${build.label}, tag "${build.tag}", Update button ${build.btn}`);
+check(/^v\d+$/.test(build.version) && parseInt(build.version.slice(1)) >= 50 && build.btn && build.tag === `${build.version} · ${build.name}`, /* v51+: accept the current build */ `menu build ${build.label}, tag "${build.tag}", Update button ${build.btn}`);
 
 // B. roll odds
 const odds = await page.evaluate(async () => {
@@ -398,7 +399,7 @@ await browser.close();
 
 const summary = [
   `Radcars v50 'bonus' verification ${new Date().toString()}`,
-  `URL ${url}`,
+  `URL ${url}  renderer=${rendererKind}`,
   '',
   `ODDS P3 rocket/lapboost/autopilot ${pct(odds.p3, 'rocket')}/${pct(odds.p3, 'lapboost')}/${pct(odds.p3, 'autopilot')}%  P1 ${pct(odds.p1, 'rocket')}/${pct(odds.p1, 'lapboost')}/${pct(odds.p1, 'autopilot')}%`,
   '',

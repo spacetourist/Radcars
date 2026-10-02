@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#07080c" />
+  <meta name="theme-color" content="#10261d" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -11,9 +11,6 @@
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg" />
   <link rel="apple-touch-icon" href="icons/icon-192.png" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Russo+One&display=swap" rel="stylesheet" />
   <title>Radcars</title>
   <!-- js/version.js is the single source of truth for the build; always fetched fresh, it writes the stylesheet, an
        import map and the main module with ?b=<build> so no browser cache can mix old and new files. -->
@@ -22,6 +19,8 @@
 <body>
   <div id="app">
     <canvas id="game"></canvas>
+    <!-- v51: menu-only photo backdrop (images are attached lazily by js/ui.js after first paint; hidden during races) -->
+    <div id="menu-bg"><div class="mb-layer mb-dim"></div><div class="mb-layer mb-blur"></div><div class="mb-kerb"></div></div>
     <div id="ui"></div>
     <div id="touch-controls" class="hidden">
       <div class="tc-aim-pad" id="aim-pad" aria-label="Steering direction">

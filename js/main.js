@@ -3,6 +3,7 @@ import { setMuted, unlockAudio } from './audio.js';
 import { createInput } from './input.js';
 import { createUI } from './ui.js';
 import { createGame } from './game.js';
+import { createRenderer } from './render.js';
 import { TRACKS } from './tracks.js';
 
 const canvas = document.getElementById('game');
@@ -14,6 +15,37 @@ setMuted(save.mute);
 const input = createInput();
 const game = createGame(canvas, input);
 try { window.__RAD_GAME__ = game; window.__RAD_INPUT__ = input; } catch (_) {}
+
+// v51 renderer choice: PixiJS v8 (WebGL) by default; ?canvas=1 forces the Canvas 2D renderer, and any WebGL / Pixi
+// init failure falls back to it automatically. Pixi (vendor/pixi-lean.mjs) loads after the menu has painted.
+const params = new URLSearchParams(location.search);
+const forceCanvas = params.get('canvas') === '1';
+const rendererReady = new Promise((resolve) => {
+  const useCanvas = (why) => { if (why) console.warn('[radcars] Canvas 2D renderer:', why); game.setRenderer(createRenderer(canvas)); resolve('canvas'); };
+  if (forceCanvas) return useCanvas();
+  const probe = document.createElement('canvas');
+  const pctx = window.WebGLRenderingContext && (probe.getContext('webgl2') || probe.getContext('webgl'));
+  const glOk = !!pctx;
+  try { const lose = pctx && pctx.getExtension('WEBGL_lose_context'); if (lose) lose.loseContext(); } catch (_) {}
+  if (!glOk) return useCanvas('WebGL unavailable');
+  requestAnimationFrame(() => setTimeout(() => {
+    import('./pixiRender.js')
+      .then((m) => m.createPixiRenderer(canvas, document.getElementById('app')))
+      .then((r) => {
+        game.setRenderer(r); resolve('pixi');
+        // a lost WebGL context mid-session (GPU reset, tab memory pressure): carry on with the Canvas renderer
+        const gl = document.getElementById('pixi');
+        if (gl) gl.addEventListener('webglcontextlost', (e) => {
+          e.preventDefault();
+          console.warn('[radcars] WebGL context lost: switching to the Canvas 2D renderer');
+          gl.remove(); canvas.classList.remove('hud-overlay');
+          game.setRenderer(createRenderer(canvas));
+        }, { once: true });
+      })
+      .catch((e) => useCanvas('Pixi init failed: ' + (e && e.message)));
+  }, 0));
+});
+try { window.__RAD_RENDERER__ = rendererReady; } catch (_) {}
 
 const ui = createUI(uiRoot, {
   onMenu(act) {
@@ -41,6 +73,9 @@ if (new URLSearchParams(location.search).has('r')) { const u = new URL(location.
 
 function startRace(trackIndex) {
   unlockAudio();
+  rendererReady.then(() => startRaceNow(trackIndex));
+}
+function startRaceNow(trackIndex) {
   ui.clear();
   ui.hideHud();
   game.setOnFinish((result) => {

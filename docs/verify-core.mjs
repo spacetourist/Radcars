@@ -47,6 +47,7 @@ page.on('pageerror', (e) => errs.push('PAGEERR ' + e.message));
 page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') errs.push('CONSOLE.' + m.type() + ' ' + m.text()); });
 page.on('requestfailed', (r) => errs.push('REQFAIL ' + r.url()));
 await page.goto(url, { waitUntil: 'networkidle2' });
+const rendererKind = await page.evaluate(() => window.__RAD_RENDERER__); // v51: 'pixi' (default) or 'canvas' (?canvas=1 / fallback)
 await page.evaluate(() => localStorage.clear());
 await page.reload({ waitUntil: 'networkidle2' });
 
@@ -57,7 +58,7 @@ async function sampleFrame() {
     requestAnimationFrame(() => requestAnimationFrame(() => {
       const f = window.__RAD_DEBUG__.frame; window.__RAD_DEBUG__ = null;
       const g = window.__RAD_GAME__; const w = g.world; const tr = w.track;
-      const cv = document.getElementById('game'); const ctx = cv.getContext('2d');
+      const cv = { width: Math.round(f.W * f.DPR), height: Math.round(f.H * f.DPR) }; // v51: device-px race view; pixels come from the active renderer (Pixi WebGL or Canvas fallback)
       const hex = (h) => [1, 3, 5].map((k) => parseInt(h.slice(k, k + 2), 16));
       const wall = hex(tr.wall);
       const dAng = (a, b) => { let d = a - b; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return d; };
@@ -84,7 +85,7 @@ async function sampleFrame() {
         const ox = dc.origin.x, oy = dc.origin.y;
         if (spd > 150 && clearWall && clearCars && clearFx && colDist > 90 && ox > reg && oy > reg && ox < cv.width - reg && oy < cv.height - reg && !(ox > cv.width - 230 && oy < 230)) {
           const x0 = Math.floor(ox - reg), y0 = Math.floor(oy - reg), sz = Math.ceil(reg * 2);
-          const img = ctx.getImageData(x0, y0, sz, sz).data;
+          const img = g.readPixels(x0, y0, sz, sz);
           let n = 0, sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0, hn = 0, hx = 0, hy = 0;
           for (let yy = 0; yy < sz; yy++) for (let xx = 0; xx < sz; xx++) {
             const dx = x0 + xx - ox, dy = y0 + yy - oy; if (dx * dx + dy * dy > reg * reg) continue;
@@ -99,7 +100,10 @@ async function sampleFrame() {
             const elong = Math.sqrt((tr2 / 2 + disc) / Math.max(1e-6, tr2 / 2 - disc));
             let axErr = Math.abs(dAng(axis, va)); if (axErr > Math.PI / 2) axErr = Math.PI - axErr; // axis is ±180° ambiguous
             const noseAng = Math.atan2(hy / hn - my, hx / hn - mx);
-            rec.px = { n, elong, axisErr: axErr * 180 / Math.PI, noseErr: Math.abs(dAng(noseAng, va)) * 180 / Math.PI };
+            rec.px = { n, elong, axisErr: axErr * 180 / Math.PI, noseErr: Math.abs(dAng(noseAng, va)) * 180 / Math.PI, ox: Math.round(ox), oy: Math.round(oy),
+              // v51: samples overlapping the bottom-right HUD panels are reported but not scored (the panel rims share car
+              // colours, e.g. MISSILE #ff4d5e vs car #ff2b6a, and the HUD is drawn over the race view in both renderers)
+              hud: ox > cv.width - 600 * f.DPR - reg && oy > cv.height - 210 * f.DPR - reg };
           }
         }
         out.push(rec);
@@ -192,7 +196,7 @@ for (let ti = 0; ti < 4; ti++) {
   // orientation stats
   const moving = samples.flatMap((s) => s.cars.filter((c) => c.spd > 150));
   const xf = moving.map((c) => c.xformErr);
-  const px = moving.filter((c) => c.px);
+  const pxAll = moving.filter((c) => c.px), px = pxAll.filter((c) => !c.px.hud);
   const xfMax = Math.max(...xf), xfMean = xf.reduce((a, b) => a + b, 0) / xf.length;
   const xfP95 = [...xf].sort((a, b) => a - b)[Math.floor(xf.length * 0.95)];
   const lenRatio = Math.min(...moving.map((c) => c.lenPx / c.widPx));
@@ -202,7 +206,9 @@ for (let ti = 0; ti < 4; ti++) {
   const pxNoseMax = Math.max(...noseErr), pxElongMin = Math.min(...elong);
   const pxNoseBad = noseErr.filter((e) => e > 60).length;
   const worstEl = px.reduce((a, c) => (!a || c.px.elong < a.px.elong ? c : a), null);
-  if (worstEl) logLines.push(`worst pixel elongation ${worstEl.px.elong.toFixed(2)}: car ${worstEl.id} s=${worstEl.s} lat=${Math.round(worstEl.lat)} t=${worstEl.t} spd=${Math.round(worstEl.spd)} n=${worstEl.px.n}`);
+  if (worstEl) logLines.push(`worst pixel elongation ${worstEl.px.elong.toFixed(2)}: car ${worstEl.id} s=${worstEl.s} lat=${Math.round(worstEl.lat)} t=${worstEl.t} spd=${Math.round(worstEl.spd)} n=${worstEl.px.n} at device px ${worstEl.px.ox},${worstEl.px.oy}`);
+  logLines.push(`pixel samples overlapping the HUD panels (not scored): ${pxAll.length - px.length}`);
+  for (const c of pxAll.filter((q) => q.px.noseErr > 60 || q.px.elong < 1.3)) logLines.push(`pixel outlier${c.px.hud ? ' (under HUD panels, not scored)' : ''}: car ${c.id} t=${c.t} nose ${c.px.noseErr.toFixed(1)}° elong ${c.px.elong.toFixed(2)} n=${c.px.n} at device px ${c.px.ox},${c.px.oy}`);
   const orientOk = xfP95 < 12 && lenRatio > 1.8 && px.length >= 20 && pxAxisP95 < 15 && pxNoseBad === 0 && pxElongMin > 1.3;
   orientLines.push(`  ${names[ti].padEnd(9)} ${orientOk ? 'PASS' : 'FAIL'}  render-transform: carSamples=${moving.length} lengthAxis-vs-velocity mean=${xfMean.toFixed(1)}° p95=${xfP95.toFixed(1)}° max=${xfMax.toFixed(1)}°  drawn length/width≥${lenRatio.toFixed(2)}  |  pixels: carSamples=${px.length} bodyPrincipalAxis-vs-velocity mean=${pxAxisMean.toFixed(1)}° p95=${pxAxisP95.toFixed(1)}°  nose(headlights)-vs-velocity max=${pxNoseMax.toFixed(1)}° (>60°: ${pxNoseBad})  body elongation≥${pxElongMin.toFixed(2)}`);
   // race stats
@@ -228,7 +234,7 @@ const sw = await page.evaluate(() => fetch('./sw.js').then((r) => r.text()).then
 await browser.close();
 
 const out = [
-  `Radcars ${sw} verification ${new Date().toString()}`, `URL ${url}`, '',
+  `Radcars ${sw} verification ${new Date().toString()}`, `URL ${url}  renderer=${rendererKind}`, '',
   ...report,
   'DRAWN-ORIENTATION CHECK (all cars, sampled every ~0.4s while racing; speed > 150 wu/s)', ...orientLines, '',
   'RACES (through the menus, 3 laps, 5 AI Normal, player bot holds throttle + steers)', ...summary,

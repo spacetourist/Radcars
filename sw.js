@@ -1,6 +1,7 @@
 importScripts('./js/version.js');
 const CACHE = self.RADCARS_BUILD.cache; // e.g. 'radcars-v48-missile' (js/version.js is the single source of truth)
 const ASSETS = self.RADCARS_BUILD.assets;
+const OPTIONAL = self.RADCARS_BUILD.optional || []; // best-effort (menu photo backdrop); a failure never blocks install
 
 // Updates: the new worker activates at once (skipWaiting + clients.claim) and the page reloads itself when it isn't mid-race
 // (js/main.js). Same-origin requests go network-first with cache:'no-store' so the browser's HTTP cache can never serve an
@@ -8,7 +9,8 @@ const ASSETS = self.RADCARS_BUILD.assets;
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(CACHE)
-      .then((c) => c.addAll(ASSETS.map((u) => new Request(u, { cache: 'reload' }))))
+      .then((c) => c.addAll(ASSETS.map((u) => new Request(u, { cache: 'reload' })))
+        .then(() => { Promise.allSettled(OPTIONAL.map((u) => c.add(new Request(u, { cache: 'reload' })))); })) // not awaited
       .catch(() => {})
       .then(() => self.skipWaiting())
   );

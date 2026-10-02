@@ -1,0 +1,199 @@
+
+=== FPS desktop pixi (v51 · toys-pixi) ===
+    [ok] desktop neon: active renderer is pixi (expected pixi)
+  neon      race z0.85 cpu×1: 60 fps, frame JS avg 0.18 ms, p95 0.8 ms
+  neon      race z0.85 cpu×4: 49.2 fps, frame JS avg 0.77 ms, p95 3.3 ms
+  neon      far  z0.24 cpu×1: 60 fps, frame JS avg 0.21 ms, p95 0.8 ms
+  neon      far  z0.24 cpu×4: 46.1 fps, frame JS avg 0.76 ms, p95 2.3 ms
+    [ok] desktop gridlock: active renderer is pixi (expected pixi)
+  gridlock  race z0.85 cpu×1: 60 fps, frame JS avg 0.19 ms, p95 0.7 ms
+  gridlock  race z0.85 cpu×4: 49.9 fps, frame JS avg 0.69 ms, p95 2.3 ms
+  gridlock  far  z0.24 cpu×1: 60 fps, frame JS avg 0.2 ms, p95 0.9 ms
+  gridlock  far  z0.24 cpu×4: 51.8 fps, frame JS avg 0.62 ms, p95 2 ms
+    [ok] desktop pixi: console/page errors: none
+
+=== FPS desktop canvas (v51 · toys-pixi) ===
+    [ok] desktop neon: active renderer is canvas (expected canvas)
+  neon      race z0.85 cpu×1: 60 fps, frame JS avg 0.3 ms, p95 0.7 ms
+  neon      race z0.85 cpu×4: 21.2 fps, frame JS avg 1.35 ms, p95 3 ms
+  neon      far  z0.24 cpu×1: 60 fps, frame JS avg 0.29 ms, p95 0.6 ms
+  neon      far  z0.24 cpu×4: 17.2 fps, frame JS avg 1.25 ms, p95 2.6 ms
+    [ok] desktop gridlock: active renderer is canvas (expected canvas)
+  gridlock  race z0.85 cpu×1: 60 fps, frame JS avg 0.25 ms, p95 0.6 ms
+  gridlock  race z0.85 cpu×4: 20.5 fps, frame JS avg 1.24 ms, p95 2.7 ms
+  gridlock  far  z0.24 cpu×1: 59.9 fps, frame JS avg 0.24 ms, p95 0.6 ms
+  gridlock  far  z0.24 cpu×4: 18.6 fps, frame JS avg 1.3 ms, p95 2.9 ms
+    [ok] desktop canvas: console/page errors: none
+
+=== FPS phone pixi (v51 · toys-pixi) ===
+    [ok] phone neon: active renderer is pixi (expected pixi)
+  neon      race z0.85 cpu×1: 60 fps, frame JS avg 0.19 ms, p95 0.7 ms
+  neon      race z0.85 cpu×4: 36.2 fps, frame JS avg 1.01 ms, p95 4.9 ms
+  neon      far  z0.24 cpu×1: 60 fps, frame JS avg 0.24 ms, p95 1 ms
+  neon      far  z0.24 cpu×4: 36.9 fps, frame JS avg 0.73 ms, p95 2.2 ms
+    [ok] phone gridlock: active renderer is pixi (expected pixi)
+  gridlock  race z0.85 cpu×1: 59.9 fps, frame JS avg 0.22 ms, p95 1 ms
+  gridlock  race z0.85 cpu×4: 38.2 fps, frame JS avg 0.73 ms, p95 2.4 ms
+  gridlock  far  z0.24 cpu×1: 60 fps, frame JS avg 0.23 ms, p95 1.1 ms
+  gridlock  far  z0.24 cpu×4: 35.5 fps, frame JS avg 0.99 ms, p95 3.7 ms
+    [ok] phone pixi: console/page errors: none
+
+=== FPS phone canvas (v51 · toys-pixi) ===
+    [ok] phone neon: active renderer is canvas (expected canvas)
+  neon      race z0.85 cpu×1: 58.9 fps, frame JS avg 0.25 ms, p95 0.6 ms
+  neon      race z0.85 cpu×4: 15.1 fps, frame JS avg 1.3 ms, p95 2.8 ms
+  neon      far  z0.24 cpu×1: 60 fps, frame JS avg 0.26 ms, p95 0.6 ms
+  neon      far  z0.24 cpu×4: 16.1 fps, frame JS avg 1.38 ms, p95 3.2 ms
+    [ok] phone gridlock: active renderer is canvas (expected canvas)
+  gridlock  race z0.85 cpu×1: 59.9 fps, frame JS avg 0.23 ms, p95 0.5 ms
+  gridlock  race z0.85 cpu×4: 14.5 fps, frame JS avg 1.3 ms, p95 2.9 ms
+  gridlock  far  z0.24 cpu×1: 60 fps, frame JS avg 0.22 ms, p95 0.5 ms
+  gridlock  far  z0.24 cpu×4: 17.5 fps, frame JS avg 1.56 ms, p95 3.6 ms
+    [ok] phone canvas: console/page errors: none
+
+FPS TABLE (fps pixi / canvas; JS ms avg pixi / canvas)
+  desktop neon      race z0.85 cpu×1:    60 /    60 fps   0.18 / 0.3 ms
+    [ok] desktop neon race: Pixi ≈60 fps at normal CPU (60)
+    [ok] desktop neon race cpu×1: Pixi (60) at least as fast as Canvas (60)
+  desktop neon      race z0.85 cpu×4:  49.2 /  21.2 fps   0.77 / 1.35 ms
+    [ok] desktop neon race cpu×4: Pixi (49.2) at least as fast as Canvas (21.2)
+  desktop neon      far  z0.24 cpu×1:    60 /    60 fps   0.21 / 0.29 ms
+    [ok] desktop neon far: Pixi ≈60 fps at normal CPU (60)
+    [ok] desktop neon far cpu×1: Pixi (60) at least as fast as Canvas (60)
+  desktop neon      far  z0.24 cpu×4:  46.1 /  17.2 fps   0.76 / 1.25 ms
+    [ok] desktop neon far cpu×4: Pixi (46.1) at least as fast as Canvas (17.2)
+  desktop gridlock  race z0.85 cpu×1:    60 /    60 fps   0.19 / 0.25 ms
+    [ok] desktop gridlock race: Pixi ≈60 fps at normal CPU (60)
+    [ok] desktop gridlock race cpu×1: Pixi (60) at least as fast as Canvas (60)
+  desktop gridlock  race z0.85 cpu×4:  49.9 /  20.5 fps   0.69 / 1.24 ms
+    [ok] desktop gridlock race cpu×4: Pixi (49.9) at least as fast as Canvas (20.5)
+  desktop gridlock  far  z0.24 cpu×1:    60 /  59.9 fps   0.2 / 0.24 ms
+    [ok] desktop gridlock far: Pixi ≈60 fps at normal CPU (60)
+    [ok] desktop gridlock far cpu×1: Pixi (60) at least as fast as Canvas (59.9)
+  desktop gridlock  far  z0.24 cpu×4:  51.8 /  18.6 fps   0.62 / 1.3 ms
+    [ok] desktop gridlock far cpu×4: Pixi (51.8) at least as fast as Canvas (18.6)
+  phone   neon      race z0.85 cpu×1:    60 /  58.9 fps   0.19 / 0.25 ms
+    [ok] phone neon race: Pixi ≈60 fps at normal CPU (60)
+    [ok] phone neon race cpu×1: Pixi (60) at least as fast as Canvas (58.9)
+  phone   neon      race z0.85 cpu×4:  36.2 /  15.1 fps   1.01 / 1.3 ms
+    [ok] phone neon race cpu×4: Pixi (36.2) at least as fast as Canvas (15.1)
+  phone   neon      far  z0.24 cpu×1:    60 /    60 fps   0.24 / 0.26 ms
+    [ok] phone neon far: Pixi ≈60 fps at normal CPU (60)
+    [ok] phone neon far cpu×1: Pixi (60) at least as fast as Canvas (60)
+  phone   neon      far  z0.24 cpu×4:  36.9 /  16.1 fps   0.73 / 1.38 ms
+    [ok] phone neon far cpu×4: Pixi (36.9) at least as fast as Canvas (16.1)
+  phone   gridlock  race z0.85 cpu×1:  59.9 /  59.9 fps   0.22 / 0.23 ms
+    [ok] phone gridlock race: Pixi ≈60 fps at normal CPU (59.9)
+    [ok] phone gridlock race cpu×1: Pixi (59.9) at least as fast as Canvas (59.9)
+  phone   gridlock  race z0.85 cpu×4:  38.2 /  14.5 fps   0.73 / 1.3 ms
+    [ok] phone gridlock race cpu×4: Pixi (38.2) at least as fast as Canvas (14.5)
+  phone   gridlock  far  z0.24 cpu×1:    60 /    60 fps   0.23 / 0.22 ms
+    [ok] phone gridlock far: Pixi ≈60 fps at normal CPU (60)
+    [ok] phone gridlock far cpu×1: Pixi (60) at least as fast as Canvas (60)
+  phone   gridlock  far  z0.24 cpu×4:  35.5 /  17.5 fps   0.99 / 1.56 ms
+    [ok] phone gridlock far cpu×4: Pixi (35.5) at least as fast as Canvas (17.5)
+
+=== NEON — desktop race (1280×720) ===
+    [ok] active race renderer: pixi
+    [ok] menu photo layer hidden in the race (display none)
+    shot docs/shots/79-menu-countdown-desktop.png
+    [ok] grid (just after GO): 6 cars, drawn nose vs road tangent worst 24.2° (0:sports:0° 1:hatch:21.3° 2:f1:10.2° 3:pickup:23° 4:muscle:20° 5:sports:24.2°); vs velocity worst 0°
+    shot docs/shots/79-neon-grid.png
+    shot docs/shots/79-neon-corner.png
+    [ok] mid-race corner: 6 cars, drawn nose vs road tangent worst 11.5° (0:sports:11.5° 1:hatch:3.7° 2:f1:6.1° 3:pickup:5.2° 4:muscle:8.7° 5:sports:4.8°); vs velocity worst 0°
+    shot docs/shots/79-player-closeup.png
+    [ok] Shift boost burning (level 0.96)
+    shot docs/shots/79-boost-flame.png
+    [ok] LAP BOOST active (lapboost)
+    shot docs/shots/79-green-flame.png
+    shot docs/shots/79-menu-pause-desktop.png
+    [ok] pause (desktop): 2 buttons ≥ 44 px and on screen
+    [ok] pause uses the dimmed live race (no photo during the race)
+
+=== GRIDLOCK — desktop race (1280×720) ===
+    [ok] menu photo layer hidden in the race (display none)
+    [ok] grid (just after GO): 6 cars, drawn nose vs road tangent worst 19.9° (0:sports:0° 1:hatch:17.6° 2:f1:9.9° 3:pickup:19.2° 4:muscle:17.3° 5:sports:19.9°); vs velocity worst 0°
+    shot docs/shots/79-gridlock-grid.png
+    shot docs/shots/79-gridlock-corner.png
+    [ok] mid-race corner: 6 cars, drawn nose vs road tangent worst 5.2° (0:sports:5.2° 1:hatch:1.2° 2:f1:0.3° 3:pickup:1.4° 4:muscle:0.5° 5:sports:2.9°); vs velocity worst 0.1°
+    shot docs/shots/79-gridlock-spin.png
+    [ok] rocket hit car 1 → spin drawn (spinVis 2.59 rad)
+
+=== RAZOR — desktop race (1280×720) ===
+    [ok] menu photo layer hidden in the race (display none)
+    [ok] grid (just after GO): 6 cars, drawn nose vs road tangent worst 19.4° (0:sports:0° 1:hatch:17.4° 2:f1:10.2° 3:pickup:18.7° 4:muscle:17.4° 5:sports:19.4°); vs velocity worst 0°
+    shot docs/shots/79-razor-grid.png
+    shot docs/shots/79-razor-corner.png
+    [ok] mid-race corner: 6 cars, drawn nose vs road tangent worst 10.9° (0:sports:10.9° 1:hatch:5.5° 2:f1:6.4° 3:pickup:6.8° 4:muscle:3.5° 5:sports:8.6°); vs velocity worst 3°
+    [ok] AUTOPILOT active (autopilot)
+    shot docs/shots/79-autopilot.png
+
+=== CARGO — desktop race (1280×720) ===
+    [ok] menu photo layer hidden in the race (display none)
+    [ok] grid (just after GO): 6 cars, drawn nose vs road tangent worst 16.9° (0:sports:0° 1:hatch:14.9° 2:f1:8.1° 3:pickup:16.5° 4:muscle:13.8° 5:sports:16.9°); vs velocity worst 0°
+    shot docs/shots/79-cargo-grid.png
+    shot docs/shots/79-cargo-corner.png
+    [ok] mid-race corner: 6 cars, drawn nose vs road tangent worst 6.6° (0:sports:4.5° 1:hatch:6.6° 2:f1:0.2° 3:pickup:3.5° 4:muscle:5° 5:sports:5.3°); vs velocity worst 0°
+    shot docs/shots/79-cargo-spin.png
+    [ok] rocket hit car 5 → spin drawn (spinVis 2.59 rad)
+    [ok] no menu photo requests while racing (0)
+
+=== MENUS desktop ===
+    [ok] title: photo layer shown + loaded lazily (on dim-ready blur-ready)
+    [ok] title shows "v51 · toys-pixi" + Update / hard refresh button
+    shot docs/shots/79-menu-title-desktop.png
+    [ok] title (desktop): 3 buttons ≥ 44 px and on screen
+    shot docs/shots/79-menu-options-desktop.png
+    [ok] options (desktop): 8 buttons ≥ 44 px and on screen
+    [ok] options uses the blurred photo (on dim-ready blur-ready blur)
+    shot docs/shots/79-menu-select-desktop.png
+    [ok] track select (desktop): 5 buttons ≥ 44 px and on screen
+    shot docs/shots/79-menu-results-desktop.png
+    [ok] results (desktop): 2 buttons ≥ 44 px and on screen
+    [ok] desktop: menu photo requests during the race: 0 (all: menu-bg-city-dim.jpg, menu-bg-city-dim.jpg, menu-bg-city-blur.jpg, menu-bg-city-dim.jpg, menu-bg-city-blur.jpg)
+    [ok] results → Menu returns to the title
+    [ok] desktop console errors: none
+
+=== MENUS phone ===
+    [ok] title: photo layer shown + loaded lazily (on dim-ready blur-ready)
+    [ok] title shows "v51 · toys-pixi" + Update / hard refresh button
+    shot docs/shots/79-menu-title-phone.png
+    [ok] title (phone): 3 buttons ≥ 44 px and on screen
+    shot docs/shots/79-menu-options-phone.png
+    [ok] options (phone): 8 buttons ≥ 44 px and on screen
+    [ok] options uses the blurred photo (on dim-ready blur-ready blur)
+    shot docs/shots/79-menu-select-phone.png
+    [ok] track select (phone): 5 buttons ≥ 44 px and on screen
+    shot docs/shots/79-menu-countdown-phone.png
+    shot docs/shots/79-phone-race.png
+    [ok] phone race: 4 cars, drawn nose vs road tangent worst 2.6° (0:sports:1° 1:hatch:2.6° 2:f1:2° 3:pickup:1.6°); vs velocity worst 0°
+    shot docs/shots/79-menu-pause-phone.png
+    [ok] pause (phone): 2 buttons ≥ 44 px and on screen
+    shot docs/shots/79-menu-results-phone.png
+    [ok] results (phone): 2 buttons ≥ 44 px and on screen
+    [ok] phone: menu photo requests during the race: 0 (all: menu-bg-city-dim.jpg, menu-bg-city-dim.jpg, menu-bg-city-blur.jpg, menu-bg-city-dim.jpg, menu-bg-city-blur.jpg)
+    [ok] results → Menu returns to the title
+    [ok] phone console errors: none
+
+=== MENUS portrait 390×844 ===
+    [ok] portrait title (DPR 2) uses the HD portrait photo (menu-bg-city-portrait-dim-hd.jpg") on dim-ready blur-ready)
+    shot docs/shots/79-menu-title-portrait.png
+    [ok] title (portrait): 3 buttons ≥ 44 px and on screen
+    shot docs/shots/79-menu-options-portrait.png
+    [ok] options (portrait): 8 buttons ≥ 44 px and on screen
+    [ok] portrait options uses the portrait blur photo (menu-bg-city-portrait-blur.jpg"))
+    shot docs/shots/79-menu-select-portrait.png
+    [ok] portrait track select: 4 Race buttons ≥ 44 px within the width (scrollable list)
+    [ok] portrait loads only the files it shows: menu-bg-city-portrait-dim-hd.jpg, menu-bg-city-portrait-blur.jpg
+    [ok] portrait title at DPR 1 uses the 1080 portrait photo (menu-bg-city-portrait-dim.jpg"))
+    [ok] portrait console errors: none
+
+=== CANVAS FALLBACK comparison (?canvas=1) ===
+    [ok] ?canvas=1 → Canvas renderer active
+    shot docs/shots/79-canvas-neon-grid.png
+    shot docs/shots/79-canvas-neon-corner.png
+    [ok] canvas fallback console errors: none
+
+FPS JSON [{"kind":"desktop","rk":"pixi","name":"neon","zm":"race","zoom":0.85,"thr":1,"fps":60,"avg":0.18,"p95":0.8},{"kind":"desktop","rk":"pixi","name":"neon","zm":"race","zoom":0.85,"thr":4,"fps":49.2,"avg":0.77,"p95":3.3},{"kind":"desktop","rk":"pixi","name":"neon","zm":"far","zoom":0.24,"thr":1,"fps":60,"avg":0.21,"p95":0.8},{"kind":"desktop","rk":"pixi","name":"neon","zm":"far","zoom":0.24,"thr":4,"fps":46.1,"avg":0.76,"p95":2.3},{"kind":"desktop","rk":"pixi","name":"gridlock","zm":"race","zoom":0.85,"thr":1,"fps":60,"avg":0.19,"p95":0.7},{"kind":"desktop","rk":"pixi","name":"gridlock","zm":"race","zoom":0.85,"thr":4,"fps":49.9,"avg":0.69,"p95":2.3},{"kind":"desktop","rk":"pixi","name":"gridlock","zm":"far","zoom":0.24,"thr":1,"fps":60,"avg":0.2,"p95":0.9},{"kind":"desktop","rk":"pixi","name":"gridlock","zm":"far","zoom":0.24,"thr":4,"fps":51.8,"avg":0.62,"p95":2},{"kind":"desktop","rk":"canvas","name":"neon","zm":"race","zoom":0.85,"thr":1,"fps":60,"avg":0.3,"p95":0.7},{"kind":"desktop","rk":"canvas","name":"neon","zm":"race","zoom":0.85,"thr":4,"fps":21.2,"avg":1.35,"p95":3},{"kind":"desktop","rk":"canvas","name":"neon","zm":"far","zoom":0.24,"thr":1,"fps":60,"avg":0.29,"p95":0.6},{"kind":"desktop","rk":"canvas","name":"neon","zm":"far","zoom":0.24,"thr":4,"fps":17.2,"avg":1.25,"p95":2.6},{"kind":"desktop","rk":"canvas","name":"gridlock","zm":"race","zoom":0.85,"thr":1,"fps":60,"avg":0.25,"p95":0.6},{"kind":"desktop","rk":"canvas","name":"gridlock","zm":"race","zoom":0.85,"thr":4,"fps":20.5,"avg":1.24,"p95":2.7},{"kind":"desktop","rk":"canvas","name":"gridlock","zm":"far","zoom":0.24,"thr":1,"fps":59.9,"avg":0.24,"p95":0.6},{"kind":"desktop","rk":"canvas","name":"gridlock","zm":"far","zoom":0.24,"thr":4,"fps":18.6,"avg":1.3,"p95":2.9},{"kind":"phone","rk":"pixi","name":"neon","zm":"race","zoom":0.85,"thr":1,"fps":60,"avg":0.19,"p95":0.7},{"kind":"phone","rk":"pixi","name":"neon","zm":"race","zoom":0.85,"thr":4,"fps":36.2,"avg":1.01,"p95":4.9},{"kind":"phone","rk":"pixi","name":"neon","zm":"far","zoom":0.24,"thr":1,"fps":60,"avg":0.24,"p95":1},{"kind":"phone","rk":"pixi","name":"neon","zm":"far","zoom":0.24,"thr":4,"fps":36.9,"avg":0.73,"p95":2.2},{"kind":"phone","rk":"pixi","name":"gridlock","zm":"race","zoom":0.85,"thr":1,"fps":59.9,"avg":0.22,"p95":1},{"kind":"phone","rk":"pixi","name":"gridlock","zm":"race","zoom":0.85,"thr":4,"fps":38.2,"avg":0.73,"p95":2.4},{"kind":"phone","rk":"pixi","name":"gridlock","zm":"far","zoom":0.24,"thr":1,"fps":60,"avg":0.23,"p95":1.1},{"kind":"phone","rk":"pixi","name":"gridlock","zm":"far","zoom":0.24,"thr":4,"fps":35.5,"avg":0.99,"p95":3.7},{"kind":"phone","rk":"canvas","name":"neon","zm":"race","zoom":0.85,"thr":1,"fps":58.9,"avg":0.25,"p95":0.6},{"kind":"phone","rk":"canvas","name":"neon","zm":"race","zoom":0.85,"thr":4,"fps":15.1,"avg":1.3,"p95":2.8},{"kind":"phone","rk":"canvas","name":"neon","zm":"far","zoom":0.24,"thr":1,"fps":60,"avg":0.26,"p95":0.6},{"kind":"phone","rk":"canvas","name":"neon","zm":"far","zoom":0.24,"thr":4,"fps":16.1,"avg":1.38,"p95":3.2},{"kind":"phone","rk":"canvas","name":"gridlock","zm":"race","zoom":0.85,"thr":1,"fps":59.9,"avg":0.23,"p95":0.5},{"kind":"phone","rk":"canvas","name":"gridlock","zm":"race","zoom":0.85,"thr":4,"fps":14.5,"avg":1.3,"p95":2.9},{"kind":"phone","rk":"canvas","name":"gridlock","zm":"far","zoom":0.24,"thr":1,"fps":60,"avg":0.22,"p95":0.5},{"kind":"phone","rk":"canvas","name":"gridlock","zm":"far","zoom":0.24,"thr":4,"fps":17.5,"avg":1.56,"p95":3.6}]
+
+RESULT: ALL OK

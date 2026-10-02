@@ -120,6 +120,7 @@ const page = await browser.newPage();
 await page.setViewport({ width: 1280, height: 720 });
 const errs = []; watchErrors(page, errs);
 await page.goto(url, { waitUntil: 'networkidle2' });
+const rendererKind = await page.evaluate(() => window.__RAD_RENDERER__); // v51: 'pixi' (default) or 'canvas' (?canvas=1 / fallback)
 await page.evaluate(() => localStorage.clear());
 await page.reload({ waitUntil: 'networkidle2' });
 const raceRows = [];
@@ -414,6 +415,6 @@ check(errs.length === 0, `desktop console errors/warnings: ${errs.length} ${JSON
 const sw = await page.evaluate(() => fetch('./sw.js').then((r) => r.text()).then((t) => t.match(/radcars-v[\w-]+/)?.[0]));
 await browser.close();
 
-const head = [`Radcars ${sw} boost verification ${new Date().toString()}`, `URL ${url}`, '', 'RACES (menus, 3 laps, 5 AI Normal, bot steering; boost via Shift)', ...raceRows, '', 'BOOST SPEED', ...boostRows, '', 'MOBILE TOUCH', ...mobRows, '', `OVERALL: ${allOk ? 'PASS' : 'FAIL'}`, '', 'DETAIL'];
+const head = [`Radcars ${sw} boost verification ${new Date().toString()}`, `URL ${url}  renderer=${rendererKind}`, '', 'RACES (menus, 3 laps, 5 AI Normal, bot steering; boost via Shift)', ...raceRows, '', 'BOOST SPEED', ...boostRows, '', 'MOBILE TOUCH', ...mobRows, '', `OVERALL: ${allOk ? 'PASS' : 'FAIL'}`, '', 'DETAIL'];
 fs.writeFileSync(`${outDir}/75-verify.txt`, [...head, ...out].join('\n'));
 console.log('\n' + head.join('\n'));

@@ -44,18 +44,21 @@ function newBoost() {
 }
 
 export function createGame(canvas, input) {
-  const renderer = createRenderer(canvas);
+  // v51: main.js installs the PixiJS (WebGL) renderer when it initialises, or the Canvas 2D one (?canvas=1 / no WebGL).
+  let renderer = null;
   let running = false, paused = false, raf = 0, last = 0;
   let world = null, onFinish = null, onPause = null, lastDigit = null;
 
   function fit() {
+    if (!renderer) return;
     const app = document.getElementById('app');
     renderer.resize(app.clientWidth, app.clientHeight, Math.min(window.devicePixelRatio || 1, 2));
   }
   window.addEventListener('resize', fit);
-  fit();
+  function setRenderer(r) { renderer = r; fit(); }
 
   function startRace({ trackIndex, laps = 3, aiCount = 5, difficulty = 1 }) {
+    if (!renderer) setRenderer(createRenderer(canvas)); // safety net: never race without a renderer
     const track = getTrack(trackIndex);
     const nAI = clamp(aiCount, 1, 7);
     const diff = DIFFICULTIES[clamp(difficulty, 0, DIFFICULTIES.length - 1)];
@@ -522,7 +525,7 @@ export function createGame(canvas, input) {
     const rest = cars.filter((c) => !c.finished).sort((a, b) => b.dist - a.dist);
     for (const c of rest) { c.finishPlace = ++race.placesAssigned; c.finished = true; c.dnf = true; }
     const standings = [...cars].sort((a, b) => a.finishPlace - b.finishPlace).map((c) => ({
-      place: c.finishPlace, name: c.name, isPlayer: c.isPlayer, color: c.color,
+      place: c.finishPlace, id: c.id, name: c.name, isPlayer: c.isPlayer, color: c.color,
       finishTime: c.dnf ? 0 : c.finishTime, bestLapMs: c.bestLapMs || 0, dnf: !!c.dnf
     }));
     const p = world.player;
@@ -551,7 +554,9 @@ export function createGame(canvas, input) {
   }
 
   return {
-    startRace, stopRace, fit, getHudInfo,
+    startRace, stopRace, fit, getHudInfo, setRenderer,
+    get rendererKind() { return renderer ? renderer.kind : null; },
+    readPixels: (x, y, w, h) => renderer.readPixels(x, y, w, h), // verification (device px of the race view)
     // Pausing freezes the boost timer (update() does not run); resuming drops any boost
     // request queued while paused so Shift/GAS taps on the pause screen never fire a boost.
     setPaused(v) { paused = v; if (!v) { last = performance.now(); input.clearBoost && input.clearBoost(); } },
