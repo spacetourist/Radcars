@@ -22,19 +22,7 @@
     <!-- v51: menu-only photo backdrop (images are attached lazily by js/ui.js after first paint; hidden during races) -->
     <div id="menu-bg"><div class="mb-layer mb-dim"></div><div class="mb-layer mb-blur"></div><div class="mb-kerb"></div></div>
     <div id="ui"></div>
-    <div id="touch-controls" class="hidden">
-      <div class="tc-aim-pad" id="aim-pad" aria-label="Steering direction">
-        <div class="tc-aim-ring"></div>
-        <div class="tc-aim-cross"></div>
-        <div class="tc-aim-knob" id="aim-knob"></div>
-        <div class="tc-aim-label">STEER</div>
-      </div>
-      <div class="tc-right" aria-label="Throttle: hold GAS, slide up to boost, slide left to fire a missile">
-        <button type="button" id="btn-accel" class="tc-btn tc-accel" data-action="accel">GAS<span class="tc-hint">▲ boost · ◀ missile</span></button>
-      </div>
-      <button type="button" id="btn-power" class="tc-btn tc-power" aria-label="Use power-up (E)" style="display:none"></button>
-      <button type="button" id="btn-pause" class="tc-btn tc-pause" data-action="pause">❚❚</button>
-    </div>
+    <div id="touch-controls" class="hidden"><!-- v53: built by js/controls.js from CONTROL_LAYOUT --></div>
   </div>
 </body>
 </html>

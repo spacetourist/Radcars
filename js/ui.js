@@ -18,14 +18,10 @@ export function createUI(root, api) {
   hud.className = 'hud hidden';
   hud.id = 'hud';
   hud.innerHTML = `
-    <div class="hud-left">
-      <span class="pill pill-lap">LAP <strong data-h="lap">1/3</strong></span>
-      <span class="pill">POS <strong data-h="pos">1/6</strong></span>
-      <span class="pill pill-laptime hidden" data-h="lapflash"></span>
-    </div>
-    <div class="hud-right">
-      <span class="pill"><strong data-h="time">0:00.00</strong></span>
-    </div>`;
+    <span class="pill pill-lap">LAP <strong data-h="lap">1/3</strong></span>
+    <span class="pill pill-pos" data-place="6">P<strong data-h="pos">1/6</strong></span>
+    <span class="pill pill-time"><strong data-h="time">0:00.00</strong></span>
+    <span class="pill pill-laptime hidden" data-h="lapflash"></span>`;
   document.getElementById('app').appendChild(hud);
 
   // Menu backdrop: Callum's rainy neon city photo. Menu-only: attached lazily after first paint (dark gradient until
@@ -271,12 +267,15 @@ export function createUI(root, api) {
           <div class="opt-row"><strong>AI difficulty</strong>${stepper('difficulty', DIFFICULTIES[o.difficulty].label)}</div>
           <div class="opt-row"><strong>AI rivals <span class="muted">1–7</span></strong>${stepper('aiCount', o.aiCount)}</div>
           <div class="opt-row"><strong>Laps <span class="muted">1–10</span></strong>${stepper('laps', o.laps)}</div>
+          <div class="opt-row"><strong>Left-handed <span class="muted">mirror the controls</span></strong>
+            <button class="btn toggle ${o.leftHanded ? 'on' : ''}" id="lefty">${o.leftHanded ? 'On' : 'Off'}</button></div>
         </div>
         <div class="card help-card">
           <h3>How to drive</h3>
-          <p><b>Keyboard</b> ↑/W accelerate (lift off to slow) · ←→/AD steer · Shift boost · Space missile · E power-up · P pause</p>
-          <p><b>Touch</b> drag the ring to point the car · hold GAS · slide up from GAS to boost · slide left from GAS to fire a missile · tap POWER to use a power-up</p>
+          <p>Your car accelerates by itself. Drag the <b>steer ring</b> (it follows your thumb) to point the car · hold <b>BRAKE</b> into tight corners · tap <b>BOOST</b>, <b>MISSILE</b> and <b>POWER</b> when they glow (shortcut: slide up from BRAKE to boost, slide towards the buttons to fire)</p>
           <p>Chevron pads give any car a free 0.5 s boost · drive through a <b>?</b> box for a power-up (rocket, lap boost, autopilot)</p>
+          <details class="kb-help"><summary>Keyboard controls</summary>
+            <p>Arrows / WASD steer · Down / S brake · Shift boost · Space missile · E power-up · P / Esc pause</p></details>
         </div>
       </div>
       <div class="row foot-row"><button class="btn grey" data-act="back">Back</button></div>`, 'options-screen');
@@ -290,6 +289,13 @@ export function createUI(root, api) {
         showOptions(save);
       };
     });
+    el.querySelector('#lefty').onclick = () => {
+      o.leftHanded = !o.leftHanded;
+      persistSave(save);
+      sfx('click');
+      if (api.onLeftHanded) api.onLeftHanded(o.leftHanded);
+      showOptions(save);
+    };
     el.querySelector('#mute').onclick = () => {
       save.mute = !save.mute;
       setMuted(save.mute);
@@ -312,6 +318,7 @@ export function createUI(root, api) {
     lastKey = key;
     hud.querySelector('[data-h=lap]').textContent = lap;
     hud.querySelector('[data-h=pos]').textContent = pos;
+    hud.querySelector('.pill-pos').dataset.place = String(info.place);
     hud.querySelector('[data-h=time]').textContent = time;
     const f = hud.querySelector('[data-h=lapflash]');
     f.textContent = flash;

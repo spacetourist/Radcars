@@ -1,0 +1,69 @@
+
+=== neon · landscape · pixi · 2 laps ===
+    shot docs/shots/81-menu-title-landscape.png
+    shot docs/shots/81-menu-select-landscape.png
+  [ok] renderer pixi
+  [ok] countdown: action buttons don't overlap each other (clear)
+  [ok] countdown: nearest action button is 486.9 px clear of the steer ring (≥ 16)
+  [ok] countdown: clusters (top 167 px) clear of the HUD (bottom 154 px)
+  [ok] countdown: HUD pills clear of pause + minimap
+  [ok] countdown: smallest touch target 56 px (≥ 48)
+  [ok] countdown: every control fully on screen
+    layout s=1.000 steer 148px @(101,289) · brake 85px @(771,278) · boost 54px @(771,195) · missile 54px @(711,218) · power 54px @(689,278)
+    shot docs/shots/81-race-neon-landscape-pixi.png
+  [ok] race completed → final results (42 s wall)
+  [ok] finish reveal shown when crossing the line
+  [ok] laps counted 1→2 of 2
+  [ok] all rivals finished (6 cars, DNF: none); player P1
+  [ok] brake used into corners: 0.5 s held (bot 9/649 ticks), brake lights seen=true
+  [ok] car sprite matches its heading (max error 0.000 rad)
+  [ok] car stayed inside the view band 0.15–0.9: screen y 26%–77%
+  [ok] car never under a control (none)
+  [ok] no key hints on screen (none found)
+    race fps 31.0 (screenshots inside the window)
+    shot docs/shots/81-results-landscape-pixi.png
+
+=== gridlock · landscape · pixi · 2 laps ===
+  [ok] renderer pixi
+    shot docs/shots/81-race-gridlock-landscape-pixi.png
+  [ok] race completed → final results (48 s wall)
+  [ok] finish reveal shown when crossing the line
+  [ok] laps counted 1→2 of 2
+  [ok] all rivals finished (6 cars, DNF: none); player P5
+  [ok] brake used into corners: 5.5 s held (bot 94/781 ticks), brake lights seen=true
+  [ok] car sprite matches its heading (max error 0.000 rad)
+  [ok] car stayed inside the view band 0.15–0.9: screen y 25%–80%
+  [ok] car never under a control (none)
+  [ok] no key hints on screen (none found)
+    race fps 31.1 (screenshots inside the window)
+
+=== razor · landscape · pixi · 2 laps ===
+  [ok] renderer pixi
+    shot docs/shots/81-race-razor-landscape-pixi.png
+  [ok] race completed → final results (41 s wall)
+  [ok] finish reveal shown when crossing the line
+  [ok] laps counted 1→2 of 2
+  [ok] all rivals finished (6 cars, DNF: none); player P4
+  [ok] brake used into corners: 2.8 s held (bot 59/653 ticks), brake lights seen=true
+  [ok] car sprite matches its heading (max error 0.000 rad)
+  [ok] car stayed inside the view band 0.15–0.9: screen y 26%–79%
+  [ok] car never under a control (none)
+  [ok] no key hints on screen (none found)
+    race fps 30.9 (screenshots inside the window)
+
+=== cargo · landscape · pixi · 2 laps ===
+  [ok] renderer pixi
+    shot docs/shots/81-race-cargo-landscape-pixi.png
+  [ok] race completed → final results (45 s wall)
+  [ok] finish reveal shown when crossing the line
+  [ok] laps counted 1→2 of 2
+  [ok] all rivals finished (6 cars, DNF: none); player P5
+  [ok] brake used into corners: 5.5 s held (bot 110/737 ticks), brake lights seen=true
+  [ok] car sprite matches its heading (max error 0.000 rad)
+  [ok] car stayed inside the view band 0.15–0.9: screen y 26%–80%
+  [ok] car never under a control (none)
+  [ok] no key hints on screen (none found)
+    race fps 32.0 (screenshots inside the window)
+  [ok] console errors/warnings: 0 []
+
+RESULT: ALL OK (races-landscape-pixi)

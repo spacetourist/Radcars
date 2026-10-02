@@ -2,6 +2,7 @@
  * Plain Canvas 2D renderer (v51 'toys'): felt play-mat ground, a raised plastic track piece with grainy asphalt and
  * chunky shaded kerbs, start line, and Micro Machines-style toy cars cached as offscreen sprites (js/toyart.js).
  */
+import { getLayout } from './controls.js';
 import { CAR_LEN, CAR_WID } from './physics.js';
 import { pointAt, buildStartingGrid } from './tracks.js';
 import { TROPHY, trophyScale, ringState, partAlpha, trophyAnchor, outFade, PLACE_TEXT_Y } from './celebrate.js';
@@ -9,6 +10,20 @@ import { styleFor, carSprite, shadowSprite, scaleBucket, textureTile, SPRITE_W, 
 
 const KERB = 24; // v51: chunkier kerbs (visual only; the drivable width and walls are unchanged)
 const WALL = 12;
+
+/**
+ * v53 minimap box: the glass panel from js/controls.js's layout (portrait 96×96 under the pause button, landscape
+ * top-right); the track is fitted inside with an 8 px inset. Shared by the Pixi renderer.
+ */
+export function minimapBox(track, W, H) {
+  const lay = getLayout();
+  const box = lay && lay.minimap && lay.vw === W && lay.vh === H ? lay.minimap : { x: W - 110, y: 60, w: 96, h: 96 };
+  const b = track.bounds, inset = 9;
+  const sc = Math.min((box.w - inset * 2) / (b.maxX - b.minX), (box.h - inset * 2) / (b.maxY - b.minY));
+  const mw = (b.maxX - b.minX) * sc, mh = (b.maxY - b.minY) * sc;
+  const x0 = box.x + (box.w - mw) / 2, y0 = box.y + (box.h - mh) / 2;
+  return { bx: box.x, by: box.y, bw: box.w, bh: box.h, sc, ox: x0 - b.minX * sc, oy: y0 - b.minY * sc, key: [box.x, box.y, box.w, box.h].map(Math.round).join(',') };
+}
 
 export function createRenderer(canvas, opts = {}) {
   // opts.hud (v51 Pixi mode): this canvas is a transparent overlay above the WebGL race view and only draws the
@@ -229,6 +244,12 @@ export function createRenderer(canvas, opts = {}) {
     }
     const spr = carSprite(st, car.color, car.isPlayer, R);
     ctx.drawImage(spr, -SPRITE_W / 2 * s, -SPRITE_H / 2 * s, spr.width / R * s, spr.height / R * s);
+    if (car.braking) { // v53 brake lights while BRAKE is held
+      for (const side of [-1, 1]) {
+        ctx.fillStyle = 'rgba(255,32,32,0.55)'; ctx.beginPath(); ctx.arc(-hl + 3 * s, side * hw * 0.62, 9 * s, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ffd0d0'; ctx.beginPath(); ctx.arc(-hl + 3 * s, side * hw * 0.62, 3.2 * s, 0, Math.PI * 2); ctx.fill();
+      }
+    }
     ctx.restore();
     if (car.isPlayer) {
       // marker above the player's car
@@ -609,26 +630,21 @@ export function createRenderer(canvas, opts = {}) {
 
   function drawMinimap(world) {
     const { track, cars } = world;
-    const b = track.bounds;
-    // fit the whole layout inside a box of at most 190 × 130 px (bigger tracks shrink to fit)
-    const boxW = Math.min(190, W * 0.24), boxH = Math.min(130, H * 0.24);
-    const sc = Math.min(boxW / (b.maxX - b.minX), boxH / (b.maxY - b.minY));
-    const mw = (b.maxX - b.minX) * sc;
-    const mh = (b.maxY - b.minY) * sc;
-    const x0 = W - mw - 14, y0 = 66; // top-right, under the timer (clear of touch buttons)
+    const m = minimapBox(track, W, H);
     ctx.save();
-    ctx.fillStyle = 'rgba(12,17,40,0.62)';
-    roundRect(x0 - 7, y0 - 7, mw + 14, mh + 14, 10); ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 2; ctx.stroke();
-    ctx.translate(x0 - b.minX * sc, y0 - b.minY * sc);
-    ctx.scale(sc, sc);
+    roundRect(m.bx, m.by, m.bw, m.bh, 12);
+    ctx.fillStyle = 'rgba(10,16,34,0.62)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(0,232,255,0.85)'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.translate(m.ox, m.oy);
+    ctx.scale(m.sc, m.sc);
     ctx.strokeStyle = 'rgba(255,255,255,0.55)';
-    ctx.lineWidth = Math.max(track.halfW * 1.2, 3 / sc);
+    ctx.lineWidth = Math.max(track.halfW * 1.2, 3 / m.sc);
+    ctx.lineJoin = 'round';
     ctx.stroke(trackPaths(track).centre);
     for (const c of cars) {
       ctx.fillStyle = c.color;
       ctx.beginPath();
-      ctx.arc(c.x, c.y, (c.isPlayer ? 7 : 5) / sc, 0, Math.PI * 2);
+      ctx.arc(c.x, c.y, (c.isPlayer ? 6 : 4) / m.sc, 0, Math.PI * 2);
       ctx.fill();
     }
     ctx.restore();

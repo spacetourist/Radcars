@@ -22,7 +22,7 @@ export async function runShots(ctx) {
   const shotFull = async (page, name) => { const file = `${outDir}/79-${name}.png`; await page.screenshot({ path: file }); log(`    shot ${file}`); };
   const player = (page) => page.evaluate(() => { const p = window.__RAD_GAME__.world.player; return { x: p.x, y: p.y }; });
   const state = (page) => page.evaluate(() => { const w = window.__RAD_GAME__.world, p = w.player; return { t: w.race.time, cd: w.race.countdown, lap: p.lap, spd: Math.hypot(p.vx, p.vy), radius: w.track.pts[p.seg]?.radius ?? 1e9, results: !!document.querySelector('#results'),
-    near: w.cars.filter((c) => !c.isPlayer && Math.hypot(c.x - p.x, c.y - p.y) < 650).length, spin: w.cars.filter((c) => c.spinMs > 0).map((c) => c.id), power: w.power.active, lvl: p.boostLevel || 0 }; });
+    near: w.cars.filter((c) => !c.isPlayer && Math.hypot(c.x - p.x, c.y - p.y) < 650).length, spin: w.cars.filter((c) => c.spinMs > 0).map((c) => c.id), power: w.power.active, lvl: p.boostLevel || 0, place: window.__RAD_GAME__.getHudInfo?.().place }; });
   const waitFor = async (page, pred, ms = 20000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { const s = await state(page); if (pred(s)) return s; await sleep(40); } return null; };
 
   /** Every car's drawn nose (debug transform of the sprite) vs the road tangent at its position and vs its velocity. */
@@ -121,6 +121,9 @@ export async function runShots(ctx) {
     }
     if (name === 'gridlock' || name === 'cargo') {
       // ROCKET salvo → a spun-out toy car
+      // v53: auto-throttle never lifts, so the bot often leads by now; a rocket needs a target ahead — brake until
+      // a rival passes (max 8 s), then fire
+      if ((await state(page)).place === 1) { await page.keyboard.down('ArrowDown'); await waitFor(page, (x) => x.place > 1, 8000); await page.keyboard.up('ArrowDown'); }
       await page.evaluate(() => window.__RAD_GAME__.debug.give('rocket')); await page.keyboard.press('e');
       s = await waitFor(page, (x) => x.spin.length > 0, 9000);
       if (s) {

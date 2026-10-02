@@ -1,0 +1,7 @@
+
+=== fps · desktop · pixi ===
+  [ok] renderer pixi
+  [ok] frame rate 60.0 fps over 720 frames, worst 16.8 ms (bot braking 0.2 s)
+  [ok] console errors/warnings: 0 []
+
+RESULT: ALL OK (fps-desktop-pixi)

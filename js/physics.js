@@ -57,7 +57,11 @@ export function stepCar(car, ctl, dtMs, track) {
     if (vF < 0) vF += BRAKE * dt;
     else if (vF < top) vF = Math.min(top, vF + accel * dt * (1 - 0.55 * vF / top));
   } else if (ctl.brake) {
-    if (vF > 0) vF = Math.max(0, vF - BRAKE * dt);
+    // v53: the player's BRAKE (ctl.brakeFloor > 0) bites hard at speed and fades out into a steerable crawl, never a
+    // dead stop or a reverse; brakeRate overrides the deceleration (AI / unstick keep the old full brake)
+    const floor = ctl.brakeFloor || 0, rate = ctl.brakeRate || BRAKE;
+    if (vF > floor) vF = Math.max(floor, vF - rate * dt * (floor ? clamp(0.45 + vF / 900, 0.45, 1) : 1));
+    else if (floor && vF > 0) { /* crawl: hold the speed so the nose still turns */ }
     else if (!ctl.noReverse) vF = Math.max(-REVERSE_TOP, vF - REVERSE_ACCEL * dt);
   } else {
     const r = ROLL * dt;

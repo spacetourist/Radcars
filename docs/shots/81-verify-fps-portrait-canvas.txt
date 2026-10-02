@@ -1,0 +1,7 @@
+
+=== fps · portrait · canvas ===
+  [ok] renderer canvas
+  [FAIL] frame rate 53.6 fps over 643 frames, worst 33.4 ms (bot braking 0.2 s)
+  [ok] console errors/warnings: 0 []
+
+RESULT: FAIL (fps-portrait-canvas)

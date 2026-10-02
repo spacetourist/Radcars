@@ -158,8 +158,9 @@ for (let ti = 0; ti < ALL.length; ti++) {
       brkBtn: !!document.querySelector('#btn-brake')
     };
   });
-  check(feat.pads >= 3 && feat.missileCh <= 1 && !feat.brk && !feat.brkBtn,
-    `features intact: pads=${feat.pads}, missile charge=${feat.missileCh}, boost charge=${feat.boostCh}, brake state absent=${!feat.brk}, no BRK btn`);
+  // v53: BRAKE is back as the main touch button (auto-throttle), so the brake state + button are now expected
+  check(feat.pads >= 3 && feat.missileCh <= 1 && feat.brk && feat.brkBtn,
+    `features intact: pads=${feat.pads}, missile charge=${feat.missileCh}, boost charge=${feat.boostCh}, v53 brake state=${feat.brk}, BRAKE button=${feat.brkBtn}`);
 
   // fire a missile once if we have a target (optional soft check)
   await page.keyboard.press(' ');
@@ -225,8 +226,8 @@ const mv = await mob.evaluate(() => {
     inMargin: minX >= margin && maxX <= vw - margin && minY >= margin && maxY <= vh - margin,
     minX, maxX, minY, maxY, vw, vh, look: Math.hypot(p.x - c.x, p.y - c.y), zoom: z, brk: !!document.querySelector('#btn-brake') };
 });
-check(mv.inView && mv.inMargin && !mv.brk,
-  `mobile countdown: car in view with margin (y ${mv.minY.toFixed(0)}..${mv.maxY.toFixed(0)} of ${mv.vh}, look=${mv.look.toFixed(0)}, zoom=${mv.zoom.toFixed(2)}), no BRK`);
+check(mv.inView && mv.inMargin && mv.brk, // v53: the BRAKE button is expected
+  `mobile countdown: car in view with margin (y ${mv.minY.toFixed(0)}..${mv.maxY.toFixed(0)} of ${mv.vh}, look=${mv.look.toFixed(0)}, zoom=${mv.zoom.toFixed(2)}), BRAKE button shown`);
 await mob.screenshot({ path: `${outDir}/77-mobile-neon-countdown.png` });
 log(`    shot ${outDir}/77-mobile-neon-countdown.png`);
 check(merrs.length === 0, `mobile errors: ${merrs.length}`);

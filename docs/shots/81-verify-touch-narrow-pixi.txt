@@ -1,0 +1,33 @@
+
+=== touch · narrow · pixi ===
+  [ok] renderer pixi
+  [ok] countdown: action buttons don't overlap each other (clear)
+  [ok] countdown: round hit areas don't overlap each other (clear)
+  [ok] countdown: nearest action button is 19.0 px clear of the steer ring (≥ 16)
+  [ok] countdown: clusters (top 538 px) clear of the HUD (bottom 140 px)
+  [ok] countdown: HUD pills clear of pause + minimap
+  [ok] countdown: smallest touch target 53 px (≥ 48)
+  [ok] countdown: every control fully on screen
+    layout s=0.923 steer 129px @(79,647) · brake 92px @(281,658) · boost 59px @(281,568) · missile 59px @(216,594) · power 59px @(192,658)
+  [ok] steer: touch in the control zone re-centres the ring (translate 45.8558px -35.8317px)
+  [ok] steer: drag sets the heading (aim -0.69 rad, expected ≈ -0.69)
+  [ok] steer + BRAKE held: brake on, lights on, button active, 1000 → 71 wu/s, steer still held
+  [ok] steer + brake + BOOST at once: boost active (1750 ms left), state active, steer=true, brake=true
+  [ok] release: steer ring snaps back, brake off
+  [ok] MISSILE tap: fired=1 (refused 0), button active
+  [ok] POWER shows the held rocket (state held)
+  [ok] POWER tap: activated (rocket), button active
+  [ok] BRAKE slide shortcuts: up → boost request (1), sideways → missile request (1)
+  [ok] PAUSE tap opens the pause screen
+  [ok] race: action buttons don't overlap each other (clear)
+  [ok] race: round hit areas don't overlap each other (clear)
+  [ok] race: nearest action button is 19.0 px clear of the steer ring (≥ 16)
+  [ok] race: clusters (top 538 px) clear of the HUD (bottom 140 px)
+  [ok] race: HUD pills clear of pause + minimap
+  [ok] race: smallest touch target 53 px (≥ 48)
+  [ok] race: every control fully on screen
+    layout s=0.923 steer 129px @(79,647) · brake 92px @(281,658) · boost 59px @(281,568) · missile 59px @(216,594) · power 59px @(192,658)
+  [ok] no key hints in the race UI (none)
+  [ok] console errors/warnings: 0 []
+
+RESULT: ALL OK (touch-narrow-pixi)

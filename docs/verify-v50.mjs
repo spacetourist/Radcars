@@ -222,6 +222,9 @@ for (const name of tracks) {
   if (name === 'neon' || name === 'gridlock') { await sleep(700); await shotPlayer(page, `${name}-lapboost-green`, 400, 225, 3); }
   s = await waitFor(page, (x) => x.lap >= 1, 60000);
   await sleep(200);
+  // v53: auto-throttle reaches the line sooner; if E landed < LAPBOOST_MIN_MS (2 s) before the line, the min-duration
+  // rule keeps it burning just past the line — wait that out (it must still end on lap 1, i.e. before lap 2)
+  await waitFor(page, (x) => x.active !== 'lapboost', 2500);
   const lbEnd = await st(page);
   const rr = await rec(page);
   const lbWin = rr.filter((r) => r.act === 'lapboost');
@@ -332,12 +335,13 @@ await debug(mob, 'give', 'lapboost');
 await sleep(200);
 const lay = await mob.evaluate(() => {
   const r = (id) => { const e = document.getElementById(id); if (!e) return null; const b = e.getBoundingClientRect(); return { x: b.left, y: b.top, w: b.width, h: b.height, vis: getComputedStyle(e).display !== 'none' }; };
-  return { power: r('btn-power'), gas: r('btn-accel'), aim: r('aim-pad'), pause: r('btn-pause'), hud: window.__RAD_GAME__.getLastHud() || null, text: document.getElementById('btn-power').textContent };
+  return { power: r('btn-power'), gas: r('btn-brake'), // v53: BRAKE replaced GAS
+    aim: r('aim-pad'), pause: r('btn-pause'), hud: window.__RAD_GAME__.getLastHud() || null, text: document.getElementById('btn-power').textContent };
 });
 const ov = (a, b) => a && b && a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 const panels = lay.hud ? [lay.hud.missile, lay.hud.boost].filter(Boolean) : [];
 check(lay.power?.vis && lay.power.w >= 60 && lay.power.h >= 30, `POWER button visible ${Math.round(lay.power?.w)}×${Math.round(lay.power?.h)} at (${Math.round(lay.power?.x)},${Math.round(lay.power?.y)}) "${lay.text.trim()}"`);
-check(!ov(lay.power, lay.gas) && !ov(lay.power, lay.aim) && !ov(lay.power, lay.pause) && !panels.some((p) => ov(lay.power, p)), `no overlap with GAS (${Math.round(lay.gas.x)},${Math.round(lay.gas.y)} ${Math.round(lay.gas.w)}×${Math.round(lay.gas.h)}), STEER, pause${panels.length ? ', MISSILE/BOOST panels' : ''}`);
+check(!ov(lay.power, lay.gas) && !ov(lay.power, lay.aim) && !ov(lay.power, lay.pause) && !panels.some((p) => ov(lay.power, p)), `no overlap with BRAKE (${Math.round(lay.gas.x)},${Math.round(lay.gas.y)} ${Math.round(lay.gas.w)}×${Math.round(lay.gas.h)}), STEER, pause${panels.length ? ', MISSILE/BOOST panels' : ''}`);
 await mob.screenshot({ path: `${outDir}/78-mobile-power-held.png` }); log(`    shot ${outDir}/78-mobile-power-held.png`);
 const pc = { x: lay.power.x + lay.power.w / 2, y: lay.power.y + lay.power.h / 2 };
 const inp0 = await mob.evaluate(() => ({ aim: window.__RAD_INPUT__.state.aimActive, boost: window.__RAD_GAME__.world.boost.uses, miss: window.__RAD_GAME__.world.missile.log.length }));

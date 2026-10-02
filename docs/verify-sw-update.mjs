@@ -42,7 +42,7 @@ const errs = []; page.on('pageerror', (e) => errs.push(String(e)));
 const state = () => page.evaluate(async () => ({
   caches: await caches.keys(),
   controlled: !!navigator.serviceWorker.controller,
-  brk: !!document.querySelector('#btn-brake, .tc-brake'),
+  brk: !!document.querySelector('#btn-brake:not(.act), .tc-brake'), // v47's BRK (v53's BRAKE is an .act button)
   hint: !!document.querySelector('.tc-hint'),
   sw: window.__RAD_SW__ ? { ...window.__RAD_SW__ } : null,
   running: !!(window.__RAD_GAME__ && window.__RAD_GAME__.isRunning()),

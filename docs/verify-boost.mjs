@@ -67,7 +67,9 @@ async function installRecorder(page, withBot) {
     window.__bot = setInterval(() => {
       const w = window.__RAD_GAME__.world; if (!w) return; const p = w.player;
       const spd = Math.hypot(p.vx, p.vy);
-      if (window.__botMode === 'idle') { ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].forEach((k) => set(k, false)); return; }
+      // v53: auto-throttle — 'idle' now holds BRAKE (from a standstill it never creeps or reverses)
+      if (window.__botMode === 'idle') { ['ArrowUp', 'ArrowLeft', 'ArrowRight'].forEach((k) => set(k, false)); set('ArrowDown', true); return; }
+      set('ArrowDown', false);
       const tp = pointAt(w.track, p.sPrev + 150 + spd * 0.35);
       const err = angleDiff(p.angle, Math.atan2(tp.y - p.y, tp.x - p.x));
       // v48: no brake — lift off the gas when badly off line instead
@@ -304,92 +306,98 @@ for (const name of mobTracks) {
   await (await mob.$$('#tracks button'))[ti].tap();
   await installRecorder(mob, false);
   await waitFor(mob, (x) => x.running && x.cd > 0, 5000);
-  const rects = await mob.evaluate(() => { const r = (id) => { const b = document.getElementById(id).getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2, w: b.width, h: b.height }; }; return { gas: r('btn-accel'), pad: r('aim-pad') }; });
-  log(`  GAS centre (${rects.gas.x.toFixed(0)},${rects.gas.y.toFixed(0)}) ${rects.gas.w.toFixed(0)}px; STEER pad centre (${rects.pad.x.toFixed(0)},${rects.pad.y.toFixed(0)}) ${rects.pad.w.toFixed(0)}px`);
-  let gas = { id: 0, x: rects.gas.x, y: rects.gas.y + 12 };
-  let steer = { id: 1, x: rects.pad.x, y: rects.pad.y - rects.pad.w * 0.35 };
-  await touch('touchStart', [gas]);
-  await touch('touchStart', [gas, steer]);
+  const rects = await mob.evaluate(() => { const r = (id) => { const b = document.getElementById(id).getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2, w: b.width, h: b.height }; }; return { gas: r('btn-brake'), pad: r('aim-pad') }; });
+  log(`  BRAKE centre (${rects.gas.x.toFixed(0)},${rects.gas.y.toFixed(0)}) ${rects.gas.w.toFixed(0)}px; STEER pad centre (${rects.pad.x.toFixed(0)},${rects.pad.y.toFixed(0)}) ${rects.pad.w.toFixed(0)}px`);
+  // v53: auto-throttle — the right thumb only touches BRAKE to slide-boost; the steer ring floats, so the steer
+  // finger lands on the ring centre (centre unchanged) and then points at the road like a player's thumb.
+  let gas = null;
+  let steer = { id: 1, x: rects.pad.x, y: rects.pad.y };
+  await touch('touchStart', [steer]);
   let steerOn = true;
   const aimErrs = [];
-  // steering loop: point the STEER touch at the road ahead (like a player's thumb)
+  const pts = () => (gas ? [steer, gas] : [steer]);
   const steerStep = async () => {
     const a = await mob.evaluate(async () => {
       const { pointAt } = await import('./js/tracks.js');
       const w = window.__RAD_GAME__.world, p = w.player, spd = Math.hypot(p.vx, p.vy);
       const tp = pointAt(w.track, p.sPrev + 150 + spd * 0.35);
       const i = window.__RAD_INPUT__.state;
-      return { target: Math.atan2(tp.y - p.y, tp.x - p.x), heading: p.angle, aimActive: i.aimActive, aim: i.aimAngle, accel: i.accel };
+      return { target: Math.atan2(tp.y - p.y, tp.x - p.x), heading: p.angle, aimActive: i.aimActive, aim: i.aimAngle, brake: i.brake };
     });
     const r = rects.pad.w * 0.36;
     steer = { id: 1, x: rects.pad.x + Math.cos(a.target) * r, y: rects.pad.y + Math.sin(a.target) * r };
-    if (steerOn) await touch('touchMove', [gas, steer]);
+    if (steerOn) await touch('touchMove', pts());
     return a;
   };
   const drive = async (ms, onTick) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { const a = await steerStep(); if (onTick) await onTick(a); await sleep(40); } };
   await waitFor(mob, (x) => x.cd <= 0, 6000);
-  // 1. plain GAS hold with small jitter: throttle on, no boost
   const angErr = (a) => { let d = a.heading - a.aim; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return Math.abs(d) * 180 / Math.PI; };
   const median = (arr) => [...arr].sort((a, b) => a - b)[Math.floor(arr.length / 2)];
+  // 1. steering only: auto-throttle drives, nothing boosts
   const hErr0 = [];
-  await drive(1500, async (a) => { if (a.aimActive) hErr0.push(angErr(a)); gas = { id: 0, x: rects.gas.x + (Math.random() - 0.5) * 16, y: rects.gas.y + 12 + (Math.random() - 0.5) * 16 }; });
+  await drive(1500, async (a) => { if (a.aimActive) hErr0.push(angErr(a)); });
   let s = await st(mob);
   let inp = await mob.evaluate(() => ({ ...window.__RAD_INPUT__.state }));
-  check(inp.accel && s.act === 0 && s.uses === 0 && s.freeUses === 0 && s.spd > 400, `GAS touch-hold (with ±8px jitter) = throttle as before, no boost (accel=${inp.accel}, speed ${s.spd.toFixed(0)})`);
-  // 2. upward slide while last (the player starts at the back) -> free boost; steering keeps tracking
+  check(!inp.brake && s.act === 0 && s.uses === 0 && s.freeUses === 0 && s.spd > 400, `steer only: auto-throttle drives (speed ${s.spd.toFixed(0)}), no brake, no boost`);
+  // 2. upward slide from BRAKE while last (the player starts at the back) -> free boost; steering keeps tracking
   const slide = async () => {
-    const y0 = gas.y; const trace = [];
-    for (let k = 1; k <= 6; k++) { gas = { id: 0, x: gas.x, y: y0 - k * 10 }; const a = await steerStep(); trace.push(a); await sleep(20); }
+    gas = { id: 0, x: rects.gas.x, y: rects.gas.y };
+    await touch('touchStart', pts());
+    const trace = [];
+    for (let k = 1; k <= 6; k++) { gas = { id: 0, x: gas.x, y: rects.gas.y - k * 10 }; const a = await steerStep(); trace.push(a); await sleep(20); }
     return trace;
   };
-  const slideBack = async () => { const y0 = gas.y; for (let k = 1; k <= 6; k++) { gas = { id: 0, x: gas.x, y: y0 + k * 10 }; await steerStep(); await sleep(20); } };
+  // lift the BRAKE thumb: CDP touchEnd lifts every point, so put the steer thumb straight back on the ring centre
+  const slideBack = async () => { gas = null; await touch('touchEnd', []); steer = { id: 1, x: rects.pad.x, y: rects.pad.y }; await touch('touchStart', [steer]); };
   let pre = await st(mob);
   let tr = await slide();
   await sleep(60);
   s = await st(mob);
   inp = await mob.evaluate(() => ({ ...window.__RAD_INPUT__.state }));
   const firedSlide1 = s.act > 0 && s.src === 'slide';
-  check(firedSlide1 && inp.accel, `60 px upward slide on GAS fired a boost (${s.free ? 'free, player last' : 'lap charge'}; source=${s.src}); GAS still held (accel=${inp.accel})`);
+  check(firedSlide1 && !inp.brake, `60 px upward slide from BRAKE fired a boost (${s.free ? 'free, player last' : 'lap charge'}; source=${s.src}); brake let go once the slide fired (brake=${inp.brake})`);
   if (name === mobTracks[0]) { await sleep(500); log(`    shot ${await shot(mob, `mobile-${name}-slide-active`)}`); }
-  // steering through the slide: heading error vs STEER aim during the next 2 s
+  await slideBack();
   const hErr = [];
   await drive(2000, async (a) => { if (a.aimActive) { let d = a.heading - a.aim; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; hErr.push(Math.abs(d) * 180 / Math.PI); } aimErrs.push(a.aimActive); });
   const inpS = await mob.evaluate(() => ({ ...window.__RAD_INPUT__.state }));
-  check(tr.every((a) => a.aimActive) && aimErrs.every(Boolean) && inpS.accel, `steering stayed active through and after the slide (aimActive every tick, accel=${inpS.accel}); car heading vs STEER aim median ${median(hErr)?.toFixed(1)}° in the 2 s after the slide vs ${median(hErr0)?.toFixed(1)}° during the plain GAS hold before it`);
-  await slideBack();
+  check(tr.every((a) => a.aimActive) && aimErrs.filter(Boolean).length >= aimErrs.length - 2 && !inpS.brake, `steering stayed active through and after the slide (aimActive ${aimErrs.filter(Boolean).length}/${aimErrs.length} ticks, brake=${inpS.brake}); car heading vs STEER aim median ${median(hErr)?.toFixed(1)}° in the 2 s after the slide`);
   // 3. drive until not last, then a slide uses the lap charge
-  const nl = await (async () => { const t0 = Date.now(); while (Date.now() - t0 < 60000) { await drive(300); const x = await st(mob); if (x.place <= x.total - 2 && x.act <= 0 && x.lvl === 0 && x.inLap > 800 && x.inLap < x.L - 6000) return x; } return null; })();
-  if (check(!!nl, `touch-driven car clear of last place (P${nl?.place}/${nl?.total}) at t=${(nl?.t / 1000).toFixed(1)}s lap ${nl?.lap}`)) {
-    // lift both thumbs (CDP touchEnd releases all points) and press STEER + GAS again
-    await touch('touchEnd', []); gas = { id: 0, x: rects.gas.x, y: rects.gas.y + 12 };
-    await touch('touchStart', [steer]); await touch('touchStart', [steer, gas]);
-    await drive(300);
+  // v53: with auto-throttle the touch car runs the AI's pace, so (like a player) it keeps slide-boosting while last
+  // (free) until it has passed someone
+  const nl = await (async () => { const t0 = Date.now(); while (Date.now() - t0 < 60000) {
+    await drive(300); const x = await st(mob);
+    if (x.last && x.act <= 0) { await slide(); await slideBack(); continue; }
+    const gapBehind = await mob.evaluate(() => { const w = window.__RAD_GAME__.world, p = w.player; const b = w.cars.filter((c) => c !== p && c.dist < p.dist).map((c) => c.dist); return b.length ? p.dist - Math.max(...b) : 0; });
+    if (x.place <= x.total - 1 && !x.last && gapBehind > 450 && x.act <= 0 && x.lvl === 0 && x.inLap > 800 && x.inLap < x.L - 6000) return { ...x, gapBehind }; } return null; })();
+  if (check(!!nl, `touch-driven car clear of last place (P${nl?.place}/${nl?.total}, ${nl?.gapBehind?.toFixed(0)} wu ahead of the car behind) at t=${(nl?.t / 1000).toFixed(1)}s lap ${nl?.lap}`)) {
     pre = await st(mob);
     tr = await slide(); await sleep(60);
     s = await st(mob);
-    const inpC = await mob.evaluate(() => ({ ...window.__RAD_INPUT__.state }));
-    check(s.act > 0 && !s.free && s.ch === 0 && pre.ch === 1 && s.src === 'slide', `slide while not last (P${pre.place} at press) used the lap charge (charge ${pre.ch} -> ${s.ch}; active=${s.act.toFixed(0)} free=${s.free} last=${s.last} P${s.place} accel=${inpC.accel})`);
+    check(s.act > 0 && !s.free && s.ch === 0 && pre.ch === 1 && s.src === 'slide', `slide while not last (P${pre.place} at press) used the lap charge (charge ${pre.ch} -> ${s.ch}; active=${s.act.toFixed(0)} free=${s.free} last=${s.last} P${s.place})`);
     if (name !== mobTracks[0]) { await sleep(500); log(`    shot ${await shot(mob, `mobile-${name}-slide-active`)}`); }
-    await drive(2400);
     await slideBack();
-    // second slide on the same lap (thumb slid back down = re-armed, still holding GAS) does nothing
-    await drive(200); const b = await st(mob);
-    const acc0 = await mob.evaluate(() => window.__RAD_INPUT__.state.accel);
-    check(acc0, `thumb back on GAS after the slide: throttle still held (accel=${acc0})`);
+    await drive(2400);
+    const b = await st(mob);
     tr = await slide(); await sleep(80); s = await st(mob);
     if (b.lap === s.lap && !b.last) check(s.act === 0 && s.uses === b.uses && s.freeUses === b.freeUses, `second slide on the same lap, not last (P${b.place}), does nothing (active=${s.act}, uses ${b.uses}->${s.uses})`);
     else log(`    [info] second-slide check skipped (lap changed or last again)`);
     await slideBack();
   }
-  // 4. sliding off GAS to the right still releases the throttle (left is the v48 missile slide)
-  const tgt = { id: 0, x: Math.min(843, rects.gas.x + rects.gas.w / 2 + 8), y: rects.gas.y };
-  gas = tgt; await touch('touchMove', [steer, gas]); await sleep(120);
+  // 4. holding BRAKE slows the car into a crawl (never reverses); releasing it hands back to the auto-throttle
+  const v0 = (await st(mob)).spd;
+  gas = { id: 0, x: rects.gas.x, y: rects.gas.y }; await touch('touchStart', pts());
+  await drive(900);
+  const vB = (await st(mob)).spd;
   inp = await mob.evaluate(() => ({ ...window.__RAD_INPUT__.state }));
-  check(!inp.accel, `sliding off GAS to the right releases the throttle as before (accel=${inp.accel})`);
+  check(inp.brake && vB < v0 - 150 && vB > 30, `holding BRAKE slows the car ${v0.toFixed(0)} → ${vB.toFixed(0)} wu/s (no stop / reverse)`);
+  await slideBack(); await drive(1200);
+  const vR = (await st(mob)).spd;
+  check(vR > vB + 150, `BRAKE released → auto-throttle picks up again (${vB.toFixed(0)} → ${vR.toFixed(0)} wu/s)`);
   await touch('touchEnd', []);
   await sleep(200);
   inp = await mob.evaluate(() => ({ ...window.__RAD_INPUT__.state }));
-  check(!inp.accel && !inp.aimActive, `all touches lifted -> no throttle, no aim`);
+  check(!inp.brake && !inp.aimActive, `all touches lifted -> no brake, no aim`);
   const orientNow = await orient(mob);
   check(orientNow.every((e) => e < 20), `cars drawn along their velocity (render transform) max err ${Math.max(0, ...orientNow).toFixed(1)}°`);
   await mob.evaluate(() => { clearInterval(window.__recT); cancelAnimationFrame(window.__fr); });

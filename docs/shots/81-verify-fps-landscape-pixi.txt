@@ -1,0 +1,7 @@
+
+=== fps · landscape · pixi ===
+  [ok] renderer pixi
+  [ok] frame rate 59.9 fps over 720 frames, worst 33.3 ms (bot braking 0.2 s)
+  [ok] console errors/warnings: 0 []
+
+RESULT: ALL OK (fps-landscape-pixi)

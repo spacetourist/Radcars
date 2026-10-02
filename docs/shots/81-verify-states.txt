@@ -1,0 +1,28 @@
+
+=== states · portrait 390×844 · DPR 3 · pixi ===
+  [ok] renderer pixi
+    shot docs/shots/81-gd-countdown.png
+  [ok] countdown: buttons dimmed (35%)
+  [ok] at GO the player is last → BOOST unlimited (unlimited)
+    shot docs/shots/81-gd-unlimited.png
+  [ok] ready: boost ready, missile ready, power empty
+    shot docs/shots/81-gd-boost-ready.png
+  [ok] brake pressed (active)
+    shot docs/shots/81-gd-brake-pressed.png
+    shot docs/shots/81-gd-steer-active.png
+  [ok] boost active with countdown sweep (active)
+    shot docs/shots/81-state-boost-active.png
+    missile after fire: active
+    shot docs/shots/81-state-missile-active.png
+  [ok] missile used, NEXT LAP arc (used); boost unlimited
+    shot docs/shots/81-gd-missile-used.png
+  [ok] power holding the rocket (held)
+    shot docs/shots/81-gd-power-rocket3.png
+    shot docs/shots/81-state-power-lapboost.png
+    shot docs/shots/81-state-power-autopilot.png
+  [ok] power active with sweep (active)
+    shot docs/shots/81-state-power-active.png
+  [ok] toasts shown: LAST · BOOST ∞ | BOOST READY | LAST · BOOST ∞ | ROCKET! | HIT! SPUN OUT | BOOST READY
+  [ok] console errors/warnings: 0 []
+
+RESULT: ALL OK (states)

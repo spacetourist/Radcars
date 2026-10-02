@@ -1,292 +1,220 @@
+/**
+ * Input (v53 'controls'): auto-throttle, so the player only steers, brakes and fires.
+ * Touch (mobile-first, see js/controls.js for the data-driven layout):
+ *   - STEER: floating ring — a touch anywhere in the steer half of the control zone re-centres the ring under the
+ *     thumb; the finger's angle from the centre sets the car's heading (8% dead zone, smoothed). Snaps back on release.
+ *   - BRAKE: hold. Slide up from BRAKE = boost, slide towards the arc (left; right when left-handed) = missile.
+ *   - BOOST / MISSILE / POWER: dedicated tap buttons. Every control owns its own pointer (multi-touch safe).
+ * Keyboard (desktop / testing, never shown in the HUD): arrows/WASD steer, Down/S brake, Shift boost, Space missile,
+ * E power-up, P/Esc pause. Up/W does nothing (the throttle is automatic).
+ */
 export function createInput() {
   const state = {
     steer: 0,
-    accel: false,
+    accel: false,           // Up/W held (no effect since v53: auto-throttle) — kept for old callers
+    brake: false,           // v53: keyboard Down/S or the BRAKE button
+    brakeTouch: false, brakeKey: false,
     pausePressed: false,
     left: false,
     right: false,
-    /** Absolute world heading from radial pad (radians); only while aimActive */
     aimAngle: null,
     aimActive: false,
-    /** Relative steer from keys in [-1, 1] when pad inactive */
     keySteer: 0,
-    /** Boost request (edge-triggered: Shift key or an upward slide that starts on GAS) */
-    boostPressed: false,
-    /** How the last boost request was made ('key' | 'slide'), for the HUD/debug */
-    boostSource: null,
-    /** Missile request (edge-triggered: Space or a left slide that starts on GAS) */
-    missilePressed: false,
-    missileSource: null,
-    /** v50 power-up activation (edge-triggered: E key or a tap on the POWER panel) */
-    powerPressed: false,
-    powerSource: null
+    boostPressed: false, boostSource: null,
+    missilePressed: false, missileSource: null,
+    powerPressed: false, powerSource: null,
+    taps: { brake: 0, boost: 0, missile: 0, power: 0, steer: 0, slideBoost: 0, slideMissile: 0 } // verification tallies
   };
-  /** Travel (CSS px) from the GAS touch-down point that counts as a slide: up = boost, left = missile. */
   const SLIDE_PX = 40;
-
   const keys = new Set();
+  const lefty = () => !!document.getElementById('touch-controls')?.classList.contains('lefty');
 
   function syncSteer() {
-    if (state.aimActive && state.aimAngle != null) {
-      // Radial owns heading; steer left for AI-compat only unused by physics when aim set
-      state.steer = 0;
-      return;
-    }
-    const keyR = keys.has('ArrowRight') || keys.has('d') || keys.has('D') || state.right;
-    const keyL = keys.has('ArrowLeft') || keys.has('a') || keys.has('A') || state.left;
+    if (state.aimActive && state.aimAngle != null) { state.steer = 0; return; }
+    const keyR = keys.has('ArrowRight') || keys.has('d') || state.right;
+    const keyL = keys.has('ArrowLeft') || keys.has('a') || state.left;
     state.keySteer = (keyR ? 1 : 0) - (keyL ? 1 : 0);
     state.steer = state.keySteer;
   }
+  const syncBrake = () => { state.brakeKey = keys.has('ArrowDown') || keys.has('s'); state.brake = state.brakeKey || state.brakeTouch; };
 
   // Letter keys are stored lower-case so W/A/S/D release correctly while Shift (boost) is held
   const norm = (k) => (k && k.length === 1 ? k.toLowerCase() : k);
 
   function onKeyDown(e) {
     keys.add(norm(e.key));
-    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'a', 'A', 'd', 'D', 'w', 'W', ' '].includes(e.key)) {
-      e.preventDefault();
-    }
+    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'a', 'A', 'd', 'D', 'w', 'W', 's', 'S', ' '].includes(e.key)) e.preventDefault();
     if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') state.accel = true;
-    // v48: no brake / reverse keys — lift off the gas to slow down
     if (e.key === ' ' && !e.repeat) { state.missilePressed = true; state.missileSource = 'key'; }
     if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') { if (!e.repeat) state.pausePressed = true; }
     if (e.key === 'Shift' && !e.repeat) { state.boostPressed = true; state.boostSource = 'key'; }
     if ((e.key === 'e' || e.key === 'E') && !e.repeat) { state.powerPressed = true; state.powerSource = 'key'; }
-    syncSteer();
+    syncSteer(); syncBrake();
   }
-
   function onKeyUp(e) {
     keys.delete(norm(e.key));
     if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') state.accel = keys.has('ArrowUp') || keys.has('w');
-    syncSteer();
+    syncSteer(); syncBrake();
   }
-
   window.addEventListener('keydown', onKeyDown, { passive: false });
   window.addEventListener('keyup', onKeyUp);
+  window.addEventListener('blur', () => { keys.clear(); state.accel = false; syncSteer(); syncBrake(); });
 
-  const held = new Map();
+  const press = (el, ms = 160) => { el.classList.add('pressed'); setTimeout(() => el.classList.remove('pressed'), ms); };
+  const buzz = (ms) => { try { if (navigator.vibrate) navigator.vibrate(ms); } catch (_) {} };
 
-  function bindButton(el, action) {
-    if (!el) return;
-    const down = (ev) => {
-      ev.preventDefault();
-      held.set(action, true);
-      applyAction(action, true);
-      el.classList.add('active');
-    };
-    const up = (ev) => {
-      ev.preventDefault();
-      held.set(action, false);
-      applyAction(action, false);
-      el.classList.remove('active');
-    };
-    el.addEventListener('pointerdown', down);
-    el.addEventListener('pointerup', up);
-    el.addEventListener('pointerleave', up);
-    el.addEventListener('pointercancel', up);
-    el.addEventListener('mousedown', down);
-    el.addEventListener('mouseup', up);
-    el.addEventListener('mouseleave', up);
-  }
-
-  function applyAction(action, down) {
-    switch (action) {
-      case 'left': state.left = down; syncSteer(); break;
-      case 'right': state.right = down; syncSteer(); break;
-      case 'accel': state.accel = down; break;
-      case 'pause':
-        if (down) state.pausePressed = true;
-        break;
-      default: break;
-    }
-  }
-
-  /**
-   * Radial aim pad: angle from pad centre → world heading.
-   * Camera is axis-aligned; canvas +Y is down, so atan2(dy, dx) matches car.angle
-   * (0 = right / +X). Centre deadzone ignores noise; release clears aim (no spring).
-   */
-  function bindAimPad() {
+  /** Floating steering ring (Pointer Events + capture). */
+  function bindSteer() {
     const root = document.getElementById('aim-pad');
     const knob = document.getElementById('aim-knob');
+    const zone = document.getElementById('steer-zone');
     if (!root || !knob) return;
-
-    let pointerId = null;
-    const DEAD = 0.18; // fraction of radius — ignore near centre
-
-    function setKnob(nx, ny, active) {
-      // nx,ny in [-1,1] pad space (y down)
-      const mag = Math.hypot(nx, ny);
-      const cx = mag > 1 ? nx / mag : nx;
-      const cy = mag > 1 ? ny / mag : ny;
-      const maxPx = root.clientWidth * 0.32;
-      knob.style.transform = `translate(${cx * maxPx}px, ${cy * maxPx}px)`;
-      root.classList.toggle('tc-aim-active', !!active);
-      root.classList.toggle('active', !!active);
+    let pid = null, cx = 0, cy = 0, sx = 0, sy = 0; // ring centre (client px), smoothed unit vector
+    const DEAD = 0.08;
+    const radius = () => Math.max(1, root.clientWidth / 2);
+    function setKnob(nx, ny) {
+      const m = Math.hypot(nx, ny), k = m > 1 ? 1 / m : 1, maxPx = radius() - knob.clientWidth / 2 + 4;
+      knob.style.transform = `translate(${nx * k * maxPx}px, ${ny * k * maxPx}px)`;
     }
-
-    function applyFromClient(clientX, clientY) {
-      const rect = root.getBoundingClientRect();
-      const cx = rect.left + rect.width * 0.5;
-      const cy = rect.top + rect.height * 0.5;
-      const dx = clientX - cx;
-      const dy = clientY - cy;
-      const r = Math.max(1, rect.width * 0.5);
-      const nx = dx / r;
-      const ny = dy / r;
-      const mag = Math.hypot(nx, ny);
-      if (mag < DEAD) {
-        // Held in deadzone: keep last aim if already aiming, else idle knob
-        setKnob(0, 0, state.aimActive);
-        return;
-      }
-      // World heading matches screen atan2 (camera unrotated)
-      state.aimAngle = Math.atan2(dy, dx);
-      state.aimActive = true;
-      setKnob(nx, ny, true);
+    function apply(x, y) {
+      const r = radius(), nx = (x - cx) / r, ny = (y - cy) / r, m = Math.hypot(nx, ny);
+      setKnob(nx, ny);
+      if (m < DEAD) return; // dead zone: keep the last heading while held
+      const ux = nx / m, uy = ny / m;
+      // radial output with light smoothing (fast enough for hairpins, kills jitter)
+      if (!state.aimActive) { sx = ux; sy = uy; } else { sx += (ux - sx) * 0.6; sy += (uy - sy) * 0.6; }
+      state.aimAngle = Math.atan2(sy, sx); state.aimActive = true;
       syncSteer();
     }
-
-    function clearAim() {
-      state.aimActive = false;
-      state.aimAngle = null;
-      setKnob(0, 0, false);
-      syncSteer();
+    function down(ev, float) {
+      ev.preventDefault();
+      if (pid != null) return;
+      pid = ev.pointerId;
+      const tgt = ev.currentTarget;
+      try { tgt.setPointerCapture(pid); } catch (_) {}
+      const rr = root.getBoundingClientRect();
+      if (float) {
+        // re-centre under the thumb (kept fully on screen)
+        const r = rr.width / 2, app = document.getElementById('app').getBoundingClientRect();
+        cx = Math.min(app.right - r - 4, Math.max(app.left + r + 4, ev.clientX));
+        cy = Math.min(app.bottom - r - 4, Math.max(app.top + r + 4, ev.clientY));
+        root.style.translate = `${cx - (rr.left + r)}px ${cy - (rr.top + r)}px`;
+      } else { cx = rr.left + rr.width / 2; cy = rr.top + rr.height / 2; }
+      root.classList.add('active');
+      state.taps.steer++;
+      apply(ev.clientX, ev.clientY);
     }
-
-    const onDown = (ev) => {
+    function move(ev) { if (ev.pointerId !== pid) return; ev.preventDefault(); apply(ev.clientX, ev.clientY); }
+    function up(ev) {
+      if (ev.pointerId !== pid) return;
       ev.preventDefault();
-      pointerId = ev.pointerId;
-      try { root.setPointerCapture(pointerId); } catch (_) {}
-      applyFromClient(ev.clientX, ev.clientY);
-    };
-
-    const onMove = (ev) => {
-      if (pointerId == null || ev.pointerId !== pointerId) return;
-      ev.preventDefault();
-      applyFromClient(ev.clientX, ev.clientY);
-    };
-
-    const onUp = (ev) => {
-      if (pointerId != null && ev.pointerId !== pointerId) return;
-      ev.preventDefault();
-      pointerId = null;
-      try { root.releasePointerCapture(ev.pointerId); } catch (_) {}
-      clearAim();
-    };
-
-    root.addEventListener('pointerdown', onDown);
-    root.addEventListener('pointermove', onMove);
-    root.addEventListener('pointerup', onUp);
-    root.addEventListener('pointercancel', onUp);
-
-    setKnob(0, 0, false);
+      try { ev.currentTarget.releasePointerCapture(pid); } catch (_) {}
+      pid = null;
+      state.aimActive = false; state.aimAngle = null;
+      root.classList.remove('active');
+      root.style.translate = ''; // snap back
+      setKnob(0, 0); syncSteer();
+    }
+    for (const [el, float] of [[root, true], [zone, true]]) { // spec: any touch in the steer half re-centres the ring
+      if (!el) continue;
+      el.addEventListener('pointerdown', (ev) => down(ev, float));
+      el.addEventListener('pointermove', move);
+      el.addEventListener('pointerup', up);
+      el.addEventListener('pointercancel', up);
+    }
+    setKnob(0, 0);
   }
 
-  /**
-   * GAS button: press-and-hold = throttle (press on, release off). Slides that start on GAS:
-   *   up   ≥ SLIDE_PX → boost    (v47)
-   *   left ≥ SLIDE_PX → missile  (v48)
-   * The dominant axis decides, so a diagonal slide fires only one of them. One request per
-   * slide: bring the thumb back near where it landed (or lift and press again) to re-arm.
-   * The throttle stays held during an up/left slide even outside the button; sliding off to
-   * the right or downwards releases it as before.
-   */
-  function bindGas(el) {
-    let pid = null, startX = 0, startY = 0, fired = false, gasOn = false;
-    const release = () => {
-      if (gasOn) { gasOn = false; held.set('accel', false); applyAction('accel', false); }
-      el.classList.remove('active');
-    };
+  /** BRAKE: hold; slide up = boost, slide towards the arc = missile (one request per slide). */
+  function bindBrake(el) {
+    if (!el) return;
+    let pid = null, x0 = 0, y0 = 0, fired = false;
+    const release = () => { state.brakeTouch = false; syncBrake(); el.classList.remove('active'); };
     el.addEventListener('pointerdown', (ev) => {
       ev.preventDefault();
       if (pid != null) return;
-      pid = ev.pointerId; startX = ev.clientX; startY = ev.clientY; fired = false; gasOn = true;
+      pid = ev.pointerId; x0 = ev.clientX; y0 = ev.clientY; fired = false;
       try { el.setPointerCapture(pid); } catch (_) {}
-      held.set('accel', true);
-      applyAction('accel', true);
+      state.brakeTouch = true; syncBrake(); state.taps.brake++;
       el.classList.add('active');
+      buzz(8);
     });
     el.addEventListener('pointermove', (ev) => {
       if (ev.pointerId !== pid) return;
       ev.preventDefault();
-      const dx = ev.clientX - startX, dy = ev.clientY - startY;
+      const dx = (ev.clientX - x0) * (lefty() ? -1 : 1), dy = ev.clientY - y0;
       if (!fired) {
-        if (-dy >= SLIDE_PX && -dy >= Math.abs(dx)) { fired = true; state.boostPressed = true; state.boostSource = 'slide'; }
-        else if (-dx >= SLIDE_PX && -dx > Math.abs(dy)) { fired = true; state.missilePressed = true; state.missileSource = 'slide'; }
+        if (-dy >= SLIDE_PX && -dy >= Math.abs(dx)) { fired = true; state.boostPressed = true; state.boostSource = 'slide'; state.taps.slideBoost++; }
+        else if (-dx >= SLIDE_PX && -dx > Math.abs(dy)) { fired = true; state.missilePressed = true; state.missileSource = 'slide'; state.taps.slideMissile++; }
+        // a slide is a boost / missile gesture, not braking: the brake lets go while the thumb is slid away
+        if (fired) { state.brakeTouch = false; syncBrake(); el.classList.remove('active'); }
       } else if (Math.hypot(dx, dy) < SLIDE_PX / 2) {
-        fired = false; // thumb came back: the next slide can request again
+        fired = false; state.brakeTouch = true; syncBrake(); el.classList.add('active'); // slid back onto BRAKE: brake again
       }
-      if (!gasOn) return;
-      const r = el.getBoundingClientRect();
-      const inside = ev.clientX >= r.left && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom;
-      const upSlide = ev.clientY < r.top && ev.clientX >= r.left - 60 && ev.clientX <= r.right + 40;
-      const leftSlide = ev.clientX < r.left && ev.clientY >= r.top - 60 && ev.clientY <= r.bottom + 40;
-      if (!inside && !upSlide && !leftSlide) release();
     });
     const up = (ev) => {
       if (ev.pointerId !== pid) return;
       ev.preventDefault();
       try { el.releasePointerCapture(pid); } catch (_) {}
-      pid = null;
-      release();
+      pid = null; release();
     };
     el.addEventListener('pointerup', up);
     el.addEventListener('pointercancel', up);
   }
 
-  function bindTouchUI() {
-    const root = document.getElementById('touch-controls');
-    if (!root) return;
-    root.querySelectorAll('[data-action]').forEach((btn) => {
-      const act = btn.getAttribute('data-action');
-      if (act === 'accel') bindGas(btn);
-      else bindButton(btn, act);
-    });
-    bindAimPad();
-    bindPower(document.getElementById('btn-power'));
-  }
-
-  /** v50 POWER panel: a tap (touch, pen or mouse) activates the held power-up. Own element, so GAS slides and steering are unaffected. */
-  function bindPower(el) {
+  /** Tap buttons fire on pointerdown (no click delay); each keeps its own pointer so it works mid-steer / mid-brake. */
+  function bindTap(el, fn) {
     if (!el) return;
     el.addEventListener('pointerdown', (ev) => {
       ev.preventDefault(); ev.stopPropagation();
-      state.powerPressed = true; state.powerSource = ev.pointerType === 'touch' ? 'tap' : ev.pointerType || 'tap';
-      el.classList.add('active'); setTimeout(() => el.classList.remove('active'), 140);
+      try { el.setPointerCapture(ev.pointerId); } catch (_) {}
+      fn(ev.pointerType === 'touch' ? 'tap' : ev.pointerType || 'tap');
+      press(el);
     });
+    el.addEventListener('pointerup', (ev) => { try { el.releasePointerCapture(ev.pointerId); } catch (_) {} });
   }
 
-  bindTouchUI();
+  bindSteer();
+  bindBrake(document.getElementById('btn-brake'));
+  bindTap(document.getElementById('btn-boost'), (src) => { state.boostPressed = true; state.boostSource = src; state.taps.boost++; });
+  bindTap(document.getElementById('btn-missile'), (src) => { state.missilePressed = true; state.missileSource = src; state.taps.missile++; });
+  bindTap(document.getElementById('btn-power'), (src) => { state.powerPressed = true; state.powerSource = src; state.taps.power++; });
+  bindTap(document.getElementById('btn-pause'), () => { state.pausePressed = true; });
 
   function consumeFlags() {
-    syncSteer();
+    syncSteer(); syncBrake();
     const out = {
       steer: state.steer,
       aimAngle: state.aimActive ? state.aimAngle : null,
       accel: state.accel,
+      brake: state.brake,
       pause: state.pausePressed,
-      boost: state.boostPressed,
-      boostSource: state.boostSource,
-      missile: state.missilePressed,
-      missileSource: state.missileSource,
-      power: state.powerPressed,
-      powerSource: state.powerSource
+      boost: state.boostPressed, boostSource: state.boostSource,
+      missile: state.missilePressed, missileSource: state.missileSource,
+      power: state.powerPressed, powerSource: state.powerSource
     };
-    state.pausePressed = false;
-    state.boostPressed = false;
-    state.missilePressed = false;
-    state.powerPressed = false;
+    state.pausePressed = false; state.boostPressed = false; state.missilePressed = false; state.powerPressed = false;
     return out;
   }
 
-  /** Drop any queued boost / missile request (new race / resume from pause). */
+  /** Drop any queued boost / missile / power request (new race / resume from pause). */
   function clearBoost() { state.boostPressed = false; state.missilePressed = false; state.powerPressed = false; }
 
+  let fadeT = 0;
+  /** show: true = visible, false = hidden, 'fade' = fade out over 0.2 s then hide (v53 finish). */
   function showTouch(show) {
     const el = document.getElementById('touch-controls');
     if (!el) return;
+    clearTimeout(fadeT);
+    if (show === 'fade') {
+      el.classList.add('fading');
+      state.brakeTouch = false; syncBrake();
+      fadeT = setTimeout(() => { el.classList.add('hidden'); el.classList.remove('fading'); }, 200);
+      return;
+    }
+    el.classList.remove('fading');
     el.classList.toggle('hidden', !show);
+    if (!show) { state.brakeTouch = false; syncBrake(); }
   }
 
   return { state, consumeFlags, clearBoost, showTouch, keys };

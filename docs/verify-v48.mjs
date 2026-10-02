@@ -162,7 +162,7 @@ const rendererKind = await page.evaluate(() => window.__RAD_RENDERER__); // v51:
 await page.evaluate(() => localStorage.clear());
 await page.reload({ waitUntil: 'networkidle2' });
 const hasBrk = await page.evaluate(() => !!document.getElementById('btn-brake') || !!document.querySelector('[data-action=brake], .tc-brake'));
-check(!hasBrk, `no BRK control in the DOM (btn-brake / data-action=brake / .tc-brake): ${hasBrk ? 'present' : 'absent'}`);
+check(hasBrk, `v53: BRAKE control in the DOM (btn-brake; v48 had removed BRK, v53 brings it back with auto-throttle): ${hasBrk ? 'present' : 'absent'}`);
 const raceRows = [], padRows = [], spinRows = [], trialRows = [];
 const shotLog = [];
 let gotInFlight = false, gotSpin = 0, gotExplosion = false, gotHud = false, aiPadShots = 0, playerPadShots = 0;
@@ -380,7 +380,8 @@ check(totN >= 40 && rate >= 0.55 && rate <= 0.85, `overall hit rate at 80–1500
     const b = await st(page); const brakeState = await page.evaluate(() => 'brake' in window.__RAD_INPUT__.state ? window.__RAD_INPUT__.state.brake : 'absent');
     await page.keyboard.up(key);
     const decel = (a.spd - b.spd) / ((b.t - a.t) / 1000);
-    check(decel < 400 && b.spd > 300, `holding ${key} (gas off, still steering) does not brake or reverse: ${a.spd.toFixed(0)}→${b.spd.toFixed(0)} wu/s in ${((b.t - a.t) / 1000).toFixed(2)} s = ${decel.toFixed(0)} wu/s² (coasting; the old brake was 1500), input.state.brake=${brakeState}`);
+    // v53: Down/S is the BRAKE again — it bites hard and fades into a steerable crawl (≥ 170 wu/s), never a reverse
+    check(decel > 700 && b.spd >= 165 && brakeState === true, `holding ${key} brakes into a crawl, no stop / reverse: ${a.spd.toFixed(0)}→${b.spd.toFixed(0)} wu/s in ${((b.t - a.t) / 1000).toFixed(2)} s = ${decel.toFixed(0)} wu/s² (v53 brake 1500 · crawl 170), input.state.brake=${brakeState}`);
   }
   await page.evaluate(() => { window.__botMode = 'idle'; });
   await sleep(300);
@@ -425,23 +426,27 @@ for (const name of mobTracks) {
   await installRecorder(mob, false);
   await mob.evaluate(() => { window.__order = () => [...window.__RAD_GAME__.world.cars].sort((a, b) => (a.finished && b.finished) ? a.finishPlace - b.finishPlace : a.finished ? -1 : b.finished ? 1 : b.dist - a.dist); });
   await waitFor(mob, (x) => x.running && x.cd > 0, 5000);
-  const lay = await mob.evaluate(() => { const r = (el) => { const b = el.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2, w: b.width, h: b.height }; }; return { gas: r(document.getElementById('btn-accel')), pad: r(document.getElementById('aim-pad')), brk: !!document.querySelector('#btn-brake, [data-action=brake]'), btns: [...document.querySelectorAll('#touch-controls button')].map((b) => b.id) }; });
-  check(!lay.brk, `touch controls: ${lay.btns.join(', ')} — no BRK button`);
-  let gas = { id: 0, x: lay.gas.x, y: lay.gas.y + 10 };
-  let steer = { id: 1, x: lay.pad.x, y: lay.pad.y - lay.pad.w * 0.35 };
-  await touch('touchStart', [gas]); await touch('touchStart', [gas, steer]);
+  const lay = await mob.evaluate(() => { const r = (el) => { const b = el.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2, w: b.width, h: b.height }; }; return { gas: r(document.getElementById('btn-brake')), pad: r(document.getElementById('aim-pad')), brk: !!document.querySelector('#btn-brake, [data-action=brake]'), btns: [...document.querySelectorAll('#touch-controls button')].map((b) => b.id) }; });
+  check(lay.brk, `touch controls: ${lay.btns.join(', ')} — v53 BRAKE button present (auto-throttle)`);
+  // v53: auto-throttle; the right thumb only goes down on BRAKE for a slide. The steer ring floats, so the steer
+  // finger lands on its centre (unchanged) and then points at the road.
+  let gas = null;
+  let steer = { id: 1, x: lay.pad.x, y: lay.pad.y };
+  const pts = () => (gas ? [gas, steer] : [steer]);
+  await touch('touchStart', [steer]);
   const steerStep = async () => {
     const a = await mob.evaluate(async () => { const { pointAt } = await import('./js/tracks.js'); const w = window.__RAD_GAME__.world, p = w.player, spd = Math.hypot(p.vx, p.vy); const tp = pointAt(w.track, p.sPrev + 150 + spd * 0.35); return Math.atan2(tp.y - p.y, tp.x - p.x); });
     const r = lay.pad.w * 0.36; steer = { id: 1, x: lay.pad.x + Math.cos(a) * r, y: lay.pad.y + Math.sin(a) * r };
-    await touch('touchMove', [gas, steer]);
+    await touch('touchMove', pts());
   };
   const drive = async (ms) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { await steerStep(); await sleep(40); } };
-  const slideTo = async (dx, dy) => { const x0 = gas.x, y0 = gas.y; for (let k = 1; k <= 6; k++) { gas = { id: 0, x: x0 + dx * k / 6, y: y0 + dy * k / 6 }; await steerStep(); await sleep(20); } };
-  const back = async () => { gas = { id: 0, x: lay.gas.x, y: lay.gas.y + 10 }; await steerStep(); await sleep(40); };
+  const slideTo = async (dx, dy) => { gas = { id: 0, x: lay.gas.x, y: lay.gas.y }; await touch('touchStart', pts()); const x0 = gas.x, y0 = gas.y; for (let k = 1; k <= 6; k++) { gas = { id: 0, x: x0 + dx * k / 6, y: y0 + dy * k / 6 }; await steerStep(); await sleep(20); } };
+  // lift the BRAKE thumb (CDP touchEnd lifts every point): the steer thumb goes straight back on the ring centre
+  const back = async () => { gas = null; await touch('touchEnd', []); steer = { id: 1, x: lay.pad.x, y: lay.pad.y }; await touch('touchStart', [steer]); await steerStep(); await sleep(40); };
   await waitFor(mob, (x) => x.cd <= 0, 6000);
   await drive(1200);
   let s = await st(mob); let inp = await mob.evaluate(() => ({ ...window.__RAD_INPUT__.state }));
-  check(inp.accel && s.shots === 0 && s.boostUses === 0 && s.spd > 350, `GAS hold drives as before (accel=${inp.accel}, speed ${s.spd.toFixed(0)}), no boost/missile`);
+  check(!inp.brake && s.shots === 0 && s.boostUses === 0 && s.spd > 350, `auto-throttle drives with only the steer thumb down (brake=${inp.brake}, speed ${s.spd.toFixed(0)}), no boost/missile`);
   // wait for a target in range and both charges ready
   s = await (async () => { const t0 = Date.now(); while (Date.now() - t0 < 20000) { await drive(120); const x = await st(mob); if (x.target != null && x.ahead > 80 && x.ahead < 1500 && x.ch === 1 && x.boostCh === 1) return x; } return null; })();
   if (check(!!s, `target in range for the touch test (car #${s?.target}, ${s?.ahead?.toFixed(0)} wu ahead)`)) {
@@ -456,7 +461,7 @@ for (const name of mobTracks) {
     await slideTo(-58, -38); await sleep(80);
     b1 = await st(mob);
     inp = await mob.evaluate(() => ({ ...window.__RAD_INPUT__.state }));
-    check(b1.shots === b0.shots + 1 && b1.boostUses === b0.boostUses && b1.src === 'slide' && inp.accel, `diagonal slide (dx −58, dy −38, left dominant) fired the MISSILE only (missiles ${b0.shots}→${b1.shots}, boost uses ${b0.boostUses}→${b1.boostUses}, source ${b1.src}); GAS still held=${inp.accel}`);
+    check(b1.shots === b0.shots + 1 && b1.boostUses === b0.boostUses && b1.src === 'slide' && !inp.brake, `diagonal slide (dx −58, dy −38, left dominant) fired the MISSILE only (missiles ${b0.shots}→${b1.shots}, boost uses ${b0.boostUses}→${b1.boostUses}, source ${b1.src}); brake let go once the slide fired (brake=${inp.brake})`);
     if (name === mobTracks[0]) { await sleep(40); const q = await st(mob); log(`    shot ${await shotFull(mob, `mobile-${name}-missile`)}  (speed ${q.spd.toFixed(0)}, missile in flight ${q.fly})`); }
     await back();
     const e = await waitFor(mob, (x) => x.logN > b0.logN, 5000);

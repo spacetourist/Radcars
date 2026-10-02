@@ -1,0 +1,66 @@
+
+=== neon · desktop · canvas · 2 laps ===
+    shot docs/shots/81-menu-title-desktop.png
+    shot docs/shots/81-menu-select-desktop.png
+  [ok] renderer canvas
+  [ok] countdown: action buttons don't overlap each other (clear)
+  [ok] countdown: nearest action button is 794.7 px clear of the steer ring (≥ 16)
+  [ok] countdown: clusters (top 430 px) clear of the HUD (bottom 200 px)
+  [ok] countdown: HUD pills clear of pause + minimap
+  [ok] countdown: smallest touch target 69 px (≥ 48)
+  [ok] countdown: every control fully on screen
+    layout s=1.300 steer 192px @(154,533) · brake 111px @(1185,574) · boost 71px @(1185,466) · missile 71px @(1108,497) · power 71px @(1079,574)
+    shot docs/shots/81-race-neon-desktop-canvas.png
+  [ok] race completed → final results (41 s wall)
+  [ok] finish reveal shown when crossing the line
+  [ok] laps counted 1→2 of 2
+  [ok] all rivals finished (6 cars, DNF: none); player P1
+  [ok] brake used into corners: 0.5 s held (bot 12/1013 ticks), brake lights seen=true
+  [ok] car sprite matches its heading (max error 0.000 rad)
+  [ok] car stayed inside the view band 0.15–0.9: screen y 33%–67%
+  [ok] car never under a control (none)
+  [ok] no key hints on screen (none found)
+    race fps 56.1 (screenshots inside the window)
+    shot docs/shots/81-results-desktop-canvas.png
+
+=== gridlock · desktop · canvas · 2 laps ===
+  [ok] renderer canvas
+  [ok] race completed → final results (47 s wall)
+  [ok] finish reveal shown when crossing the line
+  [ok] laps counted 1→2 of 2
+  [ok] all rivals finished (6 cars, DNF: none); player P5
+  [ok] brake used into corners: 5.8 s held (bot 181/1352 ticks), brake lights seen=true
+  [ok] car sprite matches its heading (max error 0.000 rad)
+  [ok] car stayed inside the view band 0.15–0.9: screen y 31%–70%
+  [ok] car never under a control (none)
+  [ok] no key hints on screen (none found)
+    race fps 58.4 (screenshots inside the window)
+
+=== razor · desktop · canvas · 2 laps ===
+  [ok] renderer canvas
+  [ok] race completed → final results (39 s wall)
+  [ok] finish reveal shown when crossing the line
+  [ok] laps counted 1→2 of 2
+  [ok] all rivals finished (6 cars, DNF: none); player P2
+  [ok] brake used into corners: 3.1 s held (bot 100/1105 ticks), brake lights seen=true
+  [ok] car sprite matches its heading (max error 0.000 rad)
+  [ok] car stayed inside the view band 0.15–0.9: screen y 32%–72%
+  [ok] car never under a control (none)
+  [ok] no key hints on screen (none found)
+    race fps 59.0 (screenshots inside the window)
+
+=== cargo · desktop · canvas · 2 laps ===
+  [ok] renderer canvas
+  [ok] race completed → final results (44 s wall)
+  [ok] finish reveal shown when crossing the line
+  [ok] laps counted 1→2 of 2
+  [ok] all rivals finished (6 cars, DNF: none); player P4
+  [ok] brake used into corners: 5.7 s held (bot 155/1198 ticks), brake lights seen=true
+  [ok] car sprite matches its heading (max error 0.000 rad)
+  [ok] car stayed inside the view band 0.15–0.9: screen y 28%–70%
+  [ok] car never under a control (none)
+  [ok] no key hints on screen (none found)
+    race fps 57.2 (screenshots inside the window)
+  [ok] console errors/warnings: 0 []
+
+RESULT: ALL OK (races-desktop-canvas)

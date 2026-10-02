@@ -7,6 +7,7 @@ import { sfx } from './audio.js';
 import { clamp, angleDiff } from './util.js';
 import { pointAt } from './tracks.js';
 import { newMissileState, pickTarget, launchMissile, stepMissiles, stepSpin, stepPads } from './weapons.js';
+import { updateControls, resetControls, getLayout } from './controls.js';
 import { createCelebration, stepCelebration, FINISH_TIMING, ordinal } from './celebrate.js';
 import { newPowerState, stepBonus, rocketTargets, autopilotControl, cruiseControl, trackAutopilot, POWER_INFO, POWERS, ROCKET_COUNT, ROCKET_GAP_MS, LAPBOOST_MIN_MS, AUTOPILOT_MS, AUTOPILOT_TOP_MUL, AUTOPILOT_HANDBACK_MS, handbackAssist } from './powerups.js';
 
@@ -37,6 +38,9 @@ const BOOST_RAMP_OUT_MS = 450;
 
 /** Player auto-unstick (no brake since v48): gas held, near-zero speed for UNSTICK_AFTER_MS → reverse. */
 const UNSTICK_AFTER_MS = 1500;
+/** v53 BRAKE: v47's 1500 wu/s² at speed (eases to 45% near the floor), never below a 170 wu/s crawl (still turns). */
+export const PLAYER_BRAKE = 1500;
+export const PLAYER_BRAKE_FLOOR = 170;
 const UNSTICK_REVERSE_MS = 900;
 const MISSILE_FLASH_MS = 1400;
 
@@ -107,6 +111,8 @@ export function createGame(canvas, input) {
     world.missiles = [];
     world.fx = [];
     world.unstick = { stuckMs: 0, reverseMs: 0, count: 0 };
+    world.brakeStats = { ms: 0 };
+    p.braking = false;
     world.finish = null; // v52: set when the player crosses the line on the final lap (reveal → results)
     clearFinishFlow();
     input.clearBoost && input.clearBoost();
@@ -115,6 +121,7 @@ export function createGame(canvas, input) {
     paused = false;
     last = performance.now();
     input.showTouch(true);
+    resetControls();
     cancelAnimationFrame(raf);
     raf = requestAnimationFrame(loop);
   }
@@ -139,9 +146,8 @@ export function createGame(canvas, input) {
     renderer.draw(world);
     if (!running) return; // the finish flow may have stopped the race this frame
     const showHud = !world.race.over && !world.player.finished;
-    const hud = showHud ? renderer.drawWeaponHud(world.boost, world.missile, boostAnchor(), world.race.countdown > 0) : null;
-    lastHud = hud;
-    updatePowerButton(hud);
+    // v53: the action buttons (DOM, js/controls.js) replace the canvas BOOST / MISSILE panels and the POWER slot
+    lastHud = showHud ? updateControls(world, { boostMs: BOOST_MS, autopilotMs: AUTOPILOT_MS, rocketCount: ROCKET_COUNT, braking: !!world.player.braking }) : null;
     const race = world.race;
     if (race.countdown > 0) {
       const c = race.countdown;
@@ -152,55 +158,7 @@ export function createGame(canvas, input) {
     raf = requestAnimationFrame(loop);
   }
 
-  /** v50 POWER slot: a tappable DOM panel placed left of the MISSILE panel (touch + mouse; E on keyboard). */
-  const ICONS = {
-    rocket: '<svg viewBox="0 0 24 24"><path d="M12 2c3 2.2 4.6 6 4.6 10l-1.8 3H9.2l-1.8-3C7.4 8 9 4.2 12 2z"/><path d="M9 14.5 5.5 19l4-1.2zM15 14.5l3.5 4.5-4-1.2z"/><circle cx="12" cy="9" r="1.7" fill="#0a0c12"/></svg>',
-    lapboost: '<svg viewBox="0 0 24 24"><path d="M12.5 2c.8 3.6 5 5.8 5 11a5.5 5.5 0 0 1-11 0c0-3 1.8-4.4 2.2-7.2 1 1.9 1.9 2.6 3 3.4.4-2.6-.4-4.9.8-7.2z"/></svg>',
-    autopilot: '<svg viewBox="0 0 24 24" style="fill:none;stroke:currentColor;stroke-width:2.6"><circle cx="12" cy="12" r="8.6"/><circle cx="12" cy="12" r="2.2" fill="currentColor"/><path d="M3.6 11h6.2M14.2 11h6.2M12 14.3v6.3"/></svg>',
-    none: '<svg viewBox="0 0 24 24"><text x="12" y="18" text-anchor="middle" font-size="17" font-weight="700" fill="currentColor">?</text></svg>'
-  };
-  let powerKey = '';
-  let lastHud = null; // last drawn BOOST / MISSILE panel boxes (canvas CSS px), for layout checks
-  function updatePowerButton(hud) {
-    const el = document.getElementById('btn-power');
-    if (!el) return;
-    const pw = world.power;
-    if (!hud || !hud.missile || !running) { if (powerKey !== 'hidden') { el.style.display = 'none'; powerKey = 'hidden'; } return; }
-    const m = hud.missile;
-    const w = m.w, x = Math.max(6, m.x - w - 8);
-    let kind = pw.active || pw.held || 'none', name, sub, state, frac = null;
-    if (pw.active) {
-      state = 'active'; name = POWER_INFO[pw.active].name;
-      if (pw.active === 'autopilot') { sub = (pw.activeMs / 1000).toFixed(1) + ' s'; frac = pw.activeMs / AUTOPILOT_MS; }
-      else if (pw.active === 'lapboost') { sub = 'until the line'; frac = 1; }
-      else { sub = 'FIRING ' + Math.min(ROCKET_COUNT, ROCKET_COUNT - pw.rocketQueue.length + 1) + '/' + ROCKET_COUNT; }
-    } else if (pw.flash) {
-      state = 'flash'; name = pw.flash.text; sub = pw.flash.kind === 'got' ? 'tap · E to use' : '';
-      kind = pw.held || (pw.flash.text.startsWith('ROCKET') ? 'rocket' : kind);
-    } else if (pw.held) {
-      state = 'held'; name = POWER_INFO[pw.held].name; sub = 'tap · E';
-    } else { state = 'empty'; name = 'POWER'; sub = 'grab a ? box'; }
-    const key = [kind, state, name, sub, pw.active && pw.held ? pw.held : '', frac == null ? '' : frac.toFixed(2), x, m.y, w, m.h].join('|');
-    if (key === powerKey) return;
-    powerKey = key;
-    el.style.display = 'flex';
-    el.style.left = x + 'px'; el.style.top = m.y + 'px'; el.style.width = w + 'px'; el.style.height = m.h + 'px';
-    el.dataset.state = state; el.dataset.kind = kind;
-    el.classList.toggle('has-next', !!(pw.active && pw.held));
-    el.style.setProperty('--pw', kind === 'none' ? '#7c8494' : POWER_INFO[kind].color);
-    el.innerHTML = `<span class="pw-icon">${ICONS[kind]}</span><span class="pw-text"><span class="pw-name">${name}</span><span class="pw-sub">${sub}</span></span>` +
-      (frac != null ? `<span class="pw-bar"><span style="width:${(frac * 100).toFixed(0)}%"></span></span>` : '') +
-      (pw.active && pw.held ? `<span class="pw-next" style="color:${POWER_INFO[pw.held].color}" title="next: ${POWER_INFO[pw.held].name}">${ICONS[pw.held]}</span>` : ''); // held one waiting
-  }
-
-  /** Where to draw the boost indicator: just above the GAS button (canvas CSS px). */
-  function boostAnchor() {
-    const gas = document.getElementById('btn-accel');
-    const r = gas && gas.getBoundingClientRect();
-    if (!r || !r.width) return null;
-    const c = canvas.getBoundingClientRect();
-    return { x: r.left - c.left, y: r.top - c.top, w: r.width, h: r.height };
-  }
+  let lastHud = null; // v53: last painted action-button boxes (canvas CSS px), for layout checks
 
   /**
    * Chase camera with a keep-in-view clamp (v49).
@@ -246,21 +204,30 @@ export function createGame(canvas, input) {
       if (race.time < 2500) look = Math.min(look, 140);
     }
 
-    // Max look that keeps the whole car inside the short viewport axis with the margin.
-    // At high speed zoom is small → maxLook is huge → chase cam is unchanged.
-    const half = short / 2 - margin;
-    const maxLook = Math.max(0, half / Math.max(0.05, zoom) - carPad);
+    // v53: frame by the layout (js/controls.js): portrait rests the car at ~42% of the height with the look-ahead
+    // along its heading; the car must stay inside the view band (below the HUD, above the thumbs) with margins.
+    // Landscape rests it at 50%. During the finish the controls are gone, so the whole screen is the band.
+    const lay = getLayout();
+    const band = !fin && lay && lay.vw === vw && lay.vh === vh ? lay.view : { top: 0, bottom: 1 };
+    const ay = fin ? 0.5 : (lay && lay.vw === vw ? lay.carY : 0.5);
+    const rect = { l: margin, r: vw - margin, t: Math.max(margin, band.top * vh), b: Math.min(vh - margin, band.bottom * vh) };
+    // max look so that car + pad stays in rect when the camera centre sits look·dir ahead of the car's rest point
+    const z0 = Math.max(0.05, zoom), dx = Math.cos(dir), dy = Math.sin(dir);
+    const restX = vw / 2, restY = ay * vh;
+    const room = (d, lo, hi, c) => (d > 1e-3 ? (c - lo) / d : d < -1e-3 ? (hi - c) / -d : Infinity);
+    const padPx = carPad * z0;
+    const maxLook = Math.max(0, Math.min(room(dx, rect.l + padPx, rect.r - padPx, restX), room(dy, rect.t + padPx, rect.b - padPx, restY)) / z0);
     look = Math.min(look, maxLook);
 
     const k = 1 - Math.exp(-dt / 180);
     const zk = counting ? k : (1 - Math.exp(-dt / (fin ? 1100 : 400)));
     if (cam.shakeX) { cam.x -= cam.shakeX; cam.y -= cam.shakeY; cam.shakeX = cam.shakeY = 0; } // undo last frame's kick
-    // finish: frame the car in the lower part of the screen, under the place text
-    const offY = fin ? (vh * FINISH_TIMING.carScreenY) / Math.max(0.05, cam.zoom) : 0;
-    cam.x += (p.x + Math.cos(dir) * look - cam.x) * k;
-    cam.y += (p.y + Math.sin(dir) * look - offY - cam.y) * k;
+    // finish: frame the car in the lower part of the screen, under the place text; otherwise rest at ay
+    const offY = fin ? (vh * FINISH_TIMING.carScreenY) / Math.max(0.05, cam.zoom) : (0.5 - ay) * vh / Math.max(0.05, cam.zoom);
+    cam.x += (p.x + dx * look - cam.x) * k;
+    cam.y += (p.y + dy * look + offY - (fin ? 2 * offY : 0) - cam.y) * k;
     cam.zoom += (zoom - cam.zoom) * zk;
-    keepPlayerInView(cam, p, vw, vh, margin, carPad);
+    keepPlayerInView(cam, p, vw, vh, rect, carPad);
     if (fin && fin.ms >= FINISH_TIMING.slamMs && fin.ms < FINISH_TIMING.slamMs + FINISH_TIMING.shakeMs) {
       // the place text "lands": a short decaying camera kick
       const e = 1 - (fin.ms - FINISH_TIMING.slamMs) / FINISH_TIMING.shakeMs, a = FINISH_TIMING.shakePx * e * e / Math.max(0.05, cam.zoom);
@@ -270,16 +237,16 @@ export function createGame(canvas, input) {
   }
 
   /** Hard safety: if the smoothed cam still puts any part of the car outside the safe rect, shift it. */
-  function keepPlayerInView(cam, p, vw, vh, margin, carPad) {
+  function keepPlayerInView(cam, p, vw, vh, rect, carPad) {
     const z = Math.max(0.05, cam.zoom);
     const pad = carPad * z;
     const sx = (p.x - cam.x) * z + vw / 2;
     const sy = (p.y - cam.y) * z + vh / 2;
     let dx = 0, dy = 0;
-    if (sx - pad < margin) dx = (sx - pad - margin) / z;
-    else if (sx + pad > vw - margin) dx = (sx + pad - (vw - margin)) / z;
-    if (sy - pad < margin) dy = (sy - pad - margin) / z;
-    else if (sy + pad > vh - margin) dy = (sy + pad - (vh - margin)) / z;
+    if (sx - pad < rect.l) dx = (sx - pad - rect.l) / z;
+    else if (sx + pad > rect.r) dx = (sx + pad - rect.r) / z;
+    if (sy - pad < rect.t) dy = (sy - pad - rect.t) / z;
+    else if (sy + pad > rect.b) dy = (sy + pad - rect.b) / z;
     cam.x += dx; cam.y += dy;
   }
 
@@ -325,6 +292,7 @@ export function createGame(canvas, input) {
   function stepCars(flags, dt, autopilot) {
     const { track, cars } = world;
     for (const c of cars) {
+      if (c.isPlayer) c.braking = false; // set again by playerControl while BRAKE is held (brake lights)
       let topSave = null;
       let ctl;
       const spinning = stepSpin(c, dt);
@@ -405,7 +373,7 @@ export function createGame(canvas, input) {
     const aspect = (canvas.clientWidth || innerWidth) / Math.max(1, canvas.clientHeight || innerHeight);
     world.finish = { place, ms: 0, phase: 'reveal', cele: createCelebration(place, aspect), slammed: false, skip: false, final: null, liveKey: '', skippedAtMs: null };
     world.boost.activeMs = 0;
-    input.showTouch(false); // the car drives itself now; the whole screen is the skip target
+    input.showTouch('fade'); // the car drives itself now; the controls fade out (0.2 s) and the whole screen is the skip target
     const o = ordinal(place);
     if (onReveal) revealView = onReveal({ place, ...o, tier: world.finish.cele.tierName, word: world.finish.cele.tier.word, timeMs: p.finishTime, total: world.cars.length, onSkip: skipReveal });
     window.addEventListener('keydown', onSkipKey, true);
@@ -505,11 +473,13 @@ export function createGame(canvas, input) {
     // v50: power-up lap boost burns bright green (and its ramp-out stays green unless a normal boost takes over)
     c.boostGreen = lapBoost || (!!c.boostGreen && !other && lvl > 0);
     const target = on && !c.finished ? 1 : 0;
-    c.boostLevel = target > lvl ? Math.min(1, lvl + dt / BOOST_RAMP_IN_MS) : Math.max(0, lvl - dt / BOOST_RAMP_OUT_MS);
+    // v53 fix: at full level (lvl === target === 1) this used to fall into the ramp-out branch every other frame, so a
+    // held boost flickered 1 ↔ 0.96 (0.93 at 30 fps); now it holds steady at the target
+    c.boostLevel = target > lvl ? Math.min(target, lvl + dt / BOOST_RAMP_IN_MS) : target < lvl ? Math.max(target, lvl - dt / BOOST_RAMP_OUT_MS) : lvl;
     if (c.isPlayer) world.boost.level = c.boostLevel;
   }
 
-  /** Player controls: gas + steer only (no brake since v48), with an automatic unstick reverse. */
+  /** Player controls (v53): auto-throttle + BRAKE + steer, with the automatic unstick reverse. */
   function playerControl(flags, dt) {
     const p = world.player, u = world.unstick;
     const spd = Math.hypot(p.vx, p.vy);
@@ -520,9 +490,13 @@ export function createGame(canvas, input) {
       const err = angleDiff(p.angle, Math.atan2(tp.y - p.y, tp.x - p.x));
       return { accel: false, brake: true, steer: -Math.sign(err || 1) };
     }
-    if (flags.accel && spd < 60) u.stuckMs += dt; else u.stuckMs = 0;
+    // v53 auto-throttle: full gas unless BRAKE is held (the brake fades into a crawl; it never reverses)
+    const braking = !!flags.brake;
+    p.braking = braking;
+    if (!braking && spd < 60) u.stuckMs += dt; else u.stuckMs = 0;
     if (u.stuckMs > UNSTICK_AFTER_MS) { u.stuckMs = 0; u.reverseMs = UNSTICK_REVERSE_MS; u.count++; }
-    return { accel: flags.accel, brake: false, steer: flags.steer, aimAngle: flags.aimAngle };
+    if (braking) world.brakeStats.ms += dt;
+    return { accel: !braking, brake: braking, brakeRate: PLAYER_BRAKE, brakeFloor: PLAYER_BRAKE_FLOOR, noReverse: true, steer: flags.steer, aimAngle: flags.aimAngle };
   }
 
   /** v50 power-ups: E / POWER tap activates the held one; runs rocket salvos, lap boost and autopilot timers. */

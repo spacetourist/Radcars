@@ -1,6 +1,6 @@
 # Radcars
 
-Top-down arcade racer (PWA). **v52-finish**: crossing the line on the final lap now slams in your finishing position (1ST / 2ND / 3RD / 4TH…) with a sound while your car cruises on and the rivals race home, a win gets confetti, a trophy and a camera move, and the results fill in live. **v51-toys-pixi**: Micro Machines-style toy cars on a tabletop track, drawn by **PixiJS v8 (WebGL)** by default with the plain Canvas 2D renderer as a fallback (`?canvas=1`, or automatically when WebGL can't start). Menus are CSS/DOM over a city photo backdrop. v47 added a once-per-lap **boost**; v48 removed the brake and added a seeker missile + boost pads; **v49** tightens the turn radius by ~12% at race speed and keeps the player car fully on screen during countdown / race start; **v50** adds a row of glowing **? bonus boxes** per lap that give power-ups (ROCKET, LAP BOOST, AUTOPILOT). Tracks, handling, physics, AI, camera and gameplay are unchanged in v51.
+Top-down arcade racer (PWA), mobile-first. **v53-controls**: the car **accelerates by itself** after GO; the old GAS button is now a **BRAKE**, BOOST / MISSILE / POWER are dedicated tap buttons with emoji-style icons in a right-thumb arc around BRAKE, steering is a floating ring under the left thumb, and races are laid out for **portrait** first (landscape still works). **v52-finish**: crossing the line on the final lap now slams in your finishing position (1ST / 2ND / 3RD / 4TH…) with a sound while your car cruises on and the rivals race home, a win gets confetti, a trophy and a camera move, and the results fill in live. **v51-toys-pixi**: Micro Machines-style toy cars on a tabletop track, drawn by **PixiJS v8 (WebGL)** by default with the plain Canvas 2D renderer as a fallback (`?canvas=1`, or automatically when WebGL can't start). Menus are CSS/DOM over a city photo backdrop. v47 added a once-per-lap **boost**; v48 removed the brake and added a seeker missile + boost pads; **v49** tightens the turn radius by ~12% at race speed and keeps the player car fully on screen during countdown / race start; **v50** adds a row of glowing **? bonus boxes** per lap that give power-ups (ROCKET, LAP BOOST, AUTOPILOT). Tracks, handling, physics, AI, camera and gameplay are unchanged in v51.
 
 ## Quick start
 
@@ -9,43 +9,68 @@ cd /workspace/radcars
 python3 -m http.server 4173   # or: npx --yes serve -p 4173
 ```
 
-Open `http://localhost:4173` (landscape recommended). Live: https://spacetourist.github.io/Radcars/
+Open `http://localhost:4173` (phone portrait is the primary layout; landscape and desktop work too). Live: https://spacetourist.github.io/Radcars/
 
 ## Controls
 
-| Action | Keyboard | Touch |
-|--------|----------|-------|
-| Accelerate | ↑ / W | GAS (press and hold) |
-| Boost | Shift | slide your thumb **up** from GAS (about 40 px); keep holding for throttle |
-| Seeker missile | Space | slide your thumb **left** from GAS (about 40 px); keep holding for throttle |
-| Slow down | lift off the gas (there is no brake) | let go of GAS |
-| Steer | ← → / A D | drag the STEER ring toward the direction you want the car to point |
-| Use power-up (v50) | E | tap the **POWER** panel (left of MISSILE) |
-| Pause | P / Esc | ❚❚ |
+Touch (v53, Graphic Designer's portrait right-thumb layout):
+
+| Action | Touch |
+|--------|-------|
+| Accelerate | automatic from GO |
+| Brake | hold **BRAKE** (big red button, bottom-right). Bites hard at speed, fades into a steerable crawl — never stops dead or reverses |
+| Steer | touch anywhere in the left half of the control zone: the ring jumps under your thumb; point it where the car should face |
+| Boost | tap **BOOST** (⚡) — or slide up from BRAKE |
+| Seeker missile | tap **MISSILE** (🚀) — or slide from BRAKE towards the buttons |
+| Use power-up (v50) | tap **POWER** (gift box when empty; shows the item you hold) |
+| Pause | ❚❚ top-right |
+
+Options has a **Left-handed** switch (mirrors the two clusters) and the one place keyboard keys are listed (desktop play works
+fully with a keyboard; no key hints are ever shown during a race).
+
+### Action buttons + HUD (v53)
+
+- Everything that positions a control lives in `CONTROL_LAYOUT` in `js/controls.js` (base 390×844, scaled by
+  `min(vw/390, vh/844)`; landscape has its own block and mirrors the arc at 0.85). Hit areas are the visible disc + 12 px,
+  never under 48 px; safe-area insets are respected.
+- States: **READY** (neon border + glow, one pulse when it becomes ready, plus a top toast like "MISSILE READY"),
+  **ACTIVE** (solid accent, radial countdown sweep), **USED** (grey, faded icon, thin arc filling up to the lap recharge,
+  "NEXT LAP"), **UNLIMITED** (last place: lime ∞ badge, colour-cycling border), POWER **empty** (dashed, faded gift) /
+  **held** (item colour + bounce-in). During the countdown everything but STEER sits at 35 %. The finish reveal fades the
+  controls out over 0.2 s.
+- Icons are hand-drawn inline SVG in an emoji style (`js/icons.js`: brake disc, lightning bolt, rocket, gift box, triple
+  rocket, green flame, steering wheel + sparkle) so they look identical on Android, iOS and desktop.
+- HUD: LAP (cyan), POS `P3/6` (gold / silver / bronze for the podium), timer — neon pills along the top inside the safe
+  area; pause + a 96×96 glass minimap top-right; toasts under the pills.
+- Camera (portrait): the car rests at ~42 % of the screen height with the look-ahead along its heading, and is kept inside
+  the band between the HUD and the thumbs (v49 margins), so the road ahead is never under a thumb. Landscape: ~50 %.
 
 ### Boost
 
 - **2 s** of boost: the top-speed cap rises by **40 %** (1000 → 1400 wu/s) and thrust by **70 %**, ramped in over ~0.2 s and out over ~0.45 s, then the car eases back to normal speed. Steering and grip are unchanged.
 - **One charge per lap.** You have a charge from the start (usable from GO); crossing the start/finish line refills it. It never stacks above 1, and a second press while a boost is running does nothing.
 - **Last place = unlimited.** While you're last a boost costs nothing and you can fire another as soon as the current one ends (the lap charge is kept).
-- The indicator above GAS shows **BOOST READY**, **BOOST** with a countdown bar while active, **BOOST USED** (refills at the line), or magenta **∞ LAST · UNLIMITED**. Your car shows exhaust flames and speed streaks while boosting. Only you can fire the lap boost; the AI only boosts from pads.
+- The **BOOST** button shows ready / active (countdown sweep) / used (refills at the line) / unlimited (∞ badge while last). Your car shows exhaust flames and speed streaks while boosting. Only you can fire the lap boost; the AI only boosts from pads.
 - Pausing freezes the boost timer, and any boost press made while paused is ignored. A new race or restart resets the boost.
 
 ### Seeker missile (v48)
 
-- **One per lap**, usable from GO, refilled at the start/finish line, never more than 1. Ignored during the countdown and while paused. Diagonal slides on GAS fire only the dominant direction (up = boost, left = missile).
+- **One per lap**, usable from GO, refilled at the start/finish line, never more than 1. Ignored during the countdown and while paused.
 - Launches from your nose and locks onto the car ahead of you in race order (the physically nearest one ahead along the track). It flies at **2000 wu/s** (boosted top speed is 1400) with a **3.0 rad/s** turn limit, follows the track and then homes in with lead, and lives **3.5 s**. It **explodes on wall contact** (and self-destructs if it overshoots its target), so it's not a sure thing: roughly 70 % hit rate when the target is within 1500 wu.
 - **In P1 there's no target**: the shot is refused with a **NO TARGET** flash and you keep your charge.
 - A hit makes the car do one full **360° spin over 1 s**, cuts it to **30 %** speed, and it can't steer or accelerate until it recovers. Explosion puff + sound.
-- The **MISSILE** panel (left of BOOST) shows READY / IN FLIGHT / USED — refills at the line, plus a HIT! or MISS flash.
+- The **MISSILE** button shows ready / in flight / used (refills at the line); HIT! / MISSED / NO CAR AHEAD come up as toasts.
 
 ### Boost pads (v48)
 
 - Amber chevrons on the asphalt (3–4 per track, on straights and corner exits) pointing in the direction of travel. Any car — you or the AI — crossing one gets a free **0.5 s** boost at the same strength as the lap boost. Pads don't use your lap charge and don't stack (re-hitting just tops the remaining time back up to 0.5 s). All cars show flames while pad-boosted.
 
-### No brake
+### Brake + auto-throttle (v53)
 
-- The brake and reverse keys are gone; lift off the gas to scrub speed. If you end up nose-first against a wall at near-zero speed for ~1.5 s while holding gas, the car automatically reverses briefly (steering its nose back toward the road) and then drives on.
+- Full throttle is automatic from GO. Holding BRAKE decelerates at **1500 wu/s²** at speed (easing to 45 % near the
+  floor) down to a **170 wu/s crawl** that still turns — it never stops dead and never reverses. Brake lights glow while held.
+- The v48 auto-unstick stays: nose-first against a wall at near-zero speed for ~1.5 s (BRAKE not held) and the car reverses
+  briefly, steering back toward the road.
 
 ### Updates (PWA)
 
@@ -69,7 +94,7 @@ Open `http://localhost:4173` (landscape recommended). Live: https://spacetourist
 
 - **Why it used to "just stop":** on the final crossing the player's car was given brake + no-reverse (finished cars braked to a halt), the HUD disappeared and nothing was shown until every rival finished or the ~1-lap grace ran out (15–20 s of a parked car), and then `update()` returned early once the race was over, freezing the whole world for 0.8 s before the results.
 - **Now:** in the same frame you cross the line a big **1ST / 2ND / 3RD / 4TH…** slams in (scale-in + camera kick + thump; ordinal suffixes incl. 11TH–13TH), gold for 1ST, silver 2ND, bronze 3RD, white/cyan neon for the rest, with the race time and "n of N". Your car rolls on along the autopilot rail (centreline) easing down to 42 % of top speed; finished rivals cruise on their own line, the others keep racing to the flag. The camera eases in on your car and frames it under the text.
-- After **3.6 s** (or a tap anywhere / any non-driving key such as Enter, Space, P, Esc — arrows/WASD/Shift are ignored so a held key can't skip it; not in the first 0.45 s) the reveal fades and the **results** drop in over the still-running race: rivals still out show "racing · lap n/N" and the podium fills in as they finish. The DNF rule is unchanged (about one more lap, min 15 s, after you finish); the final standings replace the live ones in place, the menu photo fades in and the race loop stops. Race again / Menu work at any time.
+- After **3.6 s** (or a tap anywhere; not in the first 0.45 s) the reveal fades and the **results** drop in over the still-running race: rivals still out show "racing · lap n/N" and the podium fills in as they finish. The DNF rule is unchanged (about one more lap, min 15 s, after you finish); the final standings replace the live ones in place, the menu photo fades in and the race loop stops. Race again / Menu work at any time.
 - **Celebration** (`js/celebrate.js` holds every tunable: timings, per-tier words/colours/sounds/zoom, confetti bursts, the trophy shape): P1 = confetti cannons + a shower in the car palette and gold, a gold trophy with a rotating light burst (Pixi Graphics; Path2D on the Canvas fallback), a glow sweep across the gold 1ST, a fanfare and the closest camera zoom. P2/P3 = a light treatment: a short confetti puff in silver/bronze tones, an expanding ring and one sweep across the text. The place text is a DOM overlay (crisp at any DPR, identical on both renderers); confetti / trophy / ring are drawn by the active renderer. No pause once you're home (P / Esc skip instead).
 - **v52 polish:** Pixi renders at `resolution = min(devicePixelRatio, 2)` with `autoDensity`, toy-car textures are baked at 2× the closest-zoom on-screen size and minified with trilinear mipmaps (no Pixi Text is used: HUD text is 2D-canvas at device resolution, the reveal is DOM); the neon glow under the track edge line is wider (34 wu ≈ 10 px at race-speed zoom) at 18 % alpha; track cards tint their RACE button in the card's neon and say "No time yet" instead of a dash.
 
@@ -103,9 +128,12 @@ Open `http://localhost:4173` (landscape recommended). Live: https://spacetourist
 | `toyart.js` | v51 toy car art (variants, gloss, stripes, numbers, lights, shadow sprite) and the felt/asphalt noise tiles, shared by both renderers. |
 | `render.js` | Canvas 2D (fallback renderer + HUD overlay in Pixi mode): felt ground, asphalt ribbon with kerbs + walls, chequered line, procedural cars (long axis + tapered nose = heading, wheels, stripe, windscreen front, tail-lights back), minimap, boost flames (any car), boost pads, missile + smoke trail + explosions, bonus boxes, autopilot glow, green lap-boost flames, BOOST and MISSILE panels. |
 | `ui.js` | v51 CSS/DOM menus: photo backdrop (lazy), title with toy parade, track cards with lapping previews, options, pause, results podium, HUD. |
-| `main.js`,  `input.js`, `audio.js`, `career.js`, `cars.js`, `util.js` | Renderer choice (Pixi / `?canvas=1` / auto-fallback) + wiring, keyboard + radial touch input, beeps, saved settings, car factory, maths. |
+| `controls.js`, `icons.js` | v53 touch layer: `CONTROL_LAYOUT` (positions / sizes for portrait + landscape), button states, toasts, minimap box; emoji-style SVG icons |
+| `main.js`,  `input.js`, `audio.js`, `career.js`, `cars.js`, `util.js` | Renderer choice (Pixi / `?canvas=1` / auto-fallback) + wiring, keyboard + touch input (floating steer ring, BRAKE hold + slides, tap buttons; v53), beeps, saved settings, car factory, maths. |
 
 ## Verification
+
+`node docs/verify-v53.mjs <url> <outDir> races|touch|fps <portrait|narrow|tall|landscape|desktop> <pixi|canvas>` (and `states`) checks v53: real 2-lap races on all 4 tracks with a bot on auto-throttle that brakes into hairpins (laps, all rivals finish, finish reveal → results, sprite orientation, car inside the view band and never under a control, no key hints, 0 errors), real multi-touch via CDP (steer + BRAKE + BOOST held at once, every button tapped, BRAKE slides, pause), layout overlap / 48 px / 16 px-clearance checks, frame rate, and shots of every button state (`docs/shots/81-*`).
 
 `node docs/verify-core.mjs http://localhost:4173/` drives a real race on every track in headless Chrome (holds throttle, steers via key events), checks the drawn orientation of every car (render transform + canvas pixels vs velocity), and writes `docs/shots/74-*.png` + `docs/shots/74-verify.txt`. `node docs/verify-boost.mjs http://localhost:4173/` races all 4 tracks while testing the boost (Shift + a touch slide on GAS in a mobile viewport, last-place unlimited boosts, lap charge used/refilled, pause), measures the speed gain, and writes `docs/shots/75-*.png` + `docs/shots/75-verify.txt`. `node docs/verify-v48.mjs http://localhost:4173/` races all 4 tracks (3 laps, 5 AI, Normal) checking the missile (Space + left slide on mobile, charge per lap, hit rate, 360° spin + speed loss), pads for player and AI, brake removal and auto-unstick, and writes `docs/shots/76-*.png` + `docs/shots/76-verify.txt`. `node docs/verify-v50.mjs http://localhost:4173/` races all 4 tracks (3 laps, 5 AI, Normal) checking the bonus boxes (one row per lap, pickup, respawn at the line, hold-blocks-pickup) and each power-up forced via `__RAD_GAME__.debug.give()` and collected from a box (rocket: 3 distinct targets, hits + spins; lap boost: green until the line; autopilot: 10 s, wall contacts, centreline deviation, speed, handback), E and a touch tap on POWER in a mobile viewport, missile/boost/pads, finishes and fps; writes `docs/shots/78-*.png` + `docs/shots/78-verify.txt`. `node docs/verify-v51.mjs http://localhost:4173/` measures FPS for Pixi vs the Canvas fallback (Neon + Gridlock, desktop 1280×720 and phone 844×390, close race zoom 0.85 and the far chase zoom ≈0.24, CPU ×1 and ×4) and shoots the toy cars on every track (grid, corner, close-up, boost / green flame / autopilot / spin), every menu on desktop, phone and portrait, touch-target sizes, the menu photo never loading in a race, and `?canvas=1` comparison shots; writes `docs/shots/79-*.png` + `docs/shots/79-verify*.txt`. `node docs/verify-v52.mjs http://localhost:4173/` checks the v52 finish on all 4 tracks for both renderers, desktop 1280×720 and phone 844×390: `debug.finishAt(place)` lines up a P1 / P2 / P3 / lower finish; the reveal must appear in the crossing frame with the right ordinal, tier and sound, the car must keep rolling and the rivals racing, fps during the reveal / celebration, results at 3.6 s + fade or right after a key / click / touch skip, live rows filling in, final `#results` with the forced place, loop stopped, 0 errors; writes `docs/shots/80-*.png` + `docs/shots/80-verify.txt`. All verify scripts run against either renderer (append `?canvas=1` for the fallback); the pixel checks read the active renderer via `__RAD_GAME__.readPixels`. `node docs/check-geometry.mjs` fails on self-intersection, wall overlap/folding, tight radii, heading or curvature jumps. Requires `puppeteer-core` in `node_modules` and Chrome at `/usr/bin/google-chrome`.
 

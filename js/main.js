@@ -1,6 +1,7 @@
 import { loadSave, persistSave } from './career.js';
 import { setMuted, unlockAudio } from './audio.js';
 import { createInput } from './input.js';
+import { buildControls, setLeftHanded } from './controls.js';
 import { createUI } from './ui.js';
 import { createGame } from './game.js';
 import { createRenderer } from './render.js';
@@ -12,6 +13,8 @@ const uiRoot = document.getElementById('ui');
 const save = loadSave();
 setMuted(save.mute);
 
+buildControls(); // v53: data-driven touch layer (must exist before input.js binds to it)
+setLeftHanded(!!save.options.leftHanded);
 const input = createInput();
 const game = createGame(canvas, input);
 try { window.__RAD_GAME__ = game; window.__RAD_INPUT__ = input; } catch (_) {}
@@ -55,7 +58,8 @@ const ui = createUI(uiRoot, {
     else ui.showTitle();
   },
   onStartRace: startRace,
-  onHardRefresh: hardRefresh
+  onHardRefresh: hardRefresh,
+  onLeftHanded: (v) => setLeftHanded(v)
 });
 
 /** Menu "Update / hard refresh": drop every service worker and cache, then reload past any HTTP cache. */

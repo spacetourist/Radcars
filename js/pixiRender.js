@@ -15,7 +15,7 @@
  * Same API as createRenderer(): resize, draw, drawCountdown, drawBoostHud, drawWeaponHud, readPixels.
  */
 import * as P from '../vendor/pixi-lean.mjs';
-import { createRenderer } from './render.js';
+import { createRenderer, minimapBox } from './render.js';
 import { CAR_LEN, CAR_WID } from './physics.js';
 import { pointAt, buildStartingGrid } from './tracks.js';
 import { TROPHY, trophyScale, ringState, partAlpha, trophyAnchor, outFade, PLACE_TEXT_Y } from './celebrate.js';
@@ -318,7 +318,9 @@ export async function createPixiRenderer(hudCanvas, app) {
         v.haloUnder = new P.Sprite(haloTex); v.haloUnder.anchor.set(0.5);
         v.haloOver = new P.Sprite(haloRingTex); v.haloOver.anchor.set(0.5);
         v.marker = makeMarker();
-        v.root.addChild(v.haloUnder, v.shadow, v.flame, v.body, v.haloOver, v.marker);
+        // v53 brake lights: two red glows + hot cores at the tail while BRAKE is held
+        v.brakes = [0, 1, 2, 3].map((i) => { const d = new P.Sprite(disc); d.anchor.set(0.5); d.tint = i < 2 ? 0xff2020 : 0xffd0d0; d.visible = false; return d; });
+        v.root.addChild(v.haloUnder, v.shadow, v.flame, v.body, ...v.brakes, v.haloOver, v.marker);
       } else v.root.addChild(v.shadow, v.flame, v.body);
       carLayer.addChild(v.root);
       carViews.set(car, v);
@@ -349,6 +351,14 @@ export async function createPixiRenderer(hudCanvas, app) {
         st.position.set(x0, dy); st.width = ln; st.height = 2.2 * s; st.tint = green ? 0x78ff6e : 0xffbe5a; st.alpha = 0.58;
       });
     } else v.flame.visible = false;
+    if (v.brakes) {
+      const on = !!car.braking, ca = Math.cos(ang), sa = Math.sin(ang);
+      v.brakes.forEach((d, i) => {
+        d.visible = on; if (!on) return;
+        const side = (i % 2 ? 1 : -1) * hw * 0.62, bx = -hl + 3 * s, r = (i < 2 ? 9 : 3.2) * s;
+        d.position.set(car.x + ca * bx - sa * side, car.y + sa * bx + ca * side); d.width = d.height = r * 2; d.alpha = i < 2 ? 0.55 : 1;
+      });
+    }
     if (v.marker) {
       v.marker.position.set(car.x, car.y - (hl + 22 * s)); v.marker.scale.set(s);
       const ap = world.power && world.power.active === 'autopilot';
@@ -427,26 +437,22 @@ export async function createPixiRenderer(hudCanvas, app) {
   let miniFor = null, miniKey = '', miniMap = null;
   const miniDots = pool(miniLayer, disc);
   function buildMinimap(track) {
-    const b = track.bounds;
-    const boxW = Math.min(190, W * 0.24), boxH = Math.min(130, H * 0.24);
-    const sc = Math.min(boxW / (b.maxX - b.minX), boxH / (b.maxY - b.minY));
-    const mw = (b.maxX - b.minX) * sc, mh = (b.maxY - b.minY) * sc;
-    const x0 = W - mw - 14, y0 = 66;
+    const m = minimapBox(track, W, H);
     miniLayer.children.filter((c) => c instanceof P.Graphics).forEach((c) => { miniLayer.removeChild(c); c.destroy(); });
     const g = new P.Graphics();
-    g.roundRect(x0 - 7, y0 - 7, mw + 14, mh + 14, 10).fill({ color: 0x0c1128, alpha: 0.62 }).stroke({ width: 2, color: 0x000000, alpha: 0.5 });
-    const ox = x0 - b.minX * sc, oy = y0 - b.minY * sc, flat = [];
-    for (const p of track.pts) flat.push(ox + p.x * sc, oy + p.y * sc);
-    g.poly(flat, true).stroke({ width: Math.max(track.halfW * 1.2 * sc, 3), color: 0xffffff, alpha: 0.55, join: 'round' });
+    g.roundRect(m.bx, m.by, m.bw, m.bh, 12).fill({ color: 0x0a1022, alpha: 0.62 }).stroke({ width: 2, color: 0x00e8ff, alpha: 0.85 });
+    const flat = [];
+    for (const p of track.pts) flat.push(m.ox + p.x * m.sc, m.oy + p.y * m.sc);
+    g.poly(flat, true).stroke({ width: Math.max(track.halfW * 1.2 * m.sc, 3), color: 0xffffff, alpha: 0.55, join: 'round' });
     miniLayer.addChildAt(g, 0);
-    miniMap = { ox, oy, sc };
-    miniFor = track; miniKey = W + 'x' + H;
+    miniMap = { ox: m.ox, oy: m.oy, sc: m.sc };
+    miniFor = track; miniKey = W + 'x' + H + ':' + m.key;
   }
   function drawMinimap(wd) {
-    if (miniFor !== wd.track || miniKey !== W + 'x' + H) buildMinimap(wd.track);
+    if (miniFor !== wd.track || miniKey !== W + 'x' + H + ':' + minimapBox(wd.track, W, H).key) buildMinimap(wd.track);
     miniDots.begin();
     for (const c of wd.cars) {
-      const d = miniDots.get(), r = c.isPlayer ? 7 : 5;
+      const d = miniDots.get(), r = c.isPlayer ? 6 : 4;
       d.position.set(miniMap.ox + c.x * miniMap.sc, miniMap.oy + c.y * miniMap.sc); d.width = d.height = r * 2; d.tint = hexNum(c.color);
     }
     miniDots.end();

@@ -3,7 +3,7 @@ const KEY = 'radcars_core_v1';
 
 export const DEFAULT_SAVE = {
   mute: false,
-  options: { aiCount: 5, laps: 3, difficulty: 1 },
+  options: { aiCount: 5, laps: 3, difficulty: 1, leftHanded: false },
   bestLaps: {}
 };
 
