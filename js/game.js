@@ -1,9 +1,9 @@
 import { getTrack, buildStartingGrid } from './tracks.js';
 import { createCar, CAR_COLORS, AI_NAMES } from './cars.js';
-import { stepCar, initCarOnTrack, resolveCarCollisions, BOOST_TOP_MUL, CAR_LEN, CAR_WID } from './physics.js';
+import { stepCar, initCarOnTrack, resolveCarCollisions, BOOST_TOP_MUL, CAR_LEN, CAR_WID, slip01 } from './physics.js';
 import { stepAI } from './ai.js';
 import { createRenderer } from './render.js';
-import { sfx } from './audio.js';
+import { sfx, setAudioPaused, engineFrame, wallStrength, WALL } from './audio.js';
 import { clamp, angleDiff } from './util.js';
 import { pointAt } from './tracks.js';
 import { newMissileState, pickTarget, launchMissile, stepMissiles, stepSpin, stepPads } from './weapons.js';
@@ -106,6 +106,7 @@ export function createGame(canvas, input) {
       race: { trackIndex, totalLaps: laps, time: 0, countdown: COUNTDOWN_MS, goFlash: 0, over: false, placesAssigned: 0, lapFlashMs: 0, lapFlashLast: 0, lapFlashBest: 0 }
     };
     world.boost = newBoost();
+    world.fxEvents = []; world.wallLog = []; // v54 feel events (consumed by the renderer's FX) + impact log
     world.missile = newMissileState();
     world.power = newPowerState();
     world.missiles = [];
@@ -138,7 +139,7 @@ export function createGame(canvas, input) {
     const dt = Math.min(50, now - last);
     last = now;
     if (!paused && update(dt) === 'pause') {
-      paused = true;
+      paused = true; setAudioPaused(true);
       if (onPause) onPause();
     }
     if (world.finish) tickFinish(dt);
@@ -277,7 +278,7 @@ export function createGame(canvas, input) {
     if (autopilot) trackAutopilot(world);
     stepMissiles(world, dt, onMissileEnd);
     if (!player.finished) stepBonus(world, standings().indexOf(player) + 1, (pw) => { sfx('bonus'); world.power.flash = { text: POWER_INFO[pw].name + '!', ms: 1100, kind: 'got' }; });
-    if (player.wallHit > 250 && race.time - (race.lastWallSfx || 0) > 300 && !player.finished) { race.lastWallSfx = race.time; sfx('wall'); }
+    emitFeelEvents();
     checkLaps();
     if (race.lapFlashMs > 0) race.lapFlashMs = Math.max(0, race.lapFlashMs - dt);
 
@@ -286,6 +287,36 @@ export function createGame(canvas, input) {
     // once the player is home, give the field about one more lap (min 15s) to finish on the longer circuits
     const grace = Math.max(15000, (player.bestLapMs || 0) * 1.1);
     if ((player.finished && race.time - player.finishTime > grace) || allDone || timeout) finishRace();
+  }
+
+  /**
+   * v54 feel events, once per frame after physics: ONE `wall` event per hit per car (wallHit > 200, 150 ms cooldown,
+   * strength = clamp((wallHit − 200)/700, 0, 1)) and ONE `boost` event when a car's boostLevel rises past 0.15 (re-arms
+   * below 0.05). The renderer's FX and the audio read the same events. Wall impacts are logged for the verify scripts.
+   */
+  function emitFeelEvents() {
+    const race = world.race, ev = world.fxEvents;
+    for (const c of world.cars) {
+      if (c.wallHit > WALL.threshold && race.time - (c.lastWallEv ?? -1e9) >= WALL.cooldownMs) {
+        c.lastWallEv = race.time;
+        const strength = wallStrength(c.wallHit);
+        const e = { type: 'wall', car: c, strength, heavy: strength >= WALL.heavy, x: c.x + (c.wallNx || 0) * 20, y: c.y + (c.wallNy || 0) * 20,
+          nx: c.wallNx || 0, ny: c.wallNy || 0, vn: c.wallHit, spd: c.wallSpd || 0, ang: c.wallAng || 0, t: race.time };
+        ev.push(e);
+        if (world.wallLog.length < 2000) world.wallLog.push({ id: c.id, p: c.isPlayer, vn: Math.round(c.wallHit), spd: Math.round(c.wallSpd || 0), angDeg: +((c.wallAng || 0) * 180 / Math.PI).toFixed(1), after: Math.round(Math.hypot(c.vx, c.vy)), t: Math.round(race.time) });
+        if (c.isPlayer && !c.finished) sfx('wall', { wallHit: c.wallHit });
+      }
+      const lvl = c.boostLevel || 0;
+      if (!c.boostArmedOff && lvl > 0.15) { c.boostArmedOff = true; ev.push({ type: 'boost', car: c, x: c.x, y: c.y, t: race.time }); }
+      else if (c.boostArmedOff && lvl < 0.05) c.boostArmedOff = false;
+    }
+    if (ev.length > 64) ev.splice(0, ev.length - 64);
+    // engine hook (silent for now): speed vs base 1100, slip, and the 3 nearest rivals
+    const p = world.player, lay = getLayout();
+    const others = world.cars.filter((c) => c !== p).map((c) => ({ c, d: Math.hypot(c.x - p.x, c.y - p.y) })).sort((a, b) => a.d - b.d).slice(0, 3)
+      .map(({ c, d }) => ({ id: c.id, speed01: Math.hypot(c.vx, c.vy) / 1100, boostLevel: c.boostLevel || 0, dist: d,
+        screenX: lay ? clamp(0.5 + ((c.x - world.cam.x) * (world.cam.zoom || 1)) / Math.max(1, lay.vw), 0, 1) : 0.5 }));
+    engineFrame({ speed01: Math.hypot(p.vx, p.vy) / 1100, boostLevel: p.boostLevel || 0, slip01: slip01(p) }, others);
   }
 
   /** One physics step for every car. Finished cars (v52) cruise on instead of braking to a stop. */
@@ -456,7 +487,7 @@ export function createGame(canvas, input) {
     if (flags.boost && !p.finished && b.activeMs <= 0 && world.power.active !== 'autopilot') {
       if (b.last) { b.activeMs = BOOST_MS; b.free = true; b.freeUses++; }
       else if (b.charge > 0) { b.charge = 0; b.activeMs = BOOST_MS; b.free = false; b.uses++; }
-      if (b.activeMs > 0) { b.lastTriggerMs = world.race.time; b.source = flags.boostSource; sfx('boost'); }
+      if (b.activeMs > 0) { b.lastTriggerMs = world.race.time; b.source = flags.boostSource; } // v54: no press sound — the boostLevel 0.15 edge drives boost FX (+ the whoosh later)
     }
     if (b.activeMs > 0) b.activeMs = Math.max(0, b.activeMs - dt);
     if (p.finished) b.activeMs = 0;
@@ -680,7 +711,7 @@ export function createGame(canvas, input) {
     readPixels: (x, y, w, h) => renderer.readPixels(x, y, w, h), // verification (device px of the race view)
     // Pausing freezes the boost timer (update() does not run); resuming drops any boost
     // request queued while paused so Shift/GAS taps on the pause screen never fire a boost.
-    setPaused(v) { paused = v; if (!v) { last = performance.now(); input.clearBoost && input.clearBoost(); } },
+    setPaused(v) { paused = v; setAudioPaused(v); if (!v) { last = performance.now(); input.clearBoost && input.clearBoost(); } },
     isPaused: () => paused,
     setOnFinish(fn) { onFinish = fn; },            // fn(result): result.live = provisional (rivals still finishing), result.final = done
     setOnReveal(fn) { onReveal = fn; },            // fn(info) → { hide(ms), remove() }: the big place text (ui.js)

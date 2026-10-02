@@ -254,4 +254,6 @@
 .hud .pill-pos { gap: 0.04em; }
 
 /* v53.1 integration: label bump so 64 px discs don't get 9.6 px labels on 1x desktop screens (POLISH.md caveat) */
-@media (max-resolution: 1.5dppx) { .act:not(.act-brake) .act-label { font-size: calc(var(--d) * 0.16); } }
+/* v54 (GD / Pep): small-disc labels never below 9 CSS px on phones (landscape arc / narrow screens gave ~8 px) */
+.act:not(.act-brake) .act-label { font-size: max(9px, calc(var(--d) * 0.15)); }
+@media (max-resolution: 1.5dppx) { .act:not(.act-brake) .act-label { font-size: max(9px, calc(var(--d) * 0.16)); } }
