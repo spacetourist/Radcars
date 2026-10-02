@@ -108,7 +108,10 @@ async function startRace(page, ti) {
 }
 async function quitRace(page) {
   await page.evaluate(() => { window.__botStop && window.__botStop(); clearInterval(window.__recT); cancelAnimationFrame(window.__fr); });
-  if (await page.$('#results')) { await page.click('#title'); }
+  // v52: once the player is home there's no pause (P skips the finish reveal); the results screen (live or final)
+  // comes up within ~4 s and its Menu button leaves the race
+  if (!(await page.$('.results-screen')) && (await page.evaluate(() => !!window.__RAD_GAME__.world?.player.finished))) await page.waitForSelector('.results-screen', { timeout: 8000 });
+  if (await page.$('.results-screen')) { await page.click('#title'); }
   else {
     const s = await st(page);
     if (s.cd > 0) await waitFor(page, (x) => x.cd <= 0, 6000);

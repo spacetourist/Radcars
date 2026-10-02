@@ -5,6 +5,7 @@ import { persistSave } from './career.js';
 import { fmtTime } from './util.js';
 import { CAR_COLORS } from './cars.js';
 import { CAR_STYLES, drawToy, textureTile } from './toyart.js';
+import { TIERS } from './celebrate.js';
 
 /**
  * v51 'toys' menus: Callum's rainy neon city photo behind the menus (menu-only, lazily loaded), dark glass panels,
@@ -110,7 +111,7 @@ export function createUI(root, api) {
     return { g, w, h, dpr };
   }
 
-  const clear = () => { anims.clear(); root.innerHTML = ''; setBg(null); };
+  const clear = () => { anims.clear(); root.innerHTML = ''; root.classList.remove('scrim'); setBg(null); removeReveal(); };
   const showHud = () => hud.classList.remove('hidden');
   const hideHud = () => hud.classList.add('hidden');
 
@@ -118,7 +119,9 @@ export function createUI(root, api) {
     anims.clear();
     root.innerHTML = '';
     hideHud();
-    setBg(bgMode);
+    // 'scrim' (v52 live results): no photo, just a dark scrim over the still-running race behind the panel
+    root.classList.toggle('scrim', bgMode === 'scrim');
+    setBg(bgMode === 'scrim' ? null : bgMode);
     const el = document.createElement('div');
     el.className = 'screen ' + cls;
     el.innerHTML = html;
@@ -231,7 +234,7 @@ export function createUI(root, api) {
     const o = save.options;
     const el = screen(`
       <h1>Pick a track</h1>
-      <p class="tagline">${DIFFICULTIES[o.difficulty].label} · ${o.laps} laps · ${o.aiCount} rivals</p>
+      <p class="tagline">${DIFFICULTIES[o.difficulty].label} · ${o.laps} lap${o.laps === 1 ? '' : 's'} · ${o.aiCount} rival${o.aiCount === 1 ? '' : 's'}</p>
       <div class="track-grid" id="tracks"></div>
       <div class="row foot-row"><button class="btn grey" data-act="back">Back</button></div>`, 'select-screen');
     const grid = el.querySelector('#tracks');
@@ -244,8 +247,8 @@ export function createUI(root, api) {
         <canvas class="track-preview" aria-hidden="true"></canvas>
         <h3>${t.name}</h3>
         <p class="stars" aria-label="Difficulty ${t.difficulty} of 3">${'★'.repeat(t.difficulty)}<span>${'★'.repeat(3 - t.difficulty)}</span></p>
-        <p class="stat">Best lap <b>${fmtTime(best)}</b></p>
-        <button class="btn primary" data-i="${i}">Race</button>`;
+        <p class="stat">${best ? `Best lap <b>${fmtTime(best)}</b>` : '<span class="no-time">No time yet</span>'}</p>
+        <button class="btn primary track-race" data-i="${i}" style="--accent:${t.wall}">Race</button>`;
       card.querySelector('button').onclick = () => { sfx('click'); api.onStartRace(i); };
       card.querySelector('canvas').onclick = () => card.querySelector('button').click();
       grid.appendChild(card);
@@ -346,7 +349,12 @@ export function createUI(root, api) {
         { p: top[2], x: cx + bw + gap, hgt: h * 0.26, col: ['#f0b07a', '#a8602c'], n: '3' }
       ];
       for (const b of blocks) {
-        if (!b.p) continue;
+        if (!b.p) { // v52 live results: an empty plastic block waits for its car
+          const x0 = b.x - bw / 2, y0 = baseY - b.hgt * 0.6;
+          g.fillStyle = 'rgba(255,255,255,0.06)'; g.strokeStyle = 'rgba(255,255,255,0.18)'; g.lineWidth = 2; g.setLineDash([5, 5]);
+          g.beginPath(); g.roundRect ? g.roundRect(x0, y0, bw, b.hgt * 0.6, [10, 10, 4, 4]) : g.rect(x0, y0, bw, b.hgt * 0.6); g.fill(); g.stroke(); g.setLineDash([]);
+          continue;
+        }
         const x0 = b.x - bw / 2, y0 = baseY - b.hgt;
         g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(x0 + 5, y0 + 7, bw, b.hgt - 3);
         const lg = g.createLinearGradient(0, y0, 0, baseY); lg.addColorStop(0, b.col[0]); lg.addColorStop(1, b.col[1]);
@@ -366,26 +374,91 @@ export function createUI(root, api) {
     return drawn;
   }
 
-  function showResults(result, onDone) {
-    const rows = result.standings.map((s) => `
-      <div class="res-row ${s.isPlayer ? 'me' : ''}"><span class="place p${s.place}">${s.place}</span><span class="swatch" style="background:${s.color}"></span>
+  /**
+   * Results. v52: the screen can come up while the rivals are still finishing (result.live): it sits on a dark scrim
+   * over the running race, unfinished cars show "racing · lap n/N" and the podium fills in; each call with a newer
+   * result updates it in place. The final result (result.final) gives the standings card its id="results" (what the
+   * verify scripts wait for) and fades the menu photo in behind (the race has stopped by then).
+   */
+  let resultsView = null;
+  const ordSuf = (n) => n + ((n % 100 >= 11 && n % 100 <= 13) ? 'TH' : ({ 1: 'ST', 2: 'ND', 3: 'RD' }[n % 10] || 'TH'));
+  function resultRows(result) {
+    return result.standings.map((s) => `
+      <div class="res-row ${s.isPlayer ? 'me' : ''} ${s.racing ? 'racing' : ''}"><span class="place ${s.racing ? '' : 'p' + s.place}">${s.place}</span><span class="swatch" style="background:${s.color}"></span>
       <span class="who">${s.isPlayer ? '<strong>You</strong>' : s.name}</span>
-      <span class="stat">${s.dnf ? 'DNF' : fmtTime(s.finishTime)} · best ${fmtTime(s.bestLapMs)}</span></div>`).join('');
+      <span class="stat">${s.racing ? `<i class="live-dot"></i>racing · lap ${s.lap}/${result.totalLaps || s.lap}` : `${s.dnf ? 'DNF' : fmtTime(s.finishTime)} · best ${fmtTime(s.bestLapMs)}`}</span></div>`).join('');
+  }
+  function showResults(result, onDone) {
+    const live = !!result.live;
+    const head = `${result.playerPlace === 1 ? 'You win!' : 'Race Over'}`;
+    const tag = `${result.trackName} · You finished ${result.playerPlace ? ordSuf(result.playerPlace) : '—'}${result.totalTime ? ' · ' + fmtTime(result.totalTime) : ''}`;
+    const v = resultsView;
+    if (v && v.el.isConnected && v.live) { // update the live screen in place
+      v.card.innerHTML = resultRows(result);
+      v.top.length = 0; v.top.push(...podiumTop(result));
+      v.live = live; v.onDone = onDone;
+      v.el.querySelector('.tagline-text').textContent = tag;
+      if (!live) {
+        v.card.id = 'results'; v.el.classList.remove('live');
+        const chip = v.el.querySelector('.live-chip'); if (chip) chip.remove();
+        root.classList.remove('scrim');
+        if (bg) bg.classList.add('fade-in');
+        setBg('blur');
+      }
+      return;
+    }
     const el = screen(`
-      <h1>${result.playerPlace === 1 ? 'You win!' : 'Race Over'}</h1>
-      <p class="tagline">${result.trackName} · You finished P${result.playerPlace}</p>
+      <h1>${head}</h1>
+      <p class="tagline"><span class="tagline-text">${tag}</span>${live ? ' <span class="live-chip"><i class="live-dot"></i>rivals still finishing</span>' : ''}</p>
       <div class="results-wrap">
         <canvas class="podium" aria-hidden="true"></canvas>
-        <div class="card" id="results">${rows}</div>
+        <div class="card" ${live ? 'data-live="1"' : 'id="results"'}>${resultRows(result)}</div>
       </div>
       <div class="row foot-row">
         <button class="btn primary" id="again">Race again</button>
         <button class="btn grey" id="title">Menu</button>
-      </div>`, 'results-screen');
-    el.querySelector('#again').onclick = () => { sfx('click'); onDone('again'); };
-    el.querySelector('#title').onclick = () => { sfx('click'); onDone('title'); };
-    podiumCanvas(el.querySelector('.podium'), result.standings.slice(0, 3));
+      </div>`, 'results-screen' + (live ? ' live' : ''), live ? 'scrim' : 'blur');
+    const top = podiumTop(result);
+    resultsView = { el, card: el.querySelector('.results-wrap > .card'), top, live, onDone };
+    el.querySelector('#again').onclick = () => { sfx('click'); resultsView.onDone('again'); };
+    el.querySelector('#title').onclick = () => { sfx('click'); resultsView.onDone('title'); };
+    podiumCanvas(el.querySelector('.podium'), top);
+  }
+  function podiumTop(result) {
+    const st = result.standings;
+    return [0, 1, 2].map((i) => (st[i] && !st[i].racing ? st[i] : null));
   }
 
-  return { showTitle, showTrackSelect, showOptions, updateHud, hideHud, showPause, showResults, clear };
+  /**
+   * v52 finishing-position reveal: big 1ST / 2ND / 3RD / 4TH… slammed in over the live race (DOM text: crisp at any
+   * DPR, identical on the Pixi and Canvas renderers). Confetti, light ring and trophy are drawn by the renderer.
+   * Tap anywhere (or a non-driving key, handled in game.js) to skip to the results.
+   */
+  let revealEl = null;
+  function removeReveal() { if (revealEl) { revealEl.remove(); revealEl = null; } }
+  function showFinishReveal(info) {
+    removeReveal();
+    const tier = TIERS[info.tier] || TIERS.plain;
+    const el = document.createElement('div');
+    el.className = `finish-reveal tier-${info.tier}`;
+    el.id = 'finish-reveal';
+    el.style.setProperty('--fr-glow', tier.glow);
+    el.innerHTML = `
+      <div class="fr-block" role="status" aria-live="assertive" aria-label="You finished ${info.text}">
+        <div class="fr-place"><span class="fr-num">${info.num}</span><span class="fr-suf">${info.suffix}</span></div>
+        <div class="fr-word">${info.word}</div>
+        <div class="fr-meta">${fmtTime(info.timeMs)} · ${info.place} of ${info.total}</div>
+      </div>
+      <div class="fr-skip">tap to continue</div>`;
+    el.addEventListener('pointerdown', (e) => { e.preventDefault(); info.onSkip && info.onSkip('tap'); });
+    document.getElementById('app').appendChild(el);
+    revealEl = el;
+    hideHud();
+    return {
+      hide(ms) { el.style.setProperty('--fr-out', ms + 'ms'); el.classList.add('fr-out'); },
+      remove() { if (revealEl === el) removeReveal(); else el.remove(); }
+    };
+  }
+
+  return { showTitle, showTrackSelect, showOptions, updateHud, hideHud, showPause, showResults, showFinishReveal, clear };
 }

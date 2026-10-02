@@ -20,7 +20,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function deploy(ref) {
   rmSync(site, { recursive: true, force: true }); mkdirSync(site, { recursive: true });
   const files = 'index.html sw.js manifest.webmanifest css js icons';
-  if (ref === 'worktree') execSync(`cp -r ${files} ${site}/`, { cwd: repo });
+  if (ref === 'worktree') execSync(`cp -r ${files} vendor ${site}/`, { cwd: repo }); // v51+: vendored Pixi
   else execSync(`git archive ${ref} ${files} | tar -x -C ${site}`, { cwd: repo, shell: '/bin/bash' });
 }
 const cacheName = () => {
@@ -59,11 +59,13 @@ try {
   let s = await until((x) => x.controlled && x.caches.includes('radcars-v47-boost'), 10000);
   check(s.controlled && s.caches.includes('radcars-v47-boost') && s.brk && !s.sw, `tab is controlled by the v47 worker (caches ${JSON.stringify(s.caches)}, BRK button present, no v48 page code)`);
 
-  log(`\n2) deploy v48 (working tree, cache ${(deploy('worktree'), cacheName())}) under the open tab; the user refreshes / returns to it once`);
+  deploy('worktree'); const wt = cacheName(); // working-tree build (was pinned to radcars-v48-missile)
+  log(`\n2) deploy v48 (working tree, cache ${wt}) under the open tab; the user refreshes / returns to it once`);
   const n0 = navs;
   await page.reload({ waitUntil: 'networkidle2' });
-  s = await until((x) => x.caches.includes('radcars-v48-missile') && !x.caches.includes('radcars-v47-boost') && x.sw && x.hint && !x.brk && navs - n0 >= 2, 15000);
-  check(s.caches.includes('radcars-v48-missile') && !s.caches.includes('radcars-v47-boost') && s.controlled && !!s.sw && !s.brk && s.hint,
+  // the v48 touch hint (.tc-hint) was removed in later builds, so it is no longer required here
+  s = await until((x) => x.caches.includes(wt) && !x.caches.includes('radcars-v47-boost') && x.sw && !x.brk && navs - n0 >= 2, 15000);
+  check(s.caches.includes(wt) && !s.caches.includes('radcars-v47-boost') && s.controlled && !!s.sw && !s.brk,
     `same tab now runs v48: caches ${JSON.stringify(s.caches)}, v48 page code=${!!s.sw}, BRK gone=${!s.brk}; navigations ${navs - n0} (1 refresh + ${navs - n0 - 1} automatic reload when the v48 worker took control)`);
 
   log(`\n3) next deploy while MID-RACE: update found on visibilitychange, reload deferred until the menu`);

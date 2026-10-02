@@ -18,6 +18,7 @@ import * as P from '../vendor/pixi-lean.mjs';
 import { createRenderer } from './render.js';
 import { CAR_LEN, CAR_WID } from './physics.js';
 import { pointAt, buildStartingGrid } from './tracks.js';
+import { TROPHY, trophyScale, ringState, partAlpha, trophyAnchor, outFade, PLACE_TEXT_Y } from './celebrate.js';
 import { styleFor, carSprite, shadowSprite, textureTile, scaleBucket, SPRITE_W, SPRITE_H, TOY_FONT } from './toyart.js';
 
 const KERB = 24, WALL = 12;
@@ -25,8 +26,8 @@ const hexNum = (h) => parseInt(h.slice(1), 16);
 
 // bilinear within the nearest mip level: half the texture taps of trilinear, visually the same here (fill-bound GPUs)
 const MIP_FILTER = typeof location !== 'undefined' && /[?&]mipl=1/.test(location.search) ? 'linear' : 'nearest';
-function canvasTexture(cv, mip = true, repeat = false) {
-  const source = new P.CanvasSource({ resource: cv, autoGenerateMipmaps: mip, scaleMode: 'linear', mipmapFilter: MIP_FILTER, addressMode: repeat ? 'repeat' : 'clamp-to-edge' });
+function canvasTexture(cv, mip = true, repeat = false, mipFilter = MIP_FILTER) {
+  const source = new P.CanvasSource({ resource: cv, autoGenerateMipmaps: mip, scaleMode: 'linear', mipmapFilter: mipFilter, addressMode: repeat ? 'repeat' : 'clamp-to-edge' });
   return new P.Texture({ source });
 }
 function bake(w, h, fn) {
@@ -46,7 +47,8 @@ export async function createPixiRenderer(hudCanvas, app) {
     const q = location.search, attrs = { alpha: false, antialias: /[?&]aa=1/.test(q), depth: false, stencil: true, premultipliedAlpha: true, preserveDrawingBuffer: false, powerPreference: 'high-performance' };
     const context = /[?&]ctx=0/.test(q) ? undefined : (glCanvas.getContext('webgl2', attrs) || glCanvas.getContext('webgl', attrs));
     if (!context && !/[?&]ctx=0/.test(q)) throw new Error('WebGL context unavailable');
-    await renderer.init({ canvas: glCanvas, context, width: 2, height: 2, resolution: 1, antialias: attrs.antialias, background: 0x0c0c12, powerPreference: 'high-performance', preference: 'webgl' });
+    // v52 HD: resolution = min(devicePixelRatio, 2) with autoDensity (CSS size = logical px, backing store = device px)
+    await renderer.init({ canvas: glCanvas, context, width: 2, height: 2, resolution: Math.min(window.devicePixelRatio || 1, 2), autoDensity: true, antialias: attrs.antialias, background: 0x0c0c12, powerPreference: 'high-performance', preference: 'webgl' });
   } catch (e) { glCanvas.remove(); throw e; }
   // Pixi's batch shader picks the texture with an if-chain over every bound unit (16 on most GPUs); software GL
   // (SwiftShader) and weak mobile GPUs run that chain per fragment, so batches are capped to a few textures.
@@ -172,7 +174,7 @@ export async function createPixiRenderer(hudCanvas, app) {
       const pat = g.createPattern(textureTile('asphalt', track.asphalt, 256), 'repeat');
       g.fillStyle = pat; g.fillRect(-hw, 0, hw * 2, ROAD_PERIOD); g.restore();
       band(hw * 0.5, '#ffffff', 0.025); band(hw * 0.28, '#ffffff', 0.025);
-      side(hw - 10, hw + 10, track.wall, 0.15); side(hw - 3, hw + 3, track.wall);
+      side(hw - 17, hw + 17, track.wall, 0.18); side(hw - 3, hw + 3, track.wall); // v52: wider 18% neon glow under the edge line
       g.globalAlpha = 0.14; g.fillStyle = '#ffffff'; for (let y = 0; y < ROAD_PERIOD; y += 128) g.fillRect(-3, y, 6, 50); g.globalAlpha = 1;
     });
     return canvasTexture(cv, true, true);
@@ -286,7 +288,8 @@ export async function createPixiRenderer(hudCanvas, app) {
     let t = carTexCache.get(key);
     if (!t) {
       const body = carSprite(st, car.color, car.isPlayer, R), sh = shadowSprite(st.variant, R);
-      t = { body: canvasTexture(body), shadow: canvasTexture(sh), w: body.width, h: body.height, R, variant: st.variant };
+      // v52 HD: cars are supersampled (see buildCars) and minified through the mip chain with trilinear filtering
+      t = { body: canvasTexture(body, true, false, 'linear'), shadow: canvasTexture(sh, true, false, 'linear'), w: body.width, h: body.height, R, variant: st.variant };
       carTexCache.set(key, t);
     }
     return t;
@@ -299,7 +302,9 @@ export async function createPixiRenderer(hudCanvas, app) {
   function buildCars(cars) {
     carLayer.removeChildren().forEach((c) => c.destroy({ children: true }));
     carViews.clear();
-    const R = scaleBucket(0.95 * DPR); // HD: the closest race zoom at this devicePixelRatio
+    // v52 HD: 2× the on-screen size at the closest race zoom (0.95) at this devicePixelRatio, so even the grid / finish
+    // close-ups minify a sharper texture (before: 1×, and the far chase zoom fell to a soft mip level)
+    const R = scaleBucket(2 * 0.95 * DPR);
     const order = [...cars.filter((c) => !c.isPlayer), ...cars.filter((c) => c.isPlayer)];
     for (const car of order) {
       const t = carTextures(car, R);
@@ -507,6 +512,57 @@ export async function createPixiRenderer(hudCanvas, app) {
     blit(cSlot);
   }
 
+  // ------------------------------------------------------------------ v52 finish celebration (screen space, CSS px)
+  // Confetti = pooled tinted quads, the trophy is a Graphics built once from celebrate.js's TROPHY spec, the light
+  // burst is a Graphics sunburst + soft glow, the podium ring a tinted ring sprite. The place text itself is DOM (ui.js).
+  const celebLayer = new P.Container();
+  stage.addChildAt(celebLayer, stage.children.indexOf(miniLayer) + 1);
+  const confPool = pool(celebLayer, white);
+  const ringSpr = new P.Sprite(ring); ringSpr.anchor.set(0.5); ringSpr.visible = false;
+  const trophyRoot = new P.Container(); trophyRoot.visible = false;
+  const glowSpr = new P.Sprite(softDot); glowSpr.anchor.set(0.5); glowSpr.tint = 0xffd34d;
+  const rays = new P.Graphics();
+  for (let i = 0; i < 14; i++) { const a0 = (i / 14) * Math.PI * 2, a1 = a0 + Math.PI / 14; rays.poly([0, 0, Math.cos(a0) * 100, Math.sin(a0) * 100, Math.cos(a1) * 100, Math.sin(a1) * 100], true).fill({ color: 0xfff0a0, alpha: 0.32 }); }
+  const trophyG = new P.Graphics();
+  for (const sh of TROPHY) {
+    if (sh.k === 'poly') trophyG.poly(sh.pts, true);
+    else if (sh.k === 'rect') trophyG.roundRect(sh.x, sh.y, sh.w, sh.h, sh.r || 0);
+    else trophyG.circle(sh.x, sh.y, sh.r);
+    trophyG.fill({ color: hexNum(sh.fill), alpha: sh.alpha ?? 1 });
+    if (sh.stroke) trophyG.stroke({ width: 2.5, color: hexNum(sh.stroke), alpha: 0.9, join: 'round' });
+  }
+  trophyRoot.addChild(glowSpr, rays, trophyG);
+  celebLayer.addChild(ringSpr, trophyRoot);
+  function drawCelebration(c) {
+    confPool.begin();
+    ringSpr.visible = trophyRoot.visible = false;
+    if (c) {
+      const t = c.t, cx = W / 2, cy = H / 2, u = H, fade = outFade(c);
+      celebLayer.alpha = 1; ringSpr.alpha = trophyRoot.alpha = fade;
+      if (c.tier.ring) {
+        const r = ringState(t);
+        if (r.alpha > 0) { ringSpr.visible = true; ringSpr.position.set(cx, cy + PLACE_TEXT_Y * u); ringSpr.width = ringSpr.height = (0.2 + 0.9 * r.k) * u; ringSpr.tint = hexNum(c.tier.color); ringSpr.alpha = r.alpha * fade; }
+      }
+      if (c.tier.trophy) {
+        const k = trophyScale(t), an = trophyAnchor(c.aspect);
+        if (k > 0 && fade > 0) {
+          const px = an.size * u / 120;
+          trophyRoot.visible = true; trophyRoot.position.set(cx + an.x * u, cy + an.y * u);
+          trophyG.scale.set(px * k); trophyG.rotation = 0.06 * Math.sin(t / 420);
+          rays.visible = !!c.tier.rays; rays.rotation = t / 2600; rays.scale.set(px * 1.25 * Math.min(1, k));
+          glowSpr.width = glowSpr.height = 190 * px * Math.min(1, k); glowSpr.alpha = 0.55 + 0.2 * Math.sin(t / 300);
+        }
+      }
+      for (const p of c.parts) {
+        const sp = confPool.get(), a = partAlpha(p);
+        sp.position.set(cx + p.x * u, cy + p.y * u); sp.rotation = p.rot;
+        sp.width = p.w * u; sp.height = Math.max(0.6, Math.abs(Math.cos(p.flip)) * p.h * u);
+        sp.tint = hexNum(p.col); sp.alpha = a;
+      }
+    }
+    confPool.end();
+  }
+
   function draw(wd) {
     const { track, cars, cam } = wd;
     if (builtFor !== track || builtN !== cars.length) buildTrack(track, cars.length);
@@ -519,7 +575,9 @@ export async function createPixiRenderer(hudCanvas, app) {
     const tMs = wd.race.time;
     for (const car of cars) { const v = carViews.get(car); if (v) updateCar(car, v, z, tMs, wd, debugCars); }
     drawTrailsMissilesFx(wd, z);
-    drawMinimap(wd);
+    miniLayer.visible = !wd.finish; // v52: a clean frame for the finish reveal
+    if (!wd.finish) drawMinimap(wd);
+    drawCelebration(wd.finish && wd.finish.cele);
     renderer.render(stage);
     if (debugCars) window.__RAD_DEBUG__.frame = { cars: debugCars, cam: { ...cam }, W, H, DPR, renderer: 'pixi' };
   }

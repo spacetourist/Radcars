@@ -4,6 +4,7 @@
  */
 import { CAR_LEN, CAR_WID } from './physics.js';
 import { pointAt, buildStartingGrid } from './tracks.js';
+import { TROPHY, trophyScale, ringState, partAlpha, trophyAnchor, outFade, PLACE_TEXT_Y } from './celebrate.js';
 import { styleFor, carSprite, shadowSprite, scaleBucket, textureTile, SPRITE_W, SPRITE_H, TOY_FONT } from './toyart.js';
 
 const KERB = 24; // v51: chunkier kerbs (visual only; the drivable width and walls are unchanged)
@@ -99,10 +100,11 @@ export function createRenderer(canvas, opts = {}) {
     ctx.stroke(centre);
     ctx.lineWidth = w * 0.28;
     ctx.stroke(centre);
-    // neon edge lines with a cheap glow: a wider ~15% alpha stroke underneath (no shadowBlur)
+    // neon edge lines with a cheap glow: a wider ~18% alpha stroke underneath (no shadowBlur). v52: widened to 34 wu
+    // (≈10 px on screen at the usual race-speed zoom) per Graphic Designer.
     ctx.strokeStyle = track.wall;
-    ctx.globalAlpha = 0.15;
-    ctx.lineWidth = 20;
+    ctx.globalAlpha = 0.18;
+    ctx.lineWidth = 34;
     ctx.stroke(wallL);
     ctx.stroke(wallR);
     ctx.globalAlpha = 1;
@@ -290,7 +292,8 @@ export function createRenderer(canvas, opts = {}) {
     for (const m of world.missiles || []) if (!m.dead) drawMissile(m, cam.zoom);
     for (const f of world.fx || []) drawFx(f, cam.zoom);
     ctx.restore();
-    drawMinimap(world);
+    if (!world.finish) drawMinimap(world);
+    else drawCelebration(world.finish.cele);
     if (debugCars) window.__RAD_DEBUG__.frame = { cars: debugCars, cam: { ...cam }, W, H, DPR };
   }
 
@@ -299,6 +302,58 @@ export function createRenderer(canvas, opts = {}) {
    * a flickering orange/yellow exhaust flame from the tail plus a few speed streaks.
    * Sized with the same readability scale as drawCar; the car itself is not changed.
    */
+  /** v52 finish celebration (screen space): podium ring, gold trophy with a light burst, confetti — see celebrate.js. */
+  let trophyPath = null;
+  function drawCelebration(c) {
+    if (!c) return;
+    const t = c.t, cx = W / 2, cy = H / 2, u = H, fade = outFade(c);
+    if (c.tier.ring) {
+      const r = ringState(t);
+      if (r.alpha * fade > 0) {
+        ctx.globalAlpha = r.alpha * fade; ctx.strokeStyle = c.tier.color; ctx.lineWidth = Math.max(2, 0.012 * u);
+        ctx.beginPath(); ctx.arc(cx, cy + PLACE_TEXT_Y * u, (0.1 + 0.45 * r.k) * u, 0, Math.PI * 2); ctx.stroke(); ctx.globalAlpha = 1;
+      }
+    }
+    if (c.tier.trophy) {
+      const k = trophyScale(t), an = trophyAnchor(c.aspect);
+      if (k > 0 && fade > 0) {
+        const px = an.size * u / 120;
+        ctx.globalAlpha = fade;
+        if (!trophyPath) trophyPath = TROPHY.map((sh) => {
+          const p = new Path2D();
+          if (sh.k === 'poly') { sh.pts.forEach((v, i) => { if (i % 2) (i === 1 ? p.moveTo : p.lineTo).call(p, sh.pts[i - 1], v); }); p.closePath(); }
+          else if (sh.k === 'rect') { if (p.roundRect) p.roundRect(sh.x, sh.y, sh.w, sh.h, sh.r || 0); else p.rect(sh.x, sh.y, sh.w, sh.h); }
+          else p.arc(sh.x, sh.y, sh.r, 0, Math.PI * 2);
+          return { p, sh };
+        });
+        ctx.save(); ctx.translate(cx + an.x * u, cy + an.y * u);
+        const gk = Math.min(1, k), gr = 95 * px * gk;
+        const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, gr);
+        glow.addColorStop(0, `rgba(255,211,77,${(0.55 + 0.2 * Math.sin(t / 300)) * fade})`); glow.addColorStop(1, 'rgba(255,211,77,0)');
+        ctx.fillStyle = glow; ctx.fillRect(-gr, -gr, gr * 2, gr * 2);
+        if (c.tier.rays) {
+          ctx.save(); ctx.rotate(t / 2600); ctx.fillStyle = `rgba(255,240,160,${0.32 * fade})`; const R = 125 * px * gk;
+          ctx.beginPath();
+          for (let i = 0; i < 14; i++) { const a0 = (i / 14) * Math.PI * 2, a1 = a0 + Math.PI / 14; ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a0) * R, Math.sin(a0) * R); ctx.lineTo(Math.cos(a1) * R, Math.sin(a1) * R); ctx.closePath(); }
+          ctx.fill(); ctx.restore();
+        }
+        ctx.rotate(0.06 * Math.sin(t / 420)); ctx.scale(px * k, px * k);
+        ctx.lineJoin = 'round'; ctx.lineWidth = 2.5;
+        for (const { p, sh } of trophyPath) {
+          ctx.globalAlpha = (sh.alpha ?? 1) * fade; ctx.fillStyle = sh.fill; ctx.fill(p);
+          if (sh.stroke) { ctx.globalAlpha = 0.9 * fade; ctx.strokeStyle = sh.stroke; ctx.stroke(p); }
+        }
+        ctx.globalAlpha = 1; ctx.restore();
+      }
+    }
+    for (const p of c.parts) {
+      const w = p.w * u, h = Math.max(0.6, Math.abs(Math.cos(p.flip)) * p.h * u);
+      ctx.save(); ctx.globalAlpha = partAlpha(p); ctx.translate(cx + p.x * u, cy + p.y * u); ctx.rotate(p.rot);
+      ctx.fillStyle = p.col; ctx.fillRect(-w / 2, -h / 2, w, h); ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+  }
+
   function drawBoostFlame(car, zoom, tMs) {
     const lvl = car.boostLevel;
     if (car.spinMs > 0) return;

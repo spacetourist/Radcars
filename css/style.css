@@ -279,6 +279,7 @@ canvas.parade {
 .track-pick .stat { font-size: 0.8rem; color: var(--muted); }
 .track-pick .stat b { color: #fff; }
 .track-pick .btn { margin-top: 4px; }
+.track-pick .no-time { font-style: italic; opacity: 0.85; } /* v52 */
 
 /* options */
 .opt-wrap { display: grid; grid-template-columns: minmax(300px, 1.1fr) minmax(220px, 1fr); gap: 12px; align-items: start; }
@@ -641,3 +642,79 @@ canvas.podium { display: block; width: 100%; height: 200px; }
 .pw-next svg { width: 12px; height: 12px; fill: currentColor; display: block; }
 .pw-bar { position: absolute; left: 6px; right: 6px; bottom: 4px; height: 3px; background: rgba(255, 255, 255, 0.14); border-radius: 2px; }
 .pw-bar > span { display: block; height: 100%; background: var(--pw); border-radius: 2px; }
+
+/* ——— v52 'finish': finishing-position reveal (big place text over the live race) ——— */
+#ui.scrim { background: radial-gradient(ellipse at center, rgba(8,8,14,0.45), rgba(4,4,8,0.8)); } /* live results: race keeps running behind */
+#menu-bg.on.fade-in { animation: bgIn 0.6s ease both; }
+@keyframes bgIn { from { opacity: 0; } to { opacity: 1; } }
+.finish-reveal {
+  position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center;
+  padding-bottom: 8vh; pointer-events: auto; cursor: pointer; touch-action: none;
+  background: radial-gradient(ellipse at 50% 42%, rgba(0,0,0,0.38), rgba(0,0,0,0) 62%);
+  --fr-glow: rgba(0,232,255,0.7); --fr-out: 320ms;
+}
+.finish-reveal .fr-block { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.finish-reveal .fr-place {
+  font-family: var(--font-display); font-weight: 900; font-style: italic; line-height: 0.86; letter-spacing: -0.02em;
+  font-size: min(26vh, 19vw, 250px); padding: 0 0.12em;
+  color: transparent; -webkit-background-clip: text; background-clip: text;
+  background-image: linear-gradient(180deg, #ffffff 0%, #dff8ff 48%, #7fe9ff 100%);
+  -webkit-text-stroke: max(2px, 0.012em) rgba(0,0,0,0.55);
+  filter: drop-shadow(0 0 0.09em var(--fr-glow)) drop-shadow(0 0.05em 0 rgba(0,0,0,0.6));
+  animation: frSlam 0.5s cubic-bezier(.2,.9,.25,1) both;
+  will-change: transform;
+}
+.finish-reveal .fr-suf { font-size: 0.42em; vertical-align: 0.95em; margin-left: 0.04em; letter-spacing: 0; -webkit-text-stroke-width: 0; } /* no stroke: overlapping glyph contours showed as hairlines */
+.finish-reveal .fr-word {
+  font: 900 italic min(6.6vh, 5vw, 58px)/1 var(--font-display); letter-spacing: 0.08em; color: #fff; margin-top: 0.25em;
+  text-shadow: 0 0 14px var(--fr-glow), 0 3px 0 rgba(0,0,0,0.6);
+  animation: frUp 0.4s 0.34s cubic-bezier(.2,1.3,.4,1) both;
+}
+.finish-reveal .fr-meta {
+  font: 800 min(3.3vh, 2.5vw, 20px)/1 var(--font-display); letter-spacing: 0.06em; color: rgba(255,255,255,0.85); margin-top: 0.55em;
+  background: rgba(8,8,14,0.6); border: 1px solid rgba(255,255,255,0.18); border-radius: 999px; padding: 0.4em 0.9em;
+  animation: frUp 0.4s 0.5s ease-out both;
+}
+.finish-reveal .fr-skip {
+  position: absolute; bottom: max(14px, env(safe-area-inset-bottom, 0px)); left: 0; right: 0; text-align: center;
+  font: 800 12px/1 var(--font-display); letter-spacing: 0.14em; text-transform: uppercase; color: rgba(255,255,255,0.6);
+  animation: frUp 0.4s 0.9s ease-out both, frPulse 1.6s 1.3s ease-in-out infinite;
+}
+/* gold: metallic gradient + a glow sweep running across the text */
+.finish-reveal.tier-gold .fr-place {
+  background-image: linear-gradient(100deg, rgba(255,255,255,0) 40%, rgba(255,255,255,0.95) 50%, rgba(255,255,255,0) 60%), linear-gradient(180deg, #fff7c2 0%, #ffd34d 46%, #e09a10 70%, #b87400 100%);
+  background-size: 260% 100%, 100% 100%; background-repeat: no-repeat;
+  -webkit-text-stroke-color: rgba(70,36,0,0.7);
+  animation: frSlam 0.5s cubic-bezier(.2,.9,.25,1) both, frSweep 1.5s 0.55s ease-in-out infinite;
+}
+.finish-reveal.tier-gold .fr-word { color: #fff3b0; }
+.finish-reveal.tier-silver .fr-place {
+  background-image: linear-gradient(100deg, rgba(255,255,255,0) 42%, rgba(255,255,255,0.9) 50%, rgba(255,255,255,0) 58%), linear-gradient(180deg, #ffffff 0%, #dfe6f0 48%, #a9b3c4 72%, #7d8798 100%);
+  background-size: 260% 100%, 100% 100%; background-repeat: no-repeat;
+  animation: frSlam 0.5s cubic-bezier(.2,.9,.25,1) both, frSweep 1.8s 0.6s ease-in-out 1 both;
+}
+.finish-reveal.tier-bronze .fr-place {
+  background-image: linear-gradient(100deg, rgba(255,255,255,0) 42%, rgba(255,240,220,0.85) 50%, rgba(255,255,255,0) 58%), linear-gradient(180deg, #ffe4c8 0%, #e8a062 48%, #b86a30 72%, #8a4a1c 100%);
+  background-size: 260% 100%, 100% 100%; background-repeat: no-repeat;
+  -webkit-text-stroke-color: rgba(50,20,0,0.65);
+  animation: frSlam 0.5s cubic-bezier(.2,.9,.25,1) both, frSweep 1.8s 0.6s ease-in-out 1 both;
+}
+.finish-reveal.fr-out { animation: frOut var(--fr-out) ease-in both; pointer-events: none; }
+@keyframes frSlam {
+  0% { transform: scale(3.2) rotate(-7deg); opacity: 0; }
+  40% { opacity: 1; }
+  55% { transform: scale(0.9) rotate(0deg); }
+  72% { transform: scale(1.07); }
+  86% { transform: scale(0.985); }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes frSweep { 0% { background-position: 130% 0, 0 0; } 60%, 100% { background-position: -30% 0, 0 0; } }
+@keyframes frUp { from { opacity: 0; transform: translateY(14px) scale(0.92); } to { opacity: 1; transform: none; } }
+@keyframes frPulse { 50% { opacity: 0.35; } }
+@keyframes frOut { to { opacity: 0; transform: scale(1.12); } }
+@media (prefers-reduced-motion: reduce) { .finish-reveal .fr-place, .finish-reveal .fr-word, .finish-reveal .fr-meta { animation-duration: 0.01s; } }
+/* live results (rivals still finishing) */
+.live-chip { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; padding: 3px 9px; border-radius: 999px; font-size: 0.85em; color: #b8ff00; border: 1px solid rgba(184,255,0,0.5); background: rgba(8,8,14,0.6); }
+.live-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #b8ff00; margin-right: 5px; vertical-align: 1px; animation: frPulse 1s ease-in-out infinite; }
+.res-row.racing .place { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.75); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.25); }
+.res-row.racing .who { opacity: 0.8; }

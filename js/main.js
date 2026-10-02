@@ -78,6 +78,8 @@ function startRace(trackIndex) {
 function startRaceNow(trackIndex) {
   ui.clear();
   ui.hideHud();
+  // v52: called with a live result when the reveal ends (rivals still finishing), again as each one finishes, and
+  // with the final result; the results screen updates in place. Leaving it stops the still-running race.
   game.setOnFinish((result) => {
     const id = TRACKS[trackIndex].id;
     if (result.bestLapMs && (!save.bestLaps[id] || result.bestLapMs < save.bestLaps[id])) {
@@ -85,8 +87,9 @@ function startRaceNow(trackIndex) {
       persistSave(save);
     }
     ui.hideHud();
-    ui.showResults(result, (next) => (next === 'again' ? startRace(trackIndex) : ui.showTitle()));
+    ui.showResults(result, (next) => { game.stopRace(); if (next === 'again') startRace(trackIndex); else ui.showTitle(); });
   });
+  game.setOnReveal((info) => ui.showFinishReveal(info));
   game.setPauseHandler(() => {
     ui.showPause(
       () => game.setPaused(false),
@@ -102,6 +105,7 @@ function startRaceNow(trackIndex) {
   const tick = () => {
     if (!game.isRunning()) return;
     const info = game.getHudInfo();
+    if (info && info.finished) { ui.hideHud(); return; } // v52: the finish reveal / results take over
     if (info) ui.updateHud(info);
     requestAnimationFrame(tick);
   };

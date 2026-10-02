@@ -7,7 +7,8 @@ import { sfx } from './audio.js';
 import { clamp, angleDiff } from './util.js';
 import { pointAt } from './tracks.js';
 import { newMissileState, pickTarget, launchMissile, stepMissiles, stepSpin, stepPads } from './weapons.js';
-import { newPowerState, stepBonus, rocketTargets, autopilotControl, trackAutopilot, POWER_INFO, POWERS, ROCKET_COUNT, ROCKET_GAP_MS, LAPBOOST_MIN_MS, AUTOPILOT_MS, AUTOPILOT_TOP_MUL, AUTOPILOT_HANDBACK_MS, handbackAssist } from './powerups.js';
+import { createCelebration, stepCelebration, FINISH_TIMING, ordinal } from './celebrate.js';
+import { newPowerState, stepBonus, rocketTargets, autopilotControl, cruiseControl, trackAutopilot, POWER_INFO, POWERS, ROCKET_COUNT, ROCKET_GAP_MS, LAPBOOST_MIN_MS, AUTOPILOT_MS, AUTOPILOT_TOP_MUL, AUTOPILOT_HANDBACK_MS, handbackAssist } from './powerups.js';
 
 /** Chase camera: tight at the grid, pulls out and looks ahead with speed. */
 const ZOOM_GRID = 0.85;
@@ -47,7 +48,15 @@ export function createGame(canvas, input) {
   // v51: main.js installs the PixiJS (WebGL) renderer when it initialises, or the Canvas 2D one (?canvas=1 / no WebGL).
   let renderer = null;
   let running = false, paused = false, raf = 0, last = 0;
-  let world = null, onFinish = null, onPause = null, lastDigit = null;
+  let world = null, onFinish = null, onPause = null, onReveal = null, lastDigit = null;
+  // v52 finish flow: timers and the reveal handle belong to one race (token), so a quick "Race again" can't fire them
+  let token = 0, timers = [], revealView = null;
+  const later = (fn, ms) => { const t = token; timers.push(setTimeout(() => { if (t === token) fn(); }, ms)); };
+  function clearFinishFlow() {
+    token++; timers.forEach(clearTimeout); timers = [];
+    if (revealView) { revealView.remove(); revealView = null; }
+    window.removeEventListener('keydown', onSkipKey, true);
+  }
 
   function fit() {
     if (!renderer) return;
@@ -98,6 +107,8 @@ export function createGame(canvas, input) {
     world.missiles = [];
     world.fx = [];
     world.unstick = { stuckMs: 0, reverseMs: 0, count: 0 };
+    world.finish = null; // v52: set when the player crosses the line on the final lap (reveal → results)
+    clearFinishFlow();
     input.clearBoost && input.clearBoost();
     lastDigit = null;
     running = true;
@@ -109,6 +120,7 @@ export function createGame(canvas, input) {
   }
 
   function stopRace() {
+    clearFinishFlow();
     running = false;
     input.showTouch(false);
     cancelAnimationFrame(raf);
@@ -122,8 +134,10 @@ export function createGame(canvas, input) {
       paused = true;
       if (onPause) onPause();
     }
+    if (world.finish) tickFinish(dt);
     updateCamera(dt);
     renderer.draw(world);
+    if (!running) return; // the finish flow may have stopped the race this frame
     const showHud = !world.race.over && !world.player.finished;
     const hud = showHud ? renderer.drawWeaponHud(world.boost, world.missile, boostAnchor(), world.race.countdown > 0) : null;
     lastHud = hud;
@@ -210,7 +224,14 @@ export function createGame(canvas, input) {
     const spd = Math.hypot(p.vx, p.vy);
     const counting = race.countdown > 0;
     let zoom, look, dir;
-    if (counting) {
+    const fin = world.finish;
+    if (fin) {
+      // v52 finish: ease in gently on the player's car (closer for a podium, closest for a win)
+      // (a bit less on short phone screens so the car and the big text both fit)
+      zoom = fin.cele.tier.zoom * clamp(short / 600, 0.7, 1);
+      look = 40;
+      dir = spd > 80 ? Math.atan2(p.vy, p.vx) : p.angle;
+    } else if (counting) {
       // grid framing: slight look-ahead so the car sits lower-middle, then clamp below
       zoom = ZOOM_GRID;
       look = 120;
@@ -232,11 +253,20 @@ export function createGame(canvas, input) {
     look = Math.min(look, maxLook);
 
     const k = 1 - Math.exp(-dt / 180);
-    const zk = counting ? k : (1 - Math.exp(-dt / 400));
+    const zk = counting ? k : (1 - Math.exp(-dt / (fin ? 1100 : 400)));
+    if (cam.shakeX) { cam.x -= cam.shakeX; cam.y -= cam.shakeY; cam.shakeX = cam.shakeY = 0; } // undo last frame's kick
+    // finish: frame the car in the lower part of the screen, under the place text
+    const offY = fin ? (vh * FINISH_TIMING.carScreenY) / Math.max(0.05, cam.zoom) : 0;
     cam.x += (p.x + Math.cos(dir) * look - cam.x) * k;
-    cam.y += (p.y + Math.sin(dir) * look - cam.y) * k;
+    cam.y += (p.y + Math.sin(dir) * look - offY - cam.y) * k;
     cam.zoom += (zoom - cam.zoom) * zk;
     keepPlayerInView(cam, p, vw, vh, margin, carPad);
+    if (fin && fin.ms >= FINISH_TIMING.slamMs && fin.ms < FINISH_TIMING.slamMs + FINISH_TIMING.shakeMs) {
+      // the place text "lands": a short decaying camera kick
+      const e = 1 - (fin.ms - FINISH_TIMING.slamMs) / FINISH_TIMING.shakeMs, a = FINISH_TIMING.shakePx * e * e / Math.max(0.05, cam.zoom);
+      cam.shakeX = Math.sin(fin.ms * 0.11) * a; cam.shakeY = Math.cos(fin.ms * 0.093) * a;
+      cam.x += cam.shakeX; cam.y += cam.shakeY;
+    }
   }
 
   /** Hard safety: if the smoothed cam still puts any part of the car outside the safe rect, shift it. */
@@ -256,7 +286,8 @@ export function createGame(canvas, input) {
   function update(dt) {
     const { track, cars, race, player } = world;
     const flags = input.consumeFlags();
-    if (flags.pause && race.countdown <= 0 && !race.over) return 'pause';
+    // no pause once you're home: P / Esc skip the reveal instead (handled by onSkipKey)
+    if (flags.pause && race.countdown <= 0 && !race.over && !player.finished) return 'pause';
 
     if (race.countdown > 0) {
       race.countdown -= dt;
@@ -267,19 +298,46 @@ export function createGame(canvas, input) {
       return;
     }
     if (race.goFlash > 0) race.goFlash -= dt;
-    if (race.over) return;
+    // v52: the world keeps rolling after the race is decided (everyone cruises) until the results take over
+    if (race.over) { stepCars(flags, dt, false); stepMissiles(world, dt, onMissileEnd); return; }
     race.time += dt;
     updateBoost(flags, dt);
     updateMissile(flags, dt);
     updatePower(flags, dt);
     const autopilot = world.power.active === 'autopilot';
     player.heavy = autopilot;
+    stepCars(flags, dt, autopilot);
+    if (autopilot) trackAutopilot(world);
+    stepMissiles(world, dt, onMissileEnd);
+    if (!player.finished) stepBonus(world, standings().indexOf(player) + 1, (pw) => { sfx('bonus'); world.power.flash = { text: POWER_INFO[pw].name + '!', ms: 1100, kind: 'got' }; });
+    if (player.wallHit > 250 && race.time - (race.lastWallSfx || 0) > 300 && !player.finished) { race.lastWallSfx = race.time; sfx('wall'); }
+    checkLaps();
+    if (race.lapFlashMs > 0) race.lapFlashMs = Math.max(0, race.lapFlashMs - dt);
 
+    const allDone = cars.every((c) => c.finished);
+    const timeout = race.time > race.totalLaps * 120000;
+    // once the player is home, give the field about one more lap (min 15s) to finish on the longer circuits
+    const grace = Math.max(15000, (player.bestLapMs || 0) * 1.1);
+    if ((player.finished && race.time - player.finishTime > grace) || allDone || timeout) finishRace();
+  }
+
+  /** One physics step for every car. Finished cars (v52) cruise on instead of braking to a stop. */
+  function stepCars(flags, dt, autopilot) {
+    const { track, cars } = world;
     for (const c of cars) {
       let topSave = null;
       let ctl;
       const spinning = stepSpin(c, dt);
-      if (c.finished) ctl = { accel: false, brake: true, noReverse: true, steer: 0 };
+      if (c.finished && !spinning) {
+        // gentle cruise: top speed eases down to FINISH_TIMING.cruiseMul × top; the player rides the autopilot rail,
+        // finished rivals keep their own racing line (and still dodge the cars still racing)
+        const el = world.race.time - c.finishTime + (world.race.over ? (c.overMs = (c.overMs || 0) + dt) : 0);
+        const cruise = c.top * FINISH_TIMING.cruiseMul;
+        if (c.cruiseTop == null) { c.cruiseTop = Math.max(cruise, Math.hypot(c.vx, c.vy)); c.cruiseLat0 = c.lat; }
+        c.cruiseTop += (cruise - c.cruiseTop) * (1 - Math.exp(-dt / (FINISH_TIMING.cruiseEaseMs / 2.5)));
+        topSave = c.top; c.top = c.cruiseTop;
+        ctl = c.isPlayer ? cruiseControl(c, track, dt, el) : stepAI(c, cars, track, dt);
+      }
       else if (spinning) ctl = { accel: false, brake: false, steer: 0 }; // hit by a missile: no drive, no steering
       else if (c.isPlayer && autopilot) { ctl = autopilotControl(world, dt); topSave = c.top; c.top = topSave * AUTOPILOT_TOP_MUL; }
       else if (c.isPlayer && world.power.handback) {
@@ -304,11 +362,10 @@ export function createGame(canvas, input) {
       if (!c.finished) stepPads(world, c);
     }
     resolveCarCollisions(cars, track);
-    if (autopilot) trackAutopilot(world);
-    stepMissiles(world, dt, onMissileEnd);
-    stepBonus(world, standings().indexOf(player) + 1, (pw) => { sfx('bonus'); world.power.flash = { text: POWER_INFO[pw].name + '!', ms: 1100, kind: 'got' }; });
-    if (player.wallHit > 250 && race.time - (race.lastWallSfx || 0) > 300) { race.lastWallSfx = race.time; sfx('wall'); }
+  }
 
+  function checkLaps() {
+    const { track, cars, race } = world;
     const L = track.length;
     for (const c of cars) {
       if (c.finished) continue;
@@ -330,17 +387,81 @@ export function createGame(canvas, input) {
           c.finished = true;
           c.finishPlace = ++race.placesAssigned;
           c.finishTime = race.time;
-          if (c.isPlayer) sfx('finish');
+          if (c.isPlayer) startFinish(c.finishPlace);
+          else if (world.finish && world.finish.phase === 'results') liveResults(); // a rival home behind the results
         }
       }
     }
-    if (race.lapFlashMs > 0) race.lapFlashMs = Math.max(0, race.lapFlashMs - dt);
+  }
 
-    const allDone = cars.every((c) => c.finished);
-    const timeout = race.time > race.totalLaps * 120000;
-    // once the player is home, give the field about one more lap (min 15s) to finish on the longer circuits
-    const grace = Math.max(15000, (player.bestLapMs || 0) * 1.1);
-    if ((player.finished && race.time - player.finishTime > grace) || allDone || timeout) finishRace();
+  // ------------------------------------------------------------------ v52 finish flow
+  // Before v52 the player's car was braked to a halt on the line (finished cars got brake + noReverse), the HUD
+  // vanished and nothing was shown until the field finished or the ~1-lap grace ran out (15–20 s of a parked car),
+  // and then the whole sim froze (update() returned early once race.over) for 0.8 s before the results.
+  // Now: the place reveal slams in at once, the car cruises on the autopilot rail, the rivals race on; after
+  // FINISH_TIMING.revealMs (or a tap / key) the results screen comes up and fills in live as the rivals finish.
+  function startFinish(place) {
+    const p = world.player;
+    const aspect = (canvas.clientWidth || innerWidth) / Math.max(1, canvas.clientHeight || innerHeight);
+    world.finish = { place, ms: 0, phase: 'reveal', cele: createCelebration(place, aspect), slammed: false, skip: false, final: null, liveKey: '', skippedAtMs: null };
+    world.boost.activeMs = 0;
+    input.showTouch(false); // the car drives itself now; the whole screen is the skip target
+    const o = ordinal(place);
+    if (onReveal) revealView = onReveal({ place, ...o, tier: world.finish.cele.tierName, word: world.finish.cele.tier.word, timeMs: p.finishTime, total: world.cars.length, onSkip: skipReveal });
+    window.addEventListener('keydown', onSkipKey, true);
+  }
+  // keys that drive the car don't skip (you may still be holding them on the line); anything else does
+  const DRIVE_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd', 'W', 'A', 'S', 'D', 'Shift']);
+  function onSkipKey(e) { if (e.repeat || DRIVE_KEYS.has(e.key)) return; skipReveal('key'); }
+  function skipReveal(src = 'tap') {
+    const f = world && world.finish;
+    if (!f || f.phase !== 'reveal' || f.ms < FINISH_TIMING.skipAfterMs) return false;
+    f.skip = true; f.skippedAtMs = f.ms; f.skipSrc = src;
+    return true;
+  }
+  function tickFinish(dt) {
+    const f = world.finish;
+    f.ms += dt;
+    stepCelebration(f.cele, dt, (canvas.clientWidth || innerWidth) / Math.max(1, canvas.clientHeight || innerHeight));
+    if (!f.slammed && f.ms >= FINISH_TIMING.slamMs) { f.slammed = true; sfx(f.cele.tier.sound); }
+    if (f.phase === 'reveal' && (f.ms >= FINISH_TIMING.revealMs || f.skip)) {
+      f.phase = 'out';
+      window.removeEventListener('keydown', onSkipKey, true);
+      if (revealView) revealView.hide(FINISH_TIMING.outMs);
+      f.cele.outAt = f.ms; // the renderers fade the trophy / light out with the text
+      later(() => {
+        f.phase = 'results';
+        if (revealView) { revealView.remove(); revealView = null; }
+        if (f.final) deliverFinal(); else liveResults();
+      }, FINISH_TIMING.outMs);
+    }
+  }
+  function resultOf(final) {
+    const { cars, race, track } = world, p = world.player;
+    const order = standings();
+    const rows = order.map((c, i) => ({
+      place: c.finished ? c.finishPlace : i + 1, id: c.id, name: c.name, isPlayer: c.isPlayer, color: c.color,
+      finishTime: c.finished && !c.dnf ? c.finishTime : 0, bestLapMs: c.bestLapMs || 0, dnf: !!c.dnf,
+      racing: !c.finished, lap: Math.min(race.totalLaps, Math.max(0, c.lap) + 1)
+    }));
+    return {
+      standings: rows, playerPlace: p.finishPlace, trackName: track.name, trackIndex: race.trackIndex, totalLaps: race.totalLaps,
+      totalTime: p.dnf ? 0 : p.finishTime, bestLapMs: p.bestLapMs || 0, final, live: !final, finishedCount: cars.filter((c) => c.finished && !c.dnf).length
+    };
+  }
+  function liveResults() {
+    const f = world.finish;
+    if (!f || f.phase !== 'results' || f.final) return;
+    const r = resultOf(false);
+    const key = r.standings.map((s) => s.id + ':' + s.place + ':' + (s.racing ? 'r' : 'f')).join(',');
+    if (key === f.liveKey) return;
+    f.liveKey = key;
+    if (onFinish) onFinish(r);
+  }
+  function deliverFinal() {
+    const f = world.finish;
+    if (onFinish) onFinish(f.final);
+    later(() => stopRace(), FINISH_TIMING.finalStopMs);
   }
 
   /** Race order (finished cars first by place, then by distance). */
@@ -483,7 +604,36 @@ export function createGame(canvas, input) {
   const debug = {
     give(kind) { if (POWERS.includes(kind) && world) { world.power.held = kind; return true; } return false; },
     forceNext(kind) { if (world) world.power.forceNext = kind; },
-    activate() { if (world) input.state.powerPressed = true; }
+    activate() { if (world) input.state.powerPressed = true; },
+    /**
+     * v52 verification: line the race up so the player crosses the line ~`ahead` wu from now in `place`.
+     * The best (place-1) rivals are marked finished in front; the rest drop to the final lap (or one before it if
+     * they'd otherwise beat the player to the line), keeping their positions on track.
+     */
+    finishAt(place = 1, ahead = 260) {
+      if (!world || world.player.finished) return false;
+      const { track, cars, race, player: p } = world, L = track.length, N = race.totalLaps;
+      if (race.countdown > 0) { race.countdown = 0; race.goFlash = 0; }
+      const ai = cars.filter((c) => !c.isPlayer).sort((a, b) => b.dist - a.dist);
+      place = clamp(place | 0, 1, cars.length);
+      const mod = (d) => ((d % L) + L) % L;
+      ai.forEach((c, i) => {
+        if (c.finished) return;
+        if (i < place - 1) {
+          c.finished = true; c.lap = N; c.finishPlace = ++race.placesAssigned; c.finishTime = Math.max(0, race.time - (place - 1 - i) * 900);
+          c.dist = N * L + mod(c.dist);
+        } else {
+          const frac = mod(c.dist), lap = frac > L - ahead - 400 ? N - 2 : N - 1;
+          c.lap = Math.max(0, lap); c.dist = c.lap * L + frac;
+        }
+      });
+      const sp = pointAt(track, L - ahead), a = Math.atan2(sp.ty, sp.tx), v = Math.max(500, Math.hypot(p.vx, p.vy));
+      p.x = sp.x; p.y = sp.y; p.angle = a; p.vx = Math.cos(a) * v; p.vy = Math.sin(a) * v; p.spinMs = 0; p.spinVis = 0;
+      initCarOnTrack(p, track, N * L - ahead);
+      p.lap = N - 1; p.lapStartMs = Math.min(p.lapStartMs, race.time - 1);
+      return true;
+    },
+    skip: () => skipReveal('debug')
   };
 
   /** Space / left slide on GAS: fire the seeker missile at the car ahead (one per lap). */
@@ -519,22 +669,18 @@ export function createGame(canvas, input) {
   }
 
   function finishRace() {
-    const { cars, race, track } = world;
+    const { cars, race } = world;
     if (race.over) return;
     race.over = true;
     const rest = cars.filter((c) => !c.finished).sort((a, b) => b.dist - a.dist);
-    for (const c of rest) { c.finishPlace = ++race.placesAssigned; c.finished = true; c.dnf = true; }
-    const standings = [...cars].sort((a, b) => a.finishPlace - b.finishPlace).map((c) => ({
-      place: c.finishPlace, id: c.id, name: c.name, isPlayer: c.isPlayer, color: c.color,
-      finishTime: c.dnf ? 0 : c.finishTime, bestLapMs: c.bestLapMs || 0, dnf: !!c.dnf
-    }));
-    const p = world.player;
-    const result = {
-      standings, playerPlace: p.finishPlace, trackName: track.name, trackIndex: race.trackIndex,
-      totalTime: p.dnf ? 0 : p.finishTime, bestLapMs: p.bestLapMs || 0
-    };
+    for (const c of rest) { c.finishPlace = ++race.placesAssigned; c.finished = true; c.dnf = true; c.finishTime = race.time; }
+    const result = resultOf(true);
     try { window.__RAD_LAST_RESULT__ = result; } catch (_) {}
-    setTimeout(() => { stopRace(); if (onFinish) onFinish(result); }, 800);
+    const f = world.finish;
+    if (f) { // the player is home: the results either update in place now or come up when the reveal ends
+      f.final = result;
+      if (f.phase === 'results') deliverFinal();
+    } else later(() => { stopRace(); if (onFinish) onFinish(result); }, 800); // timeout before the player finished
   }
 
   function getHudInfo() {
@@ -542,6 +688,7 @@ export function createGame(canvas, input) {
     const { player: p, race, cars } = world;
     const sorted = standings();
     return {
+      finished: !!p.finished,
       lap: p.finished ? race.totalLaps : Math.min(Math.max(0, p.lap) + 1, race.totalLaps),
       totalLaps: race.totalLaps,
       place: sorted.indexOf(p) + 1,
@@ -561,7 +708,9 @@ export function createGame(canvas, input) {
     // request queued while paused so Shift/GAS taps on the pause screen never fire a boost.
     setPaused(v) { paused = v; if (!v) { last = performance.now(); input.clearBoost && input.clearBoost(); } },
     isPaused: () => paused,
-    setOnFinish(fn) { onFinish = fn; },
+    setOnFinish(fn) { onFinish = fn; },            // fn(result): result.live = provisional (rivals still finishing), result.final = done
+    setOnReveal(fn) { onReveal = fn; },            // fn(info) → { hide(ms), remove() }: the big place text (ui.js)
+    skipReveal,
     isRunning: () => running,
     getLastHud: () => lastHud,
     setPauseHandler(fn) { onPause = fn; },

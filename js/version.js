@@ -1,6 +1,6 @@
 // Single source of truth for the build name. Loaded as a classic script by index.html (sets self.RADCARS_BUILD for the
 // menu label) and by sw.js via importScripts (cache name). Bump here on every release.
-self.RADCARS_BUILD = { version: 'v51', name: 'toys-pixi' };
+self.RADCARS_BUILD = { version: 'v52', name: 'finish' };
 self.RADCARS_BUILD.label = `${self.RADCARS_BUILD.version} · ${self.RADCARS_BUILD.name}`;
 self.RADCARS_BUILD.cache = `radcars-${self.RADCARS_BUILD.version}-${self.RADCARS_BUILD.name}`;
 // Files the service worker pre-caches and the menu's hard refresh re-downloads (relative to the site root).
@@ -26,6 +26,7 @@ self.RADCARS_BUILD.assets = [
   './js/util.js',
   './js/weapons.js',
   './js/powerups.js',
+  './js/celebrate.js',
   './js/toyart.js',
   './js/pixiRender.js',
   './vendor/pixi-lean.mjs',

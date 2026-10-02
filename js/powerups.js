@@ -94,6 +94,17 @@ export function autopilotControl(world, dtMs) {
   return { accel: true, brake: false, steer: 0, autopilot: true };
 }
 
+/**
+ * v52 finish cruise: after the line the player's car rolls on along the autopilot rail (centreline) at a gentle speed
+ * while the reveal plays and the rivals finish. The lateral offset eases to the centre over ~1.2 s.
+ */
+export function cruiseControl(car, track, dtMs, el) {
+  const spd = Math.hypot(car.vx, car.vy);
+  const k = clamp(1 - el / 1200, 0, 1);
+  railSteer(car, track, spd, (car.cruiseLat0 || 0) * k * k, dtMs / 1000, 1);
+  return { accel: true, brake: false, steer: 0, autopilot: true };
+}
+
 /** Pure-pursuit heading correction toward the centreline (+latTarget); weight w scales yaw rate and slip removal. */
 function railSteer(p, track, spd, latTarget, dt, w) {
   const look = 90 + spd * 0.06;         // ~165 wu at 1250 wu/s: corner cut ≈ look²/2R ≤ 45 wu on the tightest bends

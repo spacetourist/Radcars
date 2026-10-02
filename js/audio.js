@@ -37,6 +37,7 @@ function beep(freq, dur, type = 'square', gain = 0.04, slide = 0) {
 }
 
 export function sfx(name) {
+  try { if (self.__RAD_SFX_LOG__) self.__RAD_SFX_LOG__.push(name); } catch (_) {} // verification hook
   switch (name) {
     case 'wall': beep(110, 0.07, 'square', 0.035, -50); break;
     case 'lap': beep(520, 0.08, 'sine', 0.04); setTimeout(() => beep(680, 0.1, 'sine', 0.04), 90); break;
@@ -50,6 +51,14 @@ export function sfx(name) {
     case 'power': beep(300, 0.25, 'sawtooth', 0.035, 600); break;
     case 'autopilot': setTimeout(() => { beep(740, 0.12, 'sine', 0.04); setTimeout(() => beep(990, 0.18, 'sine', 0.04), 120); }, 120); break;
     case 'powerEnd': beep(700, 0.12, 'triangle', 0.035, -300); setTimeout(() => beep(420, 0.14, 'triangle', 0.03), 110); break;
+    // v52 finish reveal: a low thump when the place text lands, then a chord (win: fanfare + sparkle)
+    case 'slam': beep(120, 0.22, 'sine', 0.09, -70); beep(60, 0.28, 'triangle', 0.06, -25); setTimeout(() => { beep(523, 0.16, 'square', 0.035); beep(659, 0.2, 'sine', 0.035); }, 120); break;
+    case 'podium': sfx('slam'); setTimeout(() => { beep(587, 0.12, 'sine', 0.045); setTimeout(() => beep(784, 0.22, 'sine', 0.05), 110); }, 330); break;
+    case 'win':
+      sfx('slam');
+      [[523, 0], [659, 120], [784, 240], [1047, 380]].forEach(([f, d]) => setTimeout(() => beep(f, d === 380 ? 0.42 : 0.14, 'square', 0.04), 330 + d));
+      setTimeout(() => { beep(1568, 0.1, 'sine', 0.03); setTimeout(() => beep(2093, 0.16, 'sine', 0.03), 90); }, 1000);
+      break;
     case 'countdown': beep(380, 0.12, 'square', 0.05); break;
     case 'countdownGo': beep(520, 0.1, 'square', 0.06); setTimeout(() => beep(780, 0.22, 'sawtooth', 0.05), 80); break;
     default: break;
