@@ -17,6 +17,7 @@
 import * as P from '../vendor/pixi-lean.mjs';
 import { createRenderer, minimapBox } from './render.js';
 import { CAR_LEN, CAR_WID } from './physics.js';
+import { partLook } from './fx.js';
 import { pointAt, buildStartingGrid } from './tracks.js';
 import { TROPHY, trophyScale, ringState, partAlpha, trophyAnchor, outFade, PLACE_TEXT_Y } from './celebrate.js';
 import { styleFor, carSprite, shadowSprite, textureTile, scaleBucket, SPRITE_W, SPRITE_H, TOY_FONT } from './toyart.js';
@@ -110,10 +111,12 @@ export async function createPixiRenderer(hudCanvas, app) {
   const carLayer = new P.Container();
   const missileLayer = new P.Container();
   const fxLayer = new P.Container();
-  world.addChild(trackLayer, bonusLayer, trailLayer, carLayer, missileLayer, fxLayer);
+  // v54 feel: skid tiles on the road, boost ghosts under the cars, atlas particles on top, streaks in screen space
+  const skidLayer = new P.Container(), ghostLayer = new P.Container(), partLayer = new P.Container(), scrLayer = new P.Container();
+  world.addChild(trackLayer, skidLayer, bonusLayer, trailLayer, ghostLayer, carLayer, missileLayer, fxLayer, partLayer);
   // minimap lives in the WebGL scene (screen space), so the 2D HUD overlay only changes when a panel / countdown does
   const miniLayer = new P.Container();
-  stage.addChild(world, miniLayer);
+  stage.addChild(world, scrLayer, miniLayer);
   try { window.__RAD_PIXI__ = { P, canvasTexture, renderer, stage, world, trackLayer, bonusLayer, carLayer, fxLayer }; } catch (_) {} // verification / profiling
 
   /** Pooled sprites: get() hands out the next one each frame, end() hides the rest. */
@@ -130,6 +133,64 @@ export async function createPixiRenderer(hudCanvas, app) {
   const fxDiscPool = pool(fxLayer, disc);
   const fxRingPool = pool(fxLayer, ring);
   const fxRayPool = pool(fxLayer, white, 0);
+
+  // ------------------------------------------------------------------ v54 feel FX (state in fx.js; atlas assets/fx)
+  const fxAtlas = await loadFxAtlas();
+  const partPool = pool(partLayer, white), scrPool = pool(scrLayer, white), ghostPool = pool(ghostLayer, white);
+  const FX_FRAME = { spark: 'spark', dot: 'spark_dot', glow: 'glow', ring: 'ring', streak: 'streak' };
+  let skidFor = null, skidSprites = new Map(), skidUpAt = -1e9;
+  async function loadFxAtlas() {
+    try {
+      const [meta, img] = await Promise.all([
+        fetch('assets/fx/fx-atlas.json').then((r) => r.json()),
+        new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = 'assets/fx/fx-atlas.png'; })
+      ]);
+      const source = new P.ImageSource({ resource: img, scaleMode: 'linear', autoGenerateMipmaps: true });
+      const out = {};
+      for (const [name, f] of Object.entries(meta.frames)) out[name] = { tex: new P.Texture({ source, frame: new P.Rectangle(f.frame.x, f.frame.y, f.frame.w, f.frame.h) }), ax: f.anchor?.x ?? 0.5, ay: f.anchor?.y ?? 0.5 };
+      return out;
+    } catch (e) { console.info('fx atlas unavailable, using plain discs', e && e.message); return null; }
+  }
+  function drawFeelFx(wd) {
+    partPool.begin(); scrPool.begin(); ghostPool.begin();
+    const fx = wd.fxState;
+    if (fx) {
+      // skid tiles: one sprite per 512² canvas tile, re-uploaded only when stamped / faded
+      if (skidFor !== fx.skid) { skidLayer.removeChildren().forEach((c) => c.destroy({ texture: true, textureSource: true })); skidSprites = new Map(); skidFor = fx.skid; }
+      for (const t of fx.skid.removed) { const sp = skidSprites.get(t); if (sp) { sp.destroy({ texture: true, textureSource: true }); skidSprites.delete(t); } }
+      fx.skid.removed.length = 0;
+      // uploads batched to at most one pass per 50 ms (SwiftShader / weak GPUs pay per texel uploaded)
+      if (wd.race.time - skidUpAt >= 50 || wd.race.time < skidUpAt) { skidUpAt = wd.race.time;
+      for (const t of fx.skid.dirty) {
+        let sp = skidSprites.get(t);
+        if (!sp) { sp = new P.Sprite(canvasTexture(t.cv, false)); sp.position.set(t.x0, t.y0); skidLayer.addChild(sp); skidSprites.set(t, sp); }
+        else sp.texture.source.update();
+      }
+      fx.skid.dirty.clear(); }
+      // boost ghosts
+      for (const [car, g] of fx.ghosts) {
+        const v = carViews.get(car); if (!v) continue;
+        for (let i = 1; i < g.pts.length; i++) {
+          const q = g.pts[i], sp = ghostPool.get(v.body.texture);
+          sp.anchor.copyFrom(v.body.anchor); sp.scale.copyFrom(v.body.scale); sp.position.set(q.x, q.y); sp.rotation = q.a;
+          sp.tint = 0x7ff4ff; sp.alpha = 0.34 * g.level * (1 - i / 4.2); sp.blendMode = 'add';
+        }
+      }
+      for (const o of fx.parts) {
+        const lk = partLook(o), name = o.k === 'smoke' ? 'smoke_' + (o.frame || 0) : FX_FRAME[o.k], fr = fxAtlas && fxAtlas[name];
+        const sp = (o.scr ? scrPool : partPool).get(fr ? fr.tex : disc);
+        if (fr) sp.anchor.set(fr.ax, fr.ay); else sp.anchor.set(0.5);
+        sp.position.set(o.x, o.y); sp.alpha = lk.alpha;
+        sp.blendMode = o.k === 'smoke' ? 'normal' : 'add';
+        sp.tint = o.k === 'smoke' ? 0xffffff : (o.tint ?? 0xffffff);
+        if (!fr) { sp.width = sp.height = 24 * lk.scale; sp.rotation = 0; continue; }
+        if (o.k === 'spark') { sp.rotation = o.rot; sp.scale.set(lk.scale, 0.45); }
+        else if (o.k === 'streak') { sp.rotation = 0; sp.scale.set(0.5, lk.scale); }
+        else { sp.rotation = o.rot || 0; sp.scale.set(lk.scale); }
+      }
+    }
+    partPool.end(); scrPool.end(); ghostPool.end();
+  }
 
   // ------------------------------------------------------------------ static track (built once per track + grid size)
   const trackCache = new WeakMap();
@@ -581,6 +642,7 @@ export async function createPixiRenderer(hudCanvas, app) {
     const tMs = wd.race.time;
     for (const car of cars) { const v = carViews.get(car); if (v) updateCar(car, v, z, tMs, wd, debugCars); }
     drawTrailsMissilesFx(wd, z);
+    drawFeelFx(wd);
     miniLayer.visible = !wd.finish; // v52: a clean frame for the finish reveal
     if (!wd.finish) drawMinimap(wd);
     drawCelebration(wd.finish && wd.finish.cele);

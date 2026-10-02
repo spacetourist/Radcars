@@ -4,6 +4,7 @@
  */
 import { getLayout } from './controls.js';
 import { CAR_LEN, CAR_WID } from './physics.js';
+import { partLook } from './fx.js';
 import { pointAt, buildStartingGrid } from './tracks.js';
 import { TROPHY, trophyScale, ringState, partAlpha, trophyAnchor, outFade, PLACE_TEXT_Y } from './celebrate.js';
 import { styleFor, carSprite, shadowSprite, scaleBucket, textureTile, SPRITE_W, SPRITE_H, TOY_FONT } from './toyart.js';
@@ -298,6 +299,11 @@ export function createRenderer(canvas, opts = {}) {
     ctx.fillStyle = trackTex(track).felt;
     ctx.fillRect(cam.x - hx, cam.y - hy, hx * 2, hy * 2);
     drawTrack(track, cars.length);
+    const fx = world.fxState;
+    if (fx) { // v54 skid tiles (cull to the view)
+      for (const t of fx.skid.tiles.values()) if (t.x0 < cam.x + hx && t.x0 + 256 > cam.x - hx && t.y0 < cam.y + hy && t.y0 + 256 > cam.y - hy) ctx.drawImage(t.cv, t.x0, t.y0);
+      fx.skid.dirty.clear(); fx.skid.removed.length = 0;
+    }
     drawBonus(world, cam.zoom);
     for (const m of world.missiles || []) drawTrail(m, cam.zoom);
     for (const c of cars) {
@@ -307,12 +313,16 @@ export function createRenderer(canvas, opts = {}) {
     }
     const autopilot = world.power && world.power.active === 'autopilot';
     if (autopilot) drawAutopilotGlow(world.player, cam.zoom, world.race.time, world.power.activeMs, false);
+    if (fx) { const g = fx.ghosts.get(world.player); if (g) { // v54 boost ghosts (player only on Canvas)
+      ctx.save(); for (let i = g.pts.length - 1; i >= 1; i--) { ctx.globalAlpha = 0.3 * g.level * (1 - i / 4.2); drawCar({ ...world.player, x: g.pts[i].x, y: g.pts[i].y, angle: g.pts[i].a, isPlayer: false }, cam.zoom); } ctx.restore(); } }
     if (world.player.boostLevel > 0.02) drawBoostFlame(world.player, cam.zoom, world.race.time);
     drawCar(world.player, cam.zoom);
     if (autopilot) drawAutopilotGlow(world.player, cam.zoom, world.race.time, world.power.activeMs, true);
     for (const m of world.missiles || []) if (!m.dead) drawMissile(m, cam.zoom);
     for (const f of world.fx || []) drawFx(f, cam.zoom);
+    if (fx) drawFeelParts(fx, false);
     ctx.restore();
+    if (fx) drawFeelParts(fx, true);
     if (!world.finish) drawMinimap(world);
     else drawCelebration(world.finish.cele);
     if (debugCars) window.__RAD_DEBUG__.frame = { cars: debugCars, cam: { ...cam }, W, H, DPR };
@@ -323,6 +333,25 @@ export function createRenderer(canvas, opts = {}) {
    * a flickering orange/yellow exhaust flame from the tail plus a few speed streaks.
    * Sized with the same readability scale as drawCar; the car itself is not changed.
    */
+  /** v54 feel particles, Canvas fallback: plain strokes / arcs (no atlas), same state + timing as the Pixi version. */
+  const hex = (n) => '#' + (n >>> 0).toString(16).padStart(6, '0');
+  function drawFeelParts(fx, screen) {
+    ctx.save();
+    for (const o of fx.parts) {
+      if (!!o.scr !== screen) continue;
+      const lk = partLook(o); if (lk.alpha <= 0) continue;
+      ctx.globalAlpha = lk.alpha;
+      if (o.k === 'smoke') { ctx.globalCompositeOperation = 'source-over'; ctx.fillStyle = '#e6e6ec'; ctx.beginPath(); ctx.arc(o.x, o.y, 40 * lk.scale, 0, 6.2832); ctx.fill(); continue; }
+      ctx.globalCompositeOperation = 'lighter';
+      const col = hex(o.tint ?? 0xffffff);
+      if (o.k === 'spark') { const L = 80 * lk.scale; ctx.strokeStyle = col; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(o.x, o.y); ctx.lineTo(o.x - Math.cos(o.rot) * L, o.y - Math.sin(o.rot) * L); ctx.stroke(); }
+      else if (o.k === 'dot' || o.k === 'glow') { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(o.x, o.y, (o.k === 'glow' ? 18 : 8) * lk.scale, 0, 6.2832); ctx.fill(); }
+      else if (o.k === 'ring') { ctx.strokeStyle = col; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(o.x, o.y, 56 * lk.scale, 0, 6.2832); ctx.stroke(); }
+      else if (o.k === 'streak') { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(o.x, o.y); ctx.lineTo(o.x, o.y + 300 * lk.scale); ctx.stroke(); }
+    }
+    ctx.restore();
+  }
+
   /** v52 finish celebration (screen space): podium ring, gold trophy with a light burst, confetti — see celebrate.js. */
   let trophyPath = null;
   function drawCelebration(c) {

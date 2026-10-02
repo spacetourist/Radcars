@@ -23,7 +23,7 @@ export const ACCEL_ASYM = 1.04;     // the curve aims slightly past top so the c
 export const ACCEL_POW = 1.45;
 // v54 walls: glancing hits keep most of the speed and turn the car along the wall; head-on still hurts
 const WALL_BOUNCE_GLANCE = 0.12, WALL_BOUNCE_HEAD = 0.3;
-const WALL_KEEP_GLANCE = 0.97, WALL_KEEP_HEAD = 0.5;  // tangential speed kept at 0° / 90° impact
+const WALL_KEEP_GLANCE = 0.99, WALL_KEEP_HEAD = 0.84;  // tangential speed kept at 0° / 90° impact (eased by sin² so glancing hits barely scrub)
 const WALL_TURN = 0.65;             // fraction of the heading error to the wall tangent removed on a glancing hit
 const WALL_GLANCE_MAX = 0.75;       // rad (~43°): above this the hit counts as head-on (no heading deflection)
 export const WALL_ASSIST_MS = 320;  // steering assist away from the wall after a hit
@@ -136,7 +136,7 @@ export function constrain(car, track) {
       const spd = Math.hypot(car.vx, car.vy) || 1;
       const sinA = clamp(Math.abs(vn) / spd, 0, 1), ang = Math.asin(sinA);
       const tx = car.vx - vn * pr.nx, ty = car.vy - vn * pr.ny; // tangential part
-      const keep = WALL_KEEP_GLANCE + (WALL_KEEP_HEAD - WALL_KEEP_GLANCE) * Math.pow(sinA, 1.3);
+      const keep = WALL_KEEP_GLANCE + (WALL_KEEP_HEAD - WALL_KEEP_GLANCE) * sinA * sinA;
       const bounce = WALL_BOUNCE_GLANCE + (WALL_BOUNCE_HEAD - WALL_BOUNCE_GLANCE) * sinA;
       car.vx = tx * keep - bounce * vn * pr.nx;
       car.vy = ty * keep - bounce * vn * pr.ny;
@@ -195,5 +195,5 @@ export function resolveCarCollisions(cars, track) {
 }
 
 /** v54 slide amount 0…1 from the pre-grip lateral speed (skid marks, smoke, squeal). Retuned for the v54 grip. */
-export const SLIP_LO = 20, SLIP_RANGE = 50; // measured 390x844 Neon key-bot: |vLat| p50 0, p90 10, p99 39, max 52 (v53 vL scale 80/240 never fired)
+export const SLIP_LO = 30, SLIP_RANGE = 60; // measured 390x844 Neon key-bot: |vLat| p50 0, p90 10, p99 39, max 52 (v53 vL scale 80/240 never fired)
 export function slip01(car) { return clamp((Math.abs(car.vLat || 0) - SLIP_LO) / SLIP_RANGE, 0, 1); }

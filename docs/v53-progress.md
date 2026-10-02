@@ -117,3 +117,4 @@ Baseline v52 469cdc9. Started 21:45 BST.
   - polish on: 59.8 / 58.6 / 59.1
   - polish on with the spin stopped: 59.2 / 59.6 / 59.0
   - So there is no measurable cost; the harness spread is SwiftShader noise.
+- 00:11 BST SHIPPED v53.1 as d4a23ef; Pages serves 'v53.1 · chrome' (live phone smoke: polish CSS loaded after style.css, Pixi race, 5 controls, 0 errors; CSS / woff2 / svg all 200).
