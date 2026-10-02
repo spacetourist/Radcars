@@ -1,6 +1,6 @@
 # Radcars
 
-Top-down arcade racer (PWA), mobile-first. **v53-controls**: the car **accelerates by itself** after GO; the old GAS button is now a **BRAKE**, BOOST / MISSILE / POWER are dedicated tap buttons with emoji-style icons in a right-thumb arc around BRAKE, steering is a floating ring under the left thumb, and races are laid out for **portrait** first (landscape still works). **v52-finish**: crossing the line on the final lap now slams in your finishing position (1ST / 2ND / 3RD / 4TH…) with a sound while your car cruises on and the rivals race home, a win gets confetti, a trophy and a camera move, and the results fill in live. **v51-toys-pixi**: Micro Machines-style toy cars on a tabletop track, drawn by **PixiJS v8 (WebGL)** by default with the plain Canvas 2D renderer as a fallback (`?canvas=1`, or automatically when WebGL can't start). Menus are CSS/DOM over a city photo backdrop. v47 added a once-per-lap **boost**; v48 removed the brake and added a seeker missile + boost pads; **v49** tightens the turn radius by ~12% at race speed and keeps the player car fully on screen during countdown / race start; **v50** adds a row of glowing **? bonus boxes** per lap that give power-ups (ROCKET, LAP BOOST, AUTOPILOT). Tracks, handling, physics, AI, camera and gameplay are unchanged in v51.
+Top-down arcade racer (PWA), mobile-first. **v53.1-chrome**: the Graphic Designer's CSS-only polish layer for the in-race controls and HUD pills (neon-tube rims, glass sheen, labels inside the discs, countdown / recharge arcs on the rim, spinning tri-colour ring when boosts are unlimited, a soft scrim behind the thumb zone). **v53-controls**: the car **accelerates by itself** after GO; the old GAS button is now a **BRAKE**, BOOST / MISSILE / POWER are dedicated tap buttons with emoji-style icons in a right-thumb arc around BRAKE, steering is a floating ring under the left thumb, and races are laid out for **portrait** first (landscape still works). **v52-finish**: crossing the line on the final lap now slams in your finishing position (1ST / 2ND / 3RD / 4TH…) with a sound while your car cruises on and the rivals race home, a win gets confetti, a trophy and a camera move, and the results fill in live. **v51-toys-pixi**: Micro Machines-style toy cars on a tabletop track, drawn by **PixiJS v8 (WebGL)** by default with the plain Canvas 2D renderer as a fallback (`?canvas=1`, or automatically when WebGL can't start). Menus are CSS/DOM over a city photo backdrop. v47 added a once-per-lap **boost**; v48 removed the brake and added a seeker missile + boost pads; **v49** tightens the turn radius by ~12% at race speed and keeps the player car fully on screen during countdown / race start; **v50** adds a row of glowing **? bonus boxes** per lap that give power-ups (ROCKET, LAP BOOST, AUTOPILOT). Tracks, handling, physics, AI, camera and gameplay are unchanged in v51.
 
 ## Quick start
 
@@ -32,12 +32,18 @@ fully with a keyboard; no key hints are ever shown during a race).
 
 - Everything that positions a control lives in `CONTROL_LAYOUT` in `js/controls.js` (base 390×844, scaled by
   `min(vw/390, vh/844)`; landscape has its own block and mirrors the arc at 0.85). Hit areas are the visible disc + 12 px,
-  never under 48 px; safe-area insets are respected.
+  shrunk so neighbouring round hit areas never overlap, never under 48 px; safe-area insets are respected.
 - States: **READY** (neon border + glow, one pulse when it becomes ready, plus a top toast like "MISSILE READY"),
   **ACTIVE** (solid accent, radial countdown sweep), **USED** (grey, faded icon, thin arc filling up to the lap recharge,
   "NEXT LAP"), **UNLIMITED** (last place: lime ∞ badge, colour-cycling border), POWER **empty** (dashed, faded gift) /
   **held** (item colour + bounce-in). During the countdown everything but STEER sits at 35 %. The finish reveal fades the
   controls out over 0.2 s.
+- v53.1 chrome: `assets/ui/controls/controls-polish.css` (loaded right after `css/style.css` by `js/version.js`, precached
+  by the service worker together with its ∞ badge SVG and the subset Barlow Condensed ExtraBold font, SIL OFL in
+  `assets/ui/controls/fonts/OFL.txt`). It only restyles the existing markup; `assets/ui/controls/POLISH.md` maps every
+  selector to its values. Active discs keep their full-colour icons with dark label text; the only animations are a
+  one-shot expanding ring on READY and the rotating conic ring on UNLIMITED (both transform/opacity, compositor-only);
+  no `backdrop-filter`. The idle steer ring sits at 70 %.
 - Icons are hand-drawn inline SVG in an emoji style (`js/icons.js`: brake disc, lightning bolt, rocket, gift box, triple
   rocket, green flame, steering wheel + sparkle) so they look identical on Android, iOS and desktop.
 - HUD: LAP (cyan), POS `P3/6` (gold / silver / bronze for the podium), timer — neon pills along the top inside the safe

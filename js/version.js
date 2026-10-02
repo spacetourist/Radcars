@@ -1,6 +1,6 @@
 // Single source of truth for the build name. Loaded as a classic script by index.html (sets self.RADCARS_BUILD for the
 // menu label) and by sw.js via importScripts (cache name). Bump here on every release.
-self.RADCARS_BUILD = { version: 'v53', name: 'controls' };
+self.RADCARS_BUILD = { version: 'v53.1', name: 'chrome' };
 self.RADCARS_BUILD.label = `${self.RADCARS_BUILD.version} · ${self.RADCARS_BUILD.name}`;
 self.RADCARS_BUILD.cache = `radcars-${self.RADCARS_BUILD.version}-${self.RADCARS_BUILD.name}`;
 // Files the service worker pre-caches and the menu's hard refresh re-downloads (relative to the site root).
@@ -8,6 +8,9 @@ self.RADCARS_BUILD.assets = [
   './',
   './index.html',
   './css/style.css',
+  './assets/ui/controls/controls-polish.css',            // v53.1: Graphic Designer's control chrome (CSS only)
+  './assets/ui/controls/svg/infinity-badge.svg',
+  './assets/ui/controls/fonts/BarlowCondensed-ExtraBold-ui.woff2',
   './manifest.webmanifest',
   './icons/icon.svg',
   './icons/icon-192.png',
@@ -46,6 +49,7 @@ if (typeof document !== 'undefined' && document.readyState === 'loading') {
   B.assets.filter((a) => (a.startsWith('./js/') || a.startsWith('./vendor/')) && a !== './js/version.js').forEach((a) => { imports[a] = a + q; });
   document.write(
     `<link rel="stylesheet" href="css/style.css${q}" />` +
+    `<link rel="stylesheet" href="assets/ui/controls/controls-polish.css${q}" />` + // v53.1 polish layer, after style.css
     `<script type="importmap">${JSON.stringify({ imports })}<\/script>` +
     `<script type="module" src="js/main.js${q}"><\/script>`
   );

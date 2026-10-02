@@ -87,3 +87,33 @@ Baseline v52 469cdc9. Started 21:45 BST.
   - verify-boost canvas: race rAF 54.8, plus the slide-while-not-last margin (harness now needs a 450 wu gap to the car behind).
   - verify-v51 and verify-v52 FPS / reveal-FPS items were measured while other suites ran in parallel. verify-v51 rocket needs a target ahead (harness now brakes until a rival passes).
   - verify-sw-update step 4 (menu reload: navigations 0). BRK pin updated.
+- 23:50 BST SHIPPED v53 as 33e986d; Pages serves v53 · controls (live phone smoke: Pixi race, 5 controls, auto-throttle 1000 wu/s, 0 errors). Headless portrait Canvas fps v52 469cdc9 vs v53 on the same probe: 50.6 / 55.6 vs 59.2 / 57.1, so v52 is equally slow (SwiftShader artefact, not a regression).
+
+## v53.1 'chrome': GD CSS polish kit
+- 23:53 BST: read assets/ui/controls/POLISH.md in full. The kit targets our real v53 classes (.act, .act-vis, .act-ring, .act-icon, .act-badge, .act-label, .act-brake, .tc-aim-pad/ring/knob/label, .tc-pause, .hud .pill, .pill-pos, #touch-controls.counting, .pop, .pressed).
+  - Live check at 390×844 DPR3 mid-race: all 60 kit rules parse. Every selector that matched nothing at that moment was state-specific (active / used / pressed / counting / brake-active / steer-active), and the states run exercises all of them.
+  - **No selector changes were needed.** .act.disabled is unused by our JS and harmless.
+- The stylesheet link is written by js/version.js (index.html's bootstrap) immediately after css/style.css, with the same ?b=<build> cache-buster. index.html documents the order.
+- The CSS, the ∞ SVG and the woff2 were added to RADCARS_BUILD.assets, which is the SW precache and hard-refresh list.
+- One-line label bump (POLISH caveat), appended to controls-polish.css: @media (max-resolution: 1.5dppx) { .act:not(.act-brake) .act-label { font-size: calc(var(--d) * .16) } }. 64 px labels go from 9.6 to 10.24 px at 1x; phones stay at 9.6 px.
+- Computed-style checks:
+  - BRAKE rim 4 px, BOOST rim 3 px;
+  - label font "Barlow Condensed UI" (document.fonts.check true);
+  - idle steer opacity 0.7;
+  - scrim gradient present;
+  - badge uses infinity-badge.svg;
+  - POS pill text "P6/6";
+  - zero elements with backdrop-filter;
+  - 0 console errors.
+- The old box-shadow keyframes (actPulse, actCycle) are overridden by the kit (animation: none). What remains: actPing (transform + opacity), actSpin (transform) and actBounce (transform).
+- Shots: docs/shots/82-gd-{boost-ready,missile-used,power-rocket3,brake-pressed,steer-active,countdown,unlimited}.png (390×844 DPR3), 82-state-boost-active.png, 82-state-autopilot-active.png and 82-gd-vs-mockup.png (mockup | boost-ready | unlimited | brake-pressed | missile-used).
+- 00:09 BST verification (v53.1, headless SwiftShader):
+  - races on all 4 tracks: portrait / landscape / desktop × Pixi / Canvas, ALL OK (laps, all rivals finished, orientation, band, no key hints, 0 errors);
+  - touch on portrait, narrow, tall and landscape (Pixi) and portrait (Canvas): ALL OK;
+  - states: ALL OK;
+  - fps harness: portrait Pixi 57.3, landscape Pixi 57.0, desktop Pixi 59.9, portrait Canvas 52.0, landscape Canvas 50.8.
+- Does the polish CSS cost FPS? A/B on the same page (landscape Canvas, 600 frames, 3 alternating rounds, BOOST in the spinning UNLIMITED state):
+  - polish removed: 59.0 / 58.3 / 57.6
+  - polish on: 59.8 / 58.6 / 59.1
+  - polish on with the spin stopped: 59.2 / 59.6 / 59.0
+  - So there is no measurable cost; the harness spread is SwiftShader noise.
