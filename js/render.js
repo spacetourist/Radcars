@@ -356,7 +356,7 @@ export function createRenderer(canvas, opts = {}) {
       if (o.k === 'spark') { const L = o.lenPx ? o.lenPx * lk.scale / zoom : 80 * lk.scale; ctx.strokeStyle = col; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(o.x, o.y); ctx.lineTo(o.x - Math.cos(o.rot) * L, o.y - Math.sin(o.rot) * L); ctx.stroke(); }
       else if (o.k === 'dot' || o.k === 'glow') { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(o.x, o.y, (o.k === 'glow' ? 18 : 8) * lk.scale, 0, 6.2832); ctx.fill(); }
       else if (o.k === 'ring') { ctx.strokeStyle = col; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(o.x, o.y, 56 * lk.scale, 0, 6.2832); ctx.stroke(); }
-      else if (o.k === 'streak') { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(o.x, o.y); ctx.lineTo(o.x, o.y + 300 * lk.scale); ctx.stroke(); }
+      else if (o.k === 'streak') { const L = 300 * lk.scale, ux = o.dx ?? 0, uy = o.dy ?? -1; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(o.x + ux * L / 2, o.y + uy * L / 2); ctx.lineTo(o.x - ux * L / 2, o.y - uy * L / 2); ctx.stroke(); } // v54.2: along the direction of travel
     }
     ctx.restore();
   }

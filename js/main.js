@@ -104,7 +104,8 @@ function startRaceNow(trackIndex) {
     trackIndex,
     laps: save.options.laps,
     aiCount: save.options.aiCount,
-    difficulty: save.options.difficulty
+    difficulty: save.options.difficulty,
+    drift: params.has('drift') ? params.get('drift') === '1' : !!save.options.drift // v54.2 Options → Drift handling (player only); ?drift=1|0 overrides for testing
   });
   const tick = () => {
     if (!game.isRunning()) return;

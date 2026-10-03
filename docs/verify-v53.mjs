@@ -36,7 +36,8 @@ const check = (ok, msg) => { if (!ok) fails++; log(`  [${ok ? 'ok' : 'FAIL'}] ${
 const KEY_HINT = /\b(Shift|Space|Esc|WASD|keyboard)\b|tap · E|slide GAS|\bkey\b|\bE to\b/i;
 
 const vp = mode === 'states' ? { ...VIEWPORTS.portrait, deviceScaleFactor: Number(extra || 3) } : VIEWPORTS[vpName];
-const url = base + (mode !== 'states' && rk === 'canvas' ? '?canvas=1' : '');
+const qs = [mode !== 'states' && rk === 'canvas' ? 'canvas=1' : '', process.env.DRIFT ? 'drift=' + process.env.DRIFT : ''].filter(Boolean).join('&'); // v54.2: DRIFT=1 env → ?drift=1
+const url = base + (qs ? '?' + qs : '');
 const browser = await puppeteer.launch({
   executablePath: '/usr/bin/google-chrome', headless: 'new',
   args: ['--no-sandbox', '--use-gl=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required']

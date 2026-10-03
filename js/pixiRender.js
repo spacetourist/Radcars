@@ -186,7 +186,7 @@ export async function createPixiRenderer(hudCanvas, app) {
         sp.tint = o.k === 'smoke' ? 0xffffff : (o.tint ?? 0xffffff);
         if (!fr) { sp.width = sp.height = 24 * lk.scale; sp.rotation = 0; continue; }
         if (o.k === 'spark') { sp.rotation = o.rot; sp.scale.set(o.lenPx ? o.lenPx * lk.scale / (SPARK_VIS * wd.cam.zoom) : lk.scale, o.lenPx ? 0.55 : 0.45); } // heavy: lenPx = CSS px of the visible streak
-        else if (o.k === 'streak') { sp.rotation = 0; sp.scale.set(0.5, lk.scale); }
+        else if (o.k === 'streak') { sp.rotation = o.rot || 0; sp.scale.set(0.5, lk.scale); } // v54.2: along the direction of travel
         else { sp.rotation = o.rot || 0; sp.scale.set(lk.scale); }
       }
     }

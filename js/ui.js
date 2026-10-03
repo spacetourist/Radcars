@@ -269,6 +269,8 @@ export function createUI(root, api) {
           <div class="opt-row"><strong>Laps <span class="muted">1–10</span></strong>${stepper('laps', o.laps)}</div>
           <div class="opt-row"><strong>Left-handed <span class="muted">mirror the controls</span></strong>
             <button class="btn toggle ${o.leftHanded ? 'on' : ''}" id="lefty">${o.leftHanded ? 'On' : 'Off'}</button></div>
+          <div class="opt-row"><strong>Drift handling <span class="muted">tail-out in fast corners</span></strong>
+            <button class="btn toggle ${o.drift ? 'on' : ''}" id="drift">${o.drift ? 'On' : 'Off'}</button></div>
         </div>
         <div class="card help-card">
           <h3>How to drive</h3>
@@ -294,6 +296,12 @@ export function createUI(root, api) {
       persistSave(save);
       sfx('click');
       if (api.onLeftHanded) api.onLeftHanded(o.leftHanded);
+      showOptions(save);
+    };
+    el.querySelector('#drift').onclick = () => {
+      o.drift = !o.drift;
+      persistSave(save);
+      sfx('click');
       showOptions(save);
     };
     el.querySelector('#mute').onclick = () => {

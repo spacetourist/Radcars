@@ -71,7 +71,7 @@ export function createGame(canvas, input) {
   window.addEventListener('resize', fit);
   function setRenderer(r) { renderer = r; fit(); }
 
-  function startRace({ trackIndex, laps = 3, aiCount = 5, difficulty = 1 }) {
+  function startRace({ trackIndex, laps = 3, aiCount = 5, difficulty = 1, drift = false }) {
     if (!renderer) setRenderer(createRenderer(canvas)); // safety net: never race without a renderer
     const track = getTrack(trackIndex);
     const nAI = clamp(aiCount, 1, 7);
@@ -83,6 +83,7 @@ export function createGame(canvas, input) {
     const cars = [];
     const p = createCar({ id: 0, name: 'You', color: CAR_COLORS[0], isPlayer: true, x: grid[playerSlot].x, y: grid[playerSlot].y, angle: grid[playerSlot].angle, top: PLAYER_TOP, accel: PLAYER_ACCEL });
     initCarOnTrack(p, track, grid[playerSlot].s);
+    p.driftOn = !!drift; // v54.2: drift handling applies only while the player is actually driving (see stepCars)
     cars.push(p);
     let k = 0;
     for (const slot of order) {
@@ -365,6 +366,8 @@ export function createGame(canvas, input) {
         ctl = stepAI(c, cars, track, dt);
         c.top = top;
       }
+      // v54.2: drift handling only under the player's own control (never on autopilot / handback / finish cruise / spin)
+      c.drift = !!(c.driftOn && c.isPlayer && !autopilot && !world.power.handback && !c.finished && !spinning);
       rampBoost(c, dt);
       ctl.boost = ctl.autopilot ? 0 : (c.boostLevel || 0); // autopilot: its own +25% top, pads/boost don't stack
       c.drive = ctl.accel || !!ctl.steer; // last frame's drive input (read by the verify scripts)

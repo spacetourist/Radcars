@@ -33,6 +33,23 @@ export function throttleAccel(vF, top, accel) {
   return accel * ACCEL_LAUNCH * Math.pow(Math.max(0, 1 - vF / (top * ACCEL_ASYM)), ACCEL_POW);
 }
 /** v54 lateral grip at a given speed. */
+/**
+ * v54.2 'drift' handling (Options → Drift handling, player only, OFF by default). The heading turns first and the
+ * velocity catches up through grip: lateral velocity is measured against the NEW heading each step and decays at
+ * driftGripAt(). Grip stays very high below DRIFT_GRIP_SPD (touch steering stays forgiving) and falls to
+ * DRIFT_GRIP_HIGH at top speed, so the tail only steps out in fast corners. Catch assist: past DRIFT_CATCH_BETA of
+ * slip angle grip ramps up hard, releasing the steer (|steer| < 0.2) multiplies grip by DRIFT_CENTRE_MUL, and the
+ * slip angle is hard-capped at DRIFT_MAX_BETA — a normal input can never spin the car.
+ */
+export const DRIFT_GRIP_LOW = 30, DRIFT_GRIP_HIGH = 9, DRIFT_GRIP_SPD = 380;
+export const DRIFT_KEEP = 0.9;
+export const DRIFT_WALL_HOLD_MS = 900; // after any wall contact the normal (grip) handling runs, so wall recovery is unchanged // share of the scrubbed sideways speed returned to forward speed
+export const DRIFT_CATCH_BETA = 0.3, DRIFT_CATCH_GAIN = 2.5, DRIFT_CENTRE_MUL = 1.8, DRIFT_MAX_BETA = 0.6;
+export function driftGripAt(spd, top) {
+  const t = clamp((spd - DRIFT_GRIP_SPD) / Math.max(1, top - DRIFT_GRIP_SPD), 0, 1), e = t * t * (3 - 2 * t);
+  return DRIFT_GRIP_LOW + (DRIFT_GRIP_HIGH - DRIFT_GRIP_LOW) * e;
+}
+
 export function gripAt(spd, top) {
   return GRIP_LOW + (GRIP_HIGH - GRIP_LOW) * clamp((spd - GRIP_LOW_SPD) / Math.max(1, top - GRIP_LOW_SPD), 0, 1);
 }
@@ -99,8 +116,31 @@ export function stepCar(car, ctl, dtMs, track) {
   }
   // over the cap (e.g. boost winding down): ease back towards it rather than snapping
   if (vF > top) vF += (top - vF) * Math.min(1, 3 * dt);
+  if (car.driftHoldMs > 0) car.driftHoldMs -= dt * 1000;
+  if (car.drift && !(car.driftHoldMs > 0)) {
+    // v54.2 drift: re-measure the velocity against the heading that just turned, so turning creates lateral slip that
+    // grip then removes (the classic "heading first, velocity catches up"); throttle / brake already acted on vF above
+    // in the old frame, so rebuild the world velocity from that first and split it again
+    const ofx = fx, ofy = fy; // old-frame axes
+    const wx = ofx * vF - ofy * vL, wy = ofy * vF + ofx * vL;
+    const nfx = Math.cos(car.angle), nfy = Math.sin(car.angle);
+    vF = wx * nfx + wy * nfy; vL = -wx * nfy + wy * nfx;
+    car.vLat = vL;
+    const sp = Math.hypot(vF, vL), beta = Math.atan2(Math.abs(vL), Math.max(1, Math.abs(vF)));
+    let g = driftGripAt(sp, car.top);
+    if (beta > DRIFT_CATCH_BETA) g *= 1 + DRIFT_CATCH_GAIN * (beta - DRIFT_CATCH_BETA) / DRIFT_CATCH_BETA; // catch assist
+    if (Math.abs(steer) < 0.2) g *= DRIFT_CENTRE_MUL; // self-centring when the steer is released
+    const vL0 = vL;
+    vL *= Math.exp(-g * dt);
+    const cap = Math.tan(DRIFT_MAX_BETA) * Math.abs(vF);
+    if (Math.abs(vL) > cap) vL = Math.sign(vL) * cap;
+    // arcade: most of the sideways speed that grip removes is handed back along the nose (a slide costs a little
+    // time, not a lot), never above the current cap
+    if (vF > 0 && vF < top) vF = Math.min(top, Math.sqrt(vF * vF + DRIFT_KEEP * (vL0 * vL0 - vL * vL)));
+  } else {
   car.vLat = vL; // v54: lateral slip before grip (skid marks / smoke / squeal read slip01 from this)
   vL *= Math.exp(-gripAt(Math.hypot(vF, vL), car.top) * dt);
+  }
 
   fx = Math.cos(car.angle); fy = Math.sin(car.angle);
   car.vx = fx * vF - fy * vL;
@@ -146,7 +186,7 @@ export function constrain(car, track) {
         if (Math.abs(err) < Math.PI / 2) car.angle = normalizeAngle(car.angle + err * WALL_TURN);
         car.yawRate = 0;
       }
-      car.wallAssistMs = WALL_ASSIST_MS; car.wallAssistDir = 0; // direction set below from the wall side
+      car.wallAssistMs = WALL_ASSIST_MS; car.wallAssistDir = 0; car.driftHoldMs = DRIFT_WALL_HOLD_MS; // v54.2: grip handling while recovering // direction set below from the wall side
       // steer away from the wall: wall on the left of travel → steer right (+1), else left
       const fwdX = Math.cos(car.angle), fwdY = Math.sin(car.angle);
       const cross = fwdX * (side * pr.ny) - fwdY * (side * pr.nx); // sign of the wall normal relative to the heading
@@ -195,5 +235,5 @@ export function resolveCarCollisions(cars, track) {
 }
 
 /** v54 slide amount 0…1 from the pre-grip lateral speed (skid marks, smoke, squeal). Retuned for the v54 grip. */
-export const SLIP_LO = 80, SLIP_RANGE = 240; // v54.1: back to 80/240. Cornering never slides in this model (the velocity turns with the heading), so vLat only comes from walls / contacts: after a wall hit p50 53, p90 185, p99 408, max 565 → 80/240 grades that range (p90 0.44); 30/60 saturated on any brush
+export const SLIP_LO = 40, SLIP_RANGE = 220; // v54.2: drift-on hard corners read 0.35–0.56 mid-corner (peaks 0.4–0.7), a violent flick / wall slide reaches 1; drift-off cornering is exactly 0 (vLat only comes from walls / contacts there: after a hit p50 53 → 0.06, p90 185 → 0.66)
 export function slip01(car) { return clamp((Math.abs(car.vLat || 0) - SLIP_LO) / SLIP_RANGE, 0, 1); }

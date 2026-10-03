@@ -164,8 +164,14 @@ export function stepFx(fx, world, dt, view, W, H) {
   if (fx.quality >= 1 && frac > 0.8 && !p.finished && now >= fx.streakAt && fx.parts.filter((o) => o.k === 'streak').length < 6) {
     const k = Math.min(1, (frac - 0.8) / 0.2);
     fx.streakAt = now + 70 - 30 * k;
-    const left = Math.random() < 0.5, x = left ? rnd(0.02, 0.13) * W : rnd(0.87, 0.98) * W;
-    if (add(fx, { k: 'streak', scr: true, x, y: rnd(-0.1, 0.6) * H, vx: 0, vy: rnd(1500, 2400), rot: 0, life: rnd(200, 350), s0: rnd(0.35, 0.6), s1: rnd(0.35, 0.6), a0: 0.15 + 0.2 * k, tint: 0xffffff })) fx.stats.streaks++;
+    // v54.2 (GD): streaks follow the car's on-screen direction of travel (the camera never rotates, so that is the
+    // velocity direction): each line lies along it, flows backwards past the car, and spawns near the screen edges on
+    // either side of that direction (and from ahead, so it sweeps across the side band)
+    const sp = Math.hypot(p.vx, p.vy) || 1, dx = p.vx / sp, dy = p.vy / sp, nx = -dy, ny = dx;
+    const edge = (ux, uy) => Math.min(Math.abs(ux) > 1e-3 ? W / 2 / Math.abs(ux) : 1e9, Math.abs(uy) > 1e-3 ? H / 2 / Math.abs(uy) : 1e9);
+    const side = Math.random() < 0.5 ? -1 : 1, off = edge(nx, ny) * rnd(0.74, 0.96), along = edge(dx, dy) * rnd(-0.2, 1.0);
+    const x = W / 2 + nx * side * off + dx * along, y = H / 2 + ny * side * off + dy * along, v = rnd(1500, 2400);
+    if (add(fx, { k: 'streak', scr: true, x, y, vx: -dx * v, vy: -dy * v, dx, dy, rot: Math.atan2(dy, dx) - Math.PI / 2, life: rnd(200, 350), s0: rnd(0.35, 0.6), s1: rnd(0.35, 0.6), a0: 0.15 + 0.2 * k, tint: 0xffffff })) fx.stats.streaks++;
   }
   // ---- integrate + expire
   const s = dt / 1000;
