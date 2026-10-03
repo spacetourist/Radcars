@@ -13,6 +13,7 @@ import { CAR_LEN, CAR_WID } from './physics.js';
 
 export const FX_CAP = 64;
 export const SHAKE_PX = 4, SHAKE_MS = 150;
+export const SKID_LEN = 10, SKID_STEP = SKID_LEN / 4; // stamp length (wu) and the max spacing along a tyre path
 export const SKID_TILE = 256, SKID_MAX_TILES = 64; // 256² tiles keep each re-upload small; least-recently-stamped tile is recycled past 64
 const SPARK_HOT = 0xffe600, SPARK_AMBER = 0xffb347, SODIUM = 0xffb347, CYAN = 0x00e8ff;
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -25,7 +26,7 @@ export function newFx() {
     shake: { ms: 0, amp: 0, x: 0, y: 0 },
     ghosts: new Map(), // car -> [{x, y, a}] newest first (boost trail)
     pinned: q ? +q[1] : -1, quality: q ? +q[1] : 2, fpsAvg: 60, lowMs: 0, highMs: 0,
-    lastStamp: new Map(), smokeAt: new Map(), streakAt: 0,
+    lastStamp: new Map(), smokeAt: new Map(), streakAt: 0, punchAt: -1e9,
     stats: { sparks: 0, rings: 0, smoke: 0, streaks: 0, stamps: 0, heavy: 0, light: 0, boosts: 0, dropped: 0, vibrate: 0 }
   };
 }
@@ -53,11 +54,12 @@ function stamp(fx, x, y, a, alpha) {
         fx.skid.tiles.delete(old.key); fx.skid.dirty.delete(old); fx.skid.removed.push(old);
       }
       const cv = document.createElement('canvas'); cv.width = cv.height = S;
-      t = { key, cv, ctx: cv.getContext('2d'), x0: i * S, y0: j * S, used: 0 }; fx.skid.tiles.set(key, t);
+      const ctx = cv.getContext && cv.getContext('2d'); if (!ctx) continue; // (node sims have no 2D canvas)
+      t = { key, cv, ctx, x0: i * S, y0: j * S, used: 0 }; fx.skid.tiles.set(key, t);
     }
     t.used = fx.stats.stamps;
     const g = t.ctx; g.save(); g.translate(x - t.x0, y - t.y0); g.rotate(a);
-    g.globalAlpha = alpha; g.fillStyle = '#16161c'; g.fillRect(-5, -2.6, 10, 5.2); g.restore();
+    g.globalAlpha = alpha; g.fillStyle = '#16161c'; g.fillRect(-SKID_LEN / 2, -2.6, SKID_LEN, 5.2); g.restore();
     fx.skid.dirty.add(t);
   }
   fx.stats.stamps++;
@@ -77,10 +79,13 @@ function wallBurst(fx, e, onScreen) {
   const c = e.car, spd = Math.max(200, e.spd || Math.hypot(c.vx, c.vy));
   // sparks fly along the car's velocity reflected off the wall (its post-impact velocity), fanned out
   const base = Math.atan2(c.vy - e.ny * spd * 0.45, c.vx - e.nx * spd * 0.45); // wallN points INTO the wall
-  const n = e.heavy ? 6 + Math.round(4 * (e.strength - 0.6) / 0.4) : 2 + (e.strength > 0.3 ? 1 : 0);
+  // v54.1 (GD): heavy = 8–10 sparks, 36–48 CSS px long (lenPx; renderers divide by zoom), fanned at varied angles
+  // around the bounce direction; light scrapes unchanged (2–3 short sparks)
+  const n = e.heavy ? 8 + Math.round(2 * (e.strength - 0.6) / 0.4) : 2 + (e.strength > 0.3 ? 1 : 0);
   for (let i = 0; i < n; i++) {
-    const a = base + rnd(-0.7, 0.7), v = rnd(260, 640) * (0.6 + 0.6 * e.strength);
-    if (add(fx, { k: 'spark', x: e.x, y: e.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, rot: a, life: rnd(180, 320), s0: rnd(0.38, 0.55), s1: 0.12, a0: 1, tint: i % 2 ? SPARK_AMBER : SPARK_HOT })) fx.stats.sparks++;
+    const fan = e.heavy ? ((i + 0.5) / n - 0.5) * 1.9 + rnd(-0.16, 0.16) : rnd(-0.7, 0.7);
+    const a = base + fan, v = rnd(260, 640) * (0.6 + 0.6 * e.strength);
+    if (add(fx, { k: 'spark', x: e.x, y: e.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, rot: a, life: rnd(180, 320), s0: e.heavy ? 1 : rnd(0.38, 0.55), s1: e.heavy ? 0.55 : 0.12, a0: 1, lenPx: e.heavy ? rnd(36, 48) : 0, tint: i % 2 ? SPARK_AMBER : SPARK_HOT })) fx.stats.sparks++;
     if (e.heavy && i % 3 === 0) add(fx, { k: 'dot', x: e.x, y: e.y, vx: Math.cos(a) * v * 0.25, vy: Math.sin(a) * v * 0.25, rot: 0, life: 250, s0: 0.35, s1: 0.1, a0: 1, tint: SPARK_AMBER });
   }
   if (e.heavy) {
@@ -113,9 +118,12 @@ export function stepFx(fx, world, dt, view, W, H) {
   for (const e of ev) {
     if (e.type === 'wall' && inView(e.x, e.y)) wallBurst(fx, e);
     else if (e.type === 'boost' && inView(e.x, e.y)) {
-      add(fx, { k: 'ring', x: e.car.x, y: e.car.y, vx: 0, vy: 0, rot: 0, life: 260, s0: 0.3, s1: 1.4, a0: 0.8, tint: CYAN, follow: e.car });
-      add(fx, { k: 'glow', x: e.car.x, y: e.car.y, vx: 0, vy: 0, rot: 0, life: 160, s0: 2, s1: 3, a0: 0.8, tint: CYAN, follow: e.car });
+      // v54.1: ONE shockwave per 0.15 crossing, left where it fired (drifts at half the car's speed), 0.3× → 1.4× and
+      // gone after 260 ms — never a shield riding on the car
+      add(fx, { k: 'ring', x: e.car.x, y: e.car.y, vx: e.car.vx * 0.5, vy: e.car.vy * 0.5, rot: 0, life: 260, s0: 0.3, s1: 1.4, a0: 0.8, tint: CYAN, boost: true, carId: e.car.id });
+      add(fx, { k: 'glow', x: e.car.x, y: e.car.y, vx: e.car.vx * 0.5, vy: e.car.vy * 0.5, rot: 0, life: 140, s0: 2, s1: 3, a0: 0.7, tint: CYAN });
       fx.stats.boosts++;
+      if (e.car === world.player) fx.punchAt = now;
     }
   }
   ev.length = 0;
@@ -124,14 +132,19 @@ export function stepFx(fx, world, dt, view, W, H) {
     const sl = slip01(c), near = inView(c.x, c.y, 200);
     const ca = Math.cos(c.angle), sa = Math.sin(c.angle);
     if (sl > 0 && near && !c.finished) {
-      const last = fx.lastStamp.get(c);
-      if (!last || Math.hypot(c.x - last.x, c.y - last.y) > 6) {
-        for (const side of [-1, 1]) {
-          const wx = c.x - ca * CAR_LEN * 0.32 - sa * side * CAR_WID * 0.36, wy = c.y - sa * CAR_LEN * 0.32 + ca * side * CAR_WID * 0.36;
-          stamp(fx, wx, wy, last ? Math.atan2(c.y - last.y, c.x - last.x) : c.angle, 0.35 + 0.25 * sl);
-        }
-        fx.lastStamp.set(c, { x: c.x, y: c.y });
+      // v54.1: each rear tyre stamps along its path from last frame's position to this one, spaced ≤ ¼ stamp length,
+      // so a slide at speed leaves ONE continuous mark per tyre (no dashes); per-stamp alpha is low because ~4 overlap
+      const last = fx.lastStamp.get(c), wheels = [];
+      for (const side of [-1, 1]) wheels.push({ x: c.x - ca * CAR_LEN * 0.32 - sa * side * CAR_WID * 0.36, y: c.y - sa * CAR_LEN * 0.32 + ca * side * CAR_WID * 0.36 });
+      const a1 = 0.1 + 0.08 * sl;
+      for (let k = 0; k < 2; k++) {
+        const w1 = wheels[k], w0 = last ? last[k] : null;
+        const dx = w0 ? w1.x - w0.x : 0, dy = w0 ? w1.y - w0.y : 0, d = Math.hypot(dx, dy);
+        if (!w0 || d > 120) { stamp(fx, w1.x, w1.y, c.angle, a1); continue; } // first contact / teleport
+        const ang = d > 0.5 ? Math.atan2(dy, dx) : c.angle, nSt = Math.max(1, Math.ceil(d / SKID_STEP));
+        for (let i = 1; i <= nSt; i++) stamp(fx, w0.x + dx * i / nSt, w0.y + dy * i / nSt, ang, a1);
       }
+      fx.lastStamp.set(c, wheels);
       if (fx.quality >= 2 && sl > 0.35 && now >= (fx.smokeAt.get(c) || 0)) {
         fx.smokeAt.set(c, now + 140 - 80 * sl);
         const side = Math.random() < 0.5 ? -1 : 1;
@@ -176,4 +189,17 @@ export function partLook(o) {
   let a = o.a0 * (1 - t);
   if (o.k === 'spark' || o.k === 'streak') a = o.a0 * (t < 0.7 ? 1 : (1 - t) / 0.3);
   return { scale: o.s0 + (o.s1 - o.s0) * t, alpha: Math.max(0, a), t };
+}
+
+/**
+ * v54.1 boost zoom punch → camera zoom multiplier. On the player's 0.15 crossing the view kicks out 8 % in 80 ms
+ * (ease-out), then eases back over 600 ms to a mild 3 % hold scaled by boostLevel (0 when the boost is over).
+ */
+export const PUNCH = { kick: 0.08, kickMs: 80, settleMs: 600, hold: 0.03 };
+export function zoomPunch(fx, now, lvl) {
+  const hold = PUNCH.hold * lvl, el = now - fx.punchAt;
+  let k = hold;
+  if (el >= 0 && el < PUNCH.kickMs) { const t = el / PUNCH.kickMs; k = Math.max(hold, PUNCH.kick * (1 - (1 - t) * (1 - t))); }
+  else if (el >= PUNCH.kickMs && el < PUNCH.kickMs + PUNCH.settleMs) { const t = (el - PUNCH.kickMs) / PUNCH.settleMs, e = t * t * (3 - 2 * t); k = PUNCH.kick + (hold - PUNCH.kick) * e; }
+  return 1 - k;
 }

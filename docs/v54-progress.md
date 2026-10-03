@@ -12,3 +12,15 @@
 - Impact distribution (node sloppy-driver sim, 4 tracks × 3 runs × 90 s): 549 events, 485 light / 64 heavy, vn p10/p50/p90/max 262/431/631/854;
   mean speed kept by angle <15° 95 %, 15–30° 89 %, 30–50° 74 %, >50° 53 % (v53.1 same driver: 303 events, 240/63, mean keep 83 %).
 - Races (verify-v53 races): portrait Pixi 2 laps ALL OK (fps 57.1/58.8/58.6/56.8); portrait Canvas 1 lap: all 4 finished, 0 errors, one FAIL = neon "brake used into corners" (bot held BRAKE 0.2 s — v54 low-speed grip means it rarely needs to), fps 54.3/58.2/55.6/51.3 (SwiftShader portrait Canvas, v53 was 50.6/55.6).
+- SHIPPED v54 as 7cc8c56; Pages serves 'v54 · feel' (live phone smoke: Pixi race, fxState on, atlas png+json loaded, 0 errors).
+
+## v54.1 'feel polish' (GD review), branch v541-wip
+- Heavy sparks 8–10, lenPx 36–48 CSS px (Pixi scale = lenPx / (55 visible px × zoom); Canvas stroke lenPx/zoom), fanned ~100° around the bounce direction; light unchanged.
+- Skids: each rear tyre stamps from last frame's wheel position to this one every ≤ 2.5 wu (¼ of the 10 wu stamp), per-stamp alpha 0.10–0.18 (≈4 overlap); tile uploads still batched per 50 ms.
+- Boost ring: one per 0.15 crossing, spawned at the car and drifting at ½ car speed (no follow), 0.3→1.4×, alpha 0.8→0 over 260 ms; verify: early ms 17 scale 0.37, late ms 183 scale 1.08 alpha 0.24, 0 player rings after 300 ms.
+- Flame: atlas flame_0..2 (24 fps, ±8 % flicker, additive; LAP BOOST tinted green) on Pixi and Canvas.
+- Zoom punch: fx.zoomPunch — 8 % out in 80 ms, ease back over 600 ms to 3 % × boostLevel (measured 0.926 @206 ms → 0.97 hold from ~650 ms).
+- Logs: (a) sloppy driver 553 hits: glancing <43° 411 (74 %) wallHit p10/p50/p90/max 239/362/519/620, 0 heavy, keep 85 %; head-on 142 (26 %) 495/624/728/796, 72 heavy, keep 58 %.
+  (b) tightest corners (Gridlock R375, Razor R351) flat out and braking: |vLat| = 0 every frame → slip01 0. The model turns the velocity with the heading; vLat only comes from walls/contacts (after a hit |vLat| p50 53 / p90 185 / p99 408 / max 565; away from walls p99 17). → SLIP back to 80/240 (p90 after a hit = 0.44); 30/60 saturated on any brush.
+- verify-v53: Neon brake expectation relaxed to > 0.1 s (bot barely brakes on Neon since v54 grip).
+- Verify: verify-v541 PASS Neon Pixi + Razor Canvas (final code); races 1 lap ALL OK portrait/landscape Pixi+Canvas, desktop Pixi; FPS table in the report.

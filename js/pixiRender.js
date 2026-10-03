@@ -137,6 +137,7 @@ export async function createPixiRenderer(hudCanvas, app) {
   // ------------------------------------------------------------------ v54 feel FX (state in fx.js; atlas assets/fx)
   const fxAtlas = await loadFxAtlas();
   const partPool = pool(partLayer, white), scrPool = pool(scrLayer, white), ghostPool = pool(ghostLayer, white);
+  const SPARK_VIS = 55; // atlas spark: alpha ≥ 0.25 over the 55 px behind its hot head (anchor 0.85) — the length the eye reads
   const FX_FRAME = { spark: 'spark', dot: 'spark_dot', glow: 'glow', ring: 'ring', streak: 'streak' };
   let skidFor = null, skidSprites = new Map(), skidUpAt = -1e9;
   async function loadFxAtlas() {
@@ -184,7 +185,7 @@ export async function createPixiRenderer(hudCanvas, app) {
         sp.blendMode = o.k === 'smoke' ? 'normal' : 'add';
         sp.tint = o.k === 'smoke' ? 0xffffff : (o.tint ?? 0xffffff);
         if (!fr) { sp.width = sp.height = 24 * lk.scale; sp.rotation = 0; continue; }
-        if (o.k === 'spark') { sp.rotation = o.rot; sp.scale.set(lk.scale, 0.45); }
+        if (o.k === 'spark') { sp.rotation = o.rot; sp.scale.set(o.lenPx ? o.lenPx * lk.scale / (SPARK_VIS * wd.cam.zoom) : lk.scale, o.lenPx ? 0.55 : 0.45); } // heavy: lenPx = CSS px of the visible streak
         else if (o.k === 'streak') { sp.rotation = 0; sp.scale.set(0.5, lk.scale); }
         else { sp.rotation = o.rot || 0; sp.scale.set(lk.scale); }
       }
@@ -404,7 +405,13 @@ export async function createPixiRenderer(hudCanvas, app) {
       const len = (26 + 34 * lvl) * s * fl, green = !!car.boostGreen;
       v.flame.visible = true; v.flame.alpha = Math.min(1, lvl * 1.4);
       v.flame.position.set(car.x, car.y); v.flame.rotation = car.angle;
-      v.flames.forEach((f, i) => { f.texture = green ? flameGreen : flameOrange; f.position.set(-hl + 2 * s, (i ? 1 : -1) * hw * 0.42); f.scale.set((len + 2 * s) / 120, s / 2); });
+      if (fxAtlas) { // v54.1: GD's atlas flame_0..2 (cyan → pink), additive, 24 fps cycle with a ±8 % flicker; LAP BOOST tinted green
+        v.flames.forEach((f, i) => {
+          const fr = fxAtlas['flame_' + (Math.floor(t / 41.7 + i) % 3)], fk = 1 + 0.08 * Math.sin(t * 0.09 + i * 1.7);
+          f.texture = fr.tex; f.anchor.set(fr.ax, fr.ay); f.rotation = Math.PI / 2; f.blendMode = 'add'; f.tint = green ? 0x8dff6a : 0xffffff;
+          f.position.set(-hl + 4 * s, (i ? 1 : -1) * hw * 0.42); f.scale.set(12 * s * 1.6 * fk / 80, len * 1.3 * fk / (0.9 * 160));
+        });
+      } else v.flames.forEach((f, i) => { f.texture = green ? flameGreen : flameOrange; f.position.set(-hl + 2 * s, (i ? 1 : -1) * hw * 0.42); f.scale.set((len + 2 * s) / 120, s / 2); });
       const lines = [[-hw * 1.35, 1], [hw * 1.35, 0.8], [-hw * 0.7, 0.55], [hw * 0.7, 0.65]];
       v.streaks.forEach((st, i) => {
         const [dy, kk] = lines[i], ph = ((t * 0.004 + kk * 3.1) % 1);

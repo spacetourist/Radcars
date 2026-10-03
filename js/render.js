@@ -26,6 +26,15 @@ export function minimapBox(track, W, H) {
   return { bx: box.x, by: box.y, bw: box.w, bh: box.h, sc, ox: x0 - b.minX * sc, oy: y0 - b.minY * sc, key: [box.x, box.y, box.w, box.h].map(Math.round).join(',') };
 }
 
+// v54.1 FX atlas for the Canvas boost flame (same frames as Pixi); loaded once, best effort
+let fxAtlasImg = null, fxAtlasMeta = null;
+if (typeof Image !== 'undefined' && typeof fetch !== 'undefined') {
+  try {
+    fetch('assets/fx/fx-atlas.json').then((r) => r.json()).then((m) => { fxAtlasMeta = m; }).catch(() => {});
+    const im = new Image(); im.onload = () => { fxAtlasImg = im; }; im.src = 'assets/fx/fx-atlas.png';
+  } catch (_) {}
+}
+
 export function createRenderer(canvas, opts = {}) {
   // opts.hud (v51 Pixi mode): this canvas is a transparent overlay above the WebGL race view and only draws the
   // minimap, BOOST / MISSILE panels and the countdown; the world itself is drawn by js/pixiRender.js.
@@ -320,7 +329,7 @@ export function createRenderer(canvas, opts = {}) {
     if (autopilot) drawAutopilotGlow(world.player, cam.zoom, world.race.time, world.power.activeMs, true);
     for (const m of world.missiles || []) if (!m.dead) drawMissile(m, cam.zoom);
     for (const f of world.fx || []) drawFx(f, cam.zoom);
-    if (fx) drawFeelParts(fx, false);
+    if (fx) drawFeelParts(fx, false, cam.zoom);
     ctx.restore();
     if (fx) drawFeelParts(fx, true);
     if (!world.finish) drawMinimap(world);
@@ -335,7 +344,7 @@ export function createRenderer(canvas, opts = {}) {
    */
   /** v54 feel particles, Canvas fallback: plain strokes / arcs (no atlas), same state + timing as the Pixi version. */
   const hex = (n) => '#' + (n >>> 0).toString(16).padStart(6, '0');
-  function drawFeelParts(fx, screen) {
+  function drawFeelParts(fx, screen, zoom = 1) {
     ctx.save();
     for (const o of fx.parts) {
       if (!!o.scr !== screen) continue;
@@ -344,7 +353,7 @@ export function createRenderer(canvas, opts = {}) {
       if (o.k === 'smoke') { ctx.globalCompositeOperation = 'source-over'; ctx.fillStyle = '#e6e6ec'; ctx.beginPath(); ctx.arc(o.x, o.y, 40 * lk.scale, 0, 6.2832); ctx.fill(); continue; }
       ctx.globalCompositeOperation = 'lighter';
       const col = hex(o.tint ?? 0xffffff);
-      if (o.k === 'spark') { const L = 80 * lk.scale; ctx.strokeStyle = col; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(o.x, o.y); ctx.lineTo(o.x - Math.cos(o.rot) * L, o.y - Math.sin(o.rot) * L); ctx.stroke(); }
+      if (o.k === 'spark') { const L = o.lenPx ? o.lenPx * lk.scale / zoom : 80 * lk.scale; ctx.strokeStyle = col; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(o.x, o.y); ctx.lineTo(o.x - Math.cos(o.rot) * L, o.y - Math.sin(o.rot) * L); ctx.stroke(); }
       else if (o.k === 'dot' || o.k === 'glow') { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(o.x, o.y, (o.k === 'glow' ? 18 : 8) * lk.scale, 0, 6.2832); ctx.fill(); }
       else if (o.k === 'ring') { ctx.strokeStyle = col; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(o.x, o.y, 56 * lk.scale, 0, 6.2832); ctx.stroke(); }
       else if (o.k === 'streak') { ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(o.x, o.y); ctx.lineTo(o.x, o.y + 300 * lk.scale); ctx.stroke(); }
@@ -424,6 +433,21 @@ export function createRenderer(canvas, opts = {}) {
       const ph = ((tMs * 0.004 + k * 3.1) % 1);
       const x0 = -hl - 10 * s - ph * 30 * s;
       ctx.beginPath(); ctx.moveTo(x0, dy); ctx.lineTo(x0 - (30 + 40 * k) * s * lvl, dy); ctx.stroke();
+    }
+    // v54.1: GD's atlas flame_0..2 (cyan → pink, additive, 24 fps cycle, ±8 % flicker); the drawn flames stay as the
+    // fallback until the atlas has loaded
+    if (fxAtlasImg && fxAtlasMeta) {
+      ctx.globalCompositeOperation = 'lighter';
+      for (const side of [-1, 1]) {
+        const f = fxAtlasMeta.frames['flame_' + (Math.floor(tMs / 41.7 + (side > 0 ? 1 : 0)) % 3)].frame, fk = 1 + 0.08 * Math.sin(tMs * 0.09 + side * 1.7);
+        const h = len * 1.3 * fk / 0.9, w = 12 * s * 1.6 * fk;
+        ctx.save(); ctx.translate(-hl + 4 * s, side * hw * 0.42); ctx.rotate(Math.PI / 2);
+        if (green) ctx.filter = 'hue-rotate(-110deg) saturate(1.4)'; // LAP BOOST keeps its green burner
+        ctx.drawImage(fxAtlasImg, f.x, f.y, f.w, f.h, -w / 2, -h * 0.1, w, h);
+        ctx.restore();
+      }
+      ctx.restore();
+      return;
     }
     // two exhaust flames at the tail: outer orange, inner hot yellow
     for (const side of [-1, 1]) {

@@ -3,7 +3,7 @@ import { createCar, CAR_COLORS, AI_NAMES } from './cars.js';
 import { stepCar, initCarOnTrack, resolveCarCollisions, BOOST_TOP_MUL, CAR_LEN, CAR_WID, slip01 } from './physics.js';
 import { stepAI } from './ai.js';
 import { createRenderer } from './render.js';
-import { newFx, stepFx } from './fx.js';
+import { newFx, stepFx, zoomPunch } from './fx.js';
 import { sfx, setAudioPaused, engineFrame, wallStrength, WALL } from './audio.js';
 import { clamp, angleDiff } from './util.js';
 import { pointAt } from './tracks.js';
@@ -176,7 +176,7 @@ export function createGame(canvas, input) {
     if (!fx) { renderer.draw(world); return; }
     const vw = canvas.clientWidth || innerWidth, vh = canvas.clientHeight || innerHeight;
     if (dt > 0) stepFx(fx, world, dt, { x: cam.x, y: cam.y, hw: vw / 2 / cam.zoom, hh: vh / 2 / cam.zoom }, vw, vh);
-    const x = cam.x, y = cam.y, z = cam.zoom, punch = 1 - 0.05 * (world.player.boostLevel || 0);
+    const x = cam.x, y = cam.y, z = cam.zoom, punch = zoomPunch(fx, world.race.time, world.player.boostLevel || 0);
     cam.zoom = z * punch; cam.x = x - fx.shake.x / cam.zoom; cam.y = y - fx.shake.y / cam.zoom;
     try { renderer.draw(world); } finally { cam.x = x; cam.y = y; cam.zoom = z; }
   }

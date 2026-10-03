@@ -195,5 +195,5 @@ export function resolveCarCollisions(cars, track) {
 }
 
 /** v54 slide amount 0…1 from the pre-grip lateral speed (skid marks, smoke, squeal). Retuned for the v54 grip. */
-export const SLIP_LO = 30, SLIP_RANGE = 60; // measured 390x844 Neon key-bot: |vLat| p50 0, p90 10, p99 39, max 52 (v53 vL scale 80/240 never fired)
+export const SLIP_LO = 80, SLIP_RANGE = 240; // v54.1: back to 80/240. Cornering never slides in this model (the velocity turns with the heading), so vLat only comes from walls / contacts: after a wall hit p50 53, p90 185, p99 408, max 565 → 80/240 grades that range (p90 0.44); 30/60 saturated on any brush
 export function slip01(car) { return clamp((Math.abs(car.vLat || 0) - SLIP_LO) / SLIP_RANGE, 0, 1); }

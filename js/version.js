@@ -1,6 +1,6 @@
 // Single source of truth for the build name. Loaded as a classic script by index.html (sets self.RADCARS_BUILD for the
 // menu label) and by sw.js via importScripts (cache name). Bump here on every release.
-self.RADCARS_BUILD = { version: 'v54', name: 'feel' };
+self.RADCARS_BUILD = { version: 'v54.1', name: 'feel polish' };
 self.RADCARS_BUILD.label = `${self.RADCARS_BUILD.version} · ${self.RADCARS_BUILD.name}`;
 self.RADCARS_BUILD.cache = `radcars-${self.RADCARS_BUILD.version}-${self.RADCARS_BUILD.name}`;
 // Files the service worker pre-caches and the menu's hard refresh re-downloads (relative to the site root).
