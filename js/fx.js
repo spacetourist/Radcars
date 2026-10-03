@@ -14,6 +14,7 @@ import { CAR_LEN, CAR_WID } from './physics.js';
 export const FX_CAP = 64;
 export const SHAKE_PX = 4, SHAKE_MS = 150;
 export const SKID_LEN = 10, SKID_STEP = SKID_LEN / 4; // stamp length (wu) and the max spacing along a tyre path
+export const SKID_ON = 0.22, SKID_OFF = 0.15; // v54.3 slip01 hysteresis, shared with the squeal gate
 export const SKID_TILE = 256, SKID_MAX_TILES = 64; // 256² tiles keep each re-upload small; least-recently-stamped tile is recycled past 64
 const SPARK_HOT = 0xffe600, SPARK_AMBER = 0xffb347, SODIUM = 0xffb347, CYAN = 0x00e8ff;
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -26,7 +27,7 @@ export function newFx() {
     shake: { ms: 0, amp: 0, x: 0, y: 0 },
     ghosts: new Map(), // car -> [{x, y, a}] newest first (boost trail)
     pinned: q ? +q[1] : -1, quality: q ? +q[1] : 2, fpsAvg: 60, lowMs: 0, highMs: 0,
-    lastStamp: new Map(), smokeAt: new Map(), streakAt: 0, punchAt: -1e9,
+    lastStamp: new Map(), smokeAt: new Map(), skidOn: new Set(), streakAt: 0, punchAt: -1e9,
     stats: { sparks: 0, rings: 0, smoke: 0, streaks: 0, stamps: 0, heavy: 0, light: 0, boosts: 0, dropped: 0, vibrate: 0 }
   };
 }
@@ -131,7 +132,12 @@ export function stepFx(fx, world, dt, view, W, H) {
   for (const c of world.cars) {
     const sl = slip01(c), near = inView(c.x, c.y, 200);
     const ca = Math.cos(c.angle), sa = Math.sin(c.angle);
-    if (sl > 0 && near && !c.finished) {
+    // v54.3: the squeal gate (docs/ENGINE_NOTE_SPEC.md §7 rev 3.2): on above slip01 0.22 (speed01 > 0.25), off below
+    // 0.15 (or speed01 < 0.18), so skid marks, smoke and the squeal start and stop together
+    const sp01 = Math.hypot(c.vx, c.vy) / 1100, wasOn = fx.skidOn.has(c);
+    const on = wasOn ? !(sl < SKID_OFF || sp01 < 0.18) : sl > SKID_ON && sp01 > 0.25;
+    if (on) fx.skidOn.add(c); else fx.skidOn.delete(c);
+    if (on && near && !c.finished) {
       // v54.1: each rear tyre stamps along its path from last frame's position to this one, spaced ≤ ¼ stamp length,
       // so a slide at speed leaves ONE continuous mark per tyre (no dashes); per-stamp alpha is low because ~4 overlap
       const last = fx.lastStamp.get(c), wheels = [];
@@ -145,7 +151,7 @@ export function stepFx(fx, world, dt, view, W, H) {
         for (let i = 1; i <= nSt; i++) stamp(fx, w0.x + dx * i / nSt, w0.y + dy * i / nSt, ang, a1);
       }
       fx.lastStamp.set(c, wheels);
-      if (fx.quality >= 2 && sl > 0.35 && now >= (fx.smokeAt.get(c) || 0)) {
+      if (fx.quality >= 2 && now >= (fx.smokeAt.get(c) || 0)) {
         fx.smokeAt.set(c, now + 140 - 80 * sl);
         const side = Math.random() < 0.5 ? -1 : 1;
         if (add(fx, { k: 'smoke', x: c.x - ca * CAR_LEN * 0.4 - sa * side * CAR_WID * 0.3, y: c.y - sa * CAR_LEN * 0.4 + ca * side * CAR_WID * 0.3, vx: c.vx * 0.15, vy: c.vy * 0.15, rot: rnd(0, 6.28), life: rnd(600, 900), s0: 0.22, s1: 0.7, a0: 0.3 + 0.2 * sl, frame: (Math.random() * 4) | 0 })) fx.stats.smoke++;
@@ -167,11 +173,21 @@ export function stepFx(fx, world, dt, view, W, H) {
     // v54.2 (GD): streaks follow the car's on-screen direction of travel (the camera never rotates, so that is the
     // velocity direction): each line lies along it, flows backwards past the car, and spawns near the screen edges on
     // either side of that direction (and from ahead, so it sweeps across the side band)
+    // v54.3 (GD): ...and only inside the clear area between the HUD pills and the control cluster (fx.clear, measured
+    // from the DOM by game.js; whole screen minus 12 px when unknown), the whole line inside it at spawn
     const sp = Math.hypot(p.vx, p.vy) || 1, dx = p.vx / sp, dy = p.vy / sp, nx = -dy, ny = dx;
-    const edge = (ux, uy) => Math.min(Math.abs(ux) > 1e-3 ? W / 2 / Math.abs(ux) : 1e9, Math.abs(uy) > 1e-3 ? H / 2 / Math.abs(uy) : 1e9);
+    const C = streakBand(fx, W, H), cx = (C.x0 + C.x1) / 2, cy = (C.y0 + C.y1) / 2, bw = C.x1 - C.x0, bh = C.y1 - C.y0;
+    const edge = (ux, uy) => Math.min(Math.abs(ux) > 1e-3 ? bw / 2 / Math.abs(ux) : 1e9, Math.abs(uy) > 1e-3 ? bh / 2 / Math.abs(uy) : 1e9);
     const side = Math.random() < 0.5 ? -1 : 1, off = edge(nx, ny) * rnd(0.74, 0.96), along = edge(dx, dy) * rnd(-0.2, 1.0);
-    const x = W / 2 + nx * side * off + dx * along, y = H / 2 + ny * side * off + dy * along, v = rnd(1500, 2400);
-    if (add(fx, { k: 'streak', scr: true, x, y, vx: -dx * v, vy: -dy * v, dx, dy, rot: Math.atan2(dy, dx) - Math.PI / 2, life: rnd(200, 350), s0: rnd(0.35, 0.6), s1: rnd(0.35, 0.6), a0: 0.15 + 0.2 * k, tint: 0xffffff })) fx.stats.streaks++;
+    let sc = rnd(0.35, 0.6);
+    // keep both tips ≥ STREAK_FADE_PX inside the band (shorter lines when the band is small)
+    const room = (span, u) => (Math.abs(u) > 1e-3 ? (span / 2 - STREAK_FADE_PX - 2) / (STREAK_HALF * Math.abs(u)) : 9);
+    sc = Math.min(sc, room(bw, dx), room(bh, dy));
+    if (sc >= 0.12) {
+      const hx = STREAK_HALF * sc * Math.abs(dx) + STREAK_FADE_PX + 1, hy = STREAK_HALF * sc * Math.abs(dy) + STREAK_FADE_PX + 1;
+      const x = clampN(cx + nx * side * off + dx * along, C.x0 + hx, C.x1 - hx), y = clampN(cy + ny * side * off + dy * along, C.y0 + hy, C.y1 - hy), v = rnd(1500, 2400);
+      if (add(fx, { k: 'streak', scr: true, x, y, vx: -dx * v, vy: -dy * v, dx, dy, rot: Math.atan2(dy, dx) - Math.PI / 2, life: rnd(200, 350), s0: sc, s1: sc, a0: 0.15 + 0.2 * k, tint: 0xffffff, band: C, fade: 1 })) fx.stats.streaks++;
+    }
   }
   // ---- integrate + expire
   const s = dt / 1000;
@@ -180,6 +196,12 @@ export function stepFx(fx, world, dt, view, W, H) {
     if (o.ms >= o.life) { fx.parts.splice(i, 1); continue; }
     if (o.follow) { o.x = o.follow.x; o.y = o.follow.y; }
     o.x += o.vx * s; o.y += o.vy * s;
+    if (o.band) { // v54.3: fade over the last STREAK_FADE_PX before the HUD / controls / screen side, gone once the tip is out
+      const B = o.band, h = STREAK_HALF * o.s0, tx = o.x - o.dx * h, ty = o.y - o.dy * h; // leading tip (moves along −d)
+      const m = Math.min(tx - B.x0, B.x1 - tx, ty - B.y0, B.y1 - ty);
+      o.fade = Math.max(0, Math.min(1, m / STREAK_FADE_PX));
+      if (m <= 0) { fx.parts.splice(i, 1); continue; }
+    }
     if (o.k === 'spark') { o.vx *= Math.exp(-4 * s); o.vy *= Math.exp(-4 * s); }
     if (o.k === 'smoke') { o.vx *= Math.exp(-2 * s); o.vy *= Math.exp(-2 * s); o.rot += 0.6 * s; }
   }
@@ -189,11 +211,22 @@ export function stepFx(fx, world, dt, view, W, H) {
   fadeSkids(fx, now);
 }
 
+const STREAK_HALF = 160;    // CSS px half-length of a streak at scale 1 (Pixi frame 320 px, Canvas 300 px)
+const STREAK_FADE_PX = 24; // v54.3 (GD): fade-out distance before the HUD / controls
+const clampN = (v, a, b) => (b < a ? (a + b) / 2 : Math.max(a, Math.min(b, v)));
+/** v54.3: the clear rectangle streaks live in (screen CSS px): fx.clear from game.js, else the screen minus 12 px. */
+export function streakBand(fx, W, H) {
+  const c = fx.clear, m = 12;
+  if (!c || c.W !== W || c.H !== H) return { x0: m, y0: m, x1: W - m, y1: H - m };
+  return { x0: Math.max(m, c.x0), y0: Math.max(m, c.y0), x1: Math.min(W - m, c.x1), y1: Math.min(H - m, c.y1) };
+}
+
 /** Particle look at time t: {scale, alpha}. */
 export function partLook(o) {
   const t = o.ms / o.life;
   let a = o.a0 * (1 - t);
   if (o.k === 'spark' || o.k === 'streak') a = o.a0 * (t < 0.7 ? 1 : (1 - t) / 0.3);
+  if (o.fade != null) a *= o.fade;
   return { scale: o.s0 + (o.s1 - o.s0) * t, alpha: Math.max(0, a), t };
 }
 

@@ -171,11 +171,35 @@ export function createGame(canvas, input) {
    * high-speed chase, then clamp look so the player's AABB stays inside the view with ~10% of
    * the shorter screen side as margin, and hard-correct after smoothing if anything slips.
    */
+  /**
+   * v54.3 (GD): the clear area speed streaks may use, from the real DOM: below the HUD pills / pause button (+12 px) and
+   * clear of the control cluster (action buttons + steer ring). Portrait: the full-width band above the cluster;
+   * landscape / desktop (clusters in the bottom corners): whichever is larger of that band and the column between the
+   * two clusters. Re-measured on resize and every 500 ms (the layout only changes on resize / orientation).
+   */
+  let clearAt = -1e9;
+  function measureClear(fx, vw, vh) {
+    const t = performance.now(), c = fx.clear;
+    if (c && c.W === vw && c.H === vh && t - clearAt < 500) return;
+    clearAt = t;
+    const cr = canvas.getBoundingClientRect ? canvas.getBoundingClientRect() : { left: 0, top: 0 }, rel = (e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0 ? { l: b.left - cr.left, t: b.top - cr.top, r: b.right - cr.left, b: b.bottom - cr.top } : null; };
+    const pick = (sel) => (document.querySelectorAll ? [...document.querySelectorAll(sel)] : []).map(rel).filter(Boolean);
+    const hud = pick('#hud > .pill, #btn-pause'), ctl = pick('#touch-controls .act, #aim-pad');
+    const top = (hud.length ? Math.max(...hud.map((b) => b.b)) : 0) + 12;
+    if (!ctl.length) { fx.clear = { W: vw, H: vh, x0: 12, y0: top, x1: vw - 12, y1: vh - 12 }; return; }
+    const band = { x0: 12, y0: top, x1: vw - 12, y1: Math.min(...ctl.map((b) => b.t)) - 8 };
+    const L = ctl.filter((b) => (b.l + b.r) / 2 < vw / 2), R = ctl.filter((b) => (b.l + b.r) / 2 >= vw / 2);
+    const col = { x0: (L.length ? Math.max(...L.map((b) => b.r)) : 0) + 12, y0: top, x1: (R.length ? Math.min(...R.map((b) => b.l)) : vw) - 12, y1: vh - 12 };
+    const area = (q) => Math.max(0, q.x1 - q.x0) * Math.max(0, q.y1 - q.y0);
+    fx.clear = { W: vw, H: vh, ...(area(col) > area(band) ? col : band) };
+  }
+
   /** v54: advance the shared FX state, then draw with the camera shake + boost zoom punch applied for this frame only. */
   function drawWithFeel(dt) {
     const cam = world.cam, fx = world.fxState;
     if (!fx) { renderer.draw(world); return; }
     const vw = canvas.clientWidth || innerWidth, vh = canvas.clientHeight || innerHeight;
+    measureClear(fx, vw, vh);
     if (dt > 0) stepFx(fx, world, dt, { x: cam.x, y: cam.y, hw: vw / 2 / cam.zoom, hh: vh / 2 / cam.zoom }, vw, vh);
     const x = cam.x, y = cam.y, z = cam.zoom, punch = zoomPunch(fx, world.race.time, world.player.boostLevel || 0);
     cam.zoom = z * punch; cam.x = x - fx.shake.x / cam.zoom; cam.y = y - fx.shake.y / cam.zoom;
@@ -369,7 +393,8 @@ export function createGame(canvas, input) {
       // v54.2: drift handling only under the player's own control (never on autopilot / handback / finish cruise / spin)
       c.drift = !!(c.driftOn && c.isPlayer && !autopilot && !world.power.handback && !c.finished && !spinning);
       rampBoost(c, dt);
-      ctl.boost = ctl.autopilot ? 0 : (c.boostLevel || 0); // autopilot: its own +25% top, pads/boost don't stack
+      // autopilot rail: its own +25% top; pads don't stack, but v54.3 lets the player's BOOST stack on it (finish cruise: none)
+      ctl.boost = ctl.autopilot && !(c.isPlayer && autopilot && !c.finished) ? 0 : (c.boostLevel || 0);
       c.drive = ctl.accel || !!ctl.steer; // last frame's drive input (read by the verify scripts)
       stepCar(c, ctl, dt, track);
       if (topSave != null) c.top = topSave;
@@ -498,8 +523,9 @@ export function createGame(canvas, input) {
   function updateBoost(flags, dt) {
     const b = world.boost, p = world.player;
     b.last = playerIsLast();
-    // autopilot already runs its own +25 % top: a boost press is ignored (charge kept)
-    if (flags.boost && !p.finished && b.activeMs <= 0 && world.power.active !== 'autopilot') {
+    // v54.3: BOOST works on autopilot too (it used to be ignored there, charge kept — Callum's bug); it stacks on the
+    // autopilot's +25 % top exactly like a normal boost stacks on the car's top speed
+    if (flags.boost && !p.finished && b.activeMs <= 0) {
       if (b.last) { b.activeMs = BOOST_MS; b.free = true; b.freeUses++; }
       else if (b.charge > 0) { b.charge = 0; b.activeMs = BOOST_MS; b.free = false; b.uses++; }
       if (b.activeMs > 0) { b.lastTriggerMs = world.race.time; b.source = flags.boostSource; } // v54: no press sound — the boostLevel 0.15 edge drives boost FX (+ the whoosh later)
@@ -513,7 +539,8 @@ export function createGame(canvas, input) {
     if (c.padMs > 0) c.padMs = Math.max(0, c.padMs - dt);
     const lapBoost = c.isPlayer && world.power.active === 'lapboost';
     const onRail = c.isPlayer && world.power.active === 'autopilot'; // autopilot: pads don't stack (no flames either)
-    const other = !onRail && ((c.isPlayer && world.boost.activeMs > 0) || c.padMs > 0);
+    // v54.3: the player's own BOOST does apply on autopilot (pads still don't)
+    const other = (c.isPlayer && world.boost.activeMs > 0) || (!onRail && c.padMs > 0);
     const on = other || lapBoost;
     const lvl = c.boostLevel || 0;
     // v50: power-up lap boost burns bright green (and its ramp-out stays green unless a normal boost takes over)
