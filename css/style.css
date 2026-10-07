@@ -614,3 +614,14 @@ canvas.podium { display: block; width: 100%; height: 200px; }
 #touch-controls .act[data-state="notarget"] .act-icon { opacity: 0.5; }
 #touch-controls .act[data-state="notarget"] .act-label { color: #c3c6d4; }
 #touch-controls .act[data-state="notarget"] .act-ring { opacity: 0.45; }
+
+/* v54.4.1 MISSILE start lockout (GD): disc at ~60% brightness, yellow ring fills clockwise to GO, no label */
+#touch-controls.counting .act[data-state="locked"] { opacity: 1; }
+#touch-controls .act[data-state="locked"] .act-vis { border: 3px solid rgba(255,212,0,0.25); box-shadow: inset 0 0 0 999px rgba(0,0,0,0.4), 0 3px 8px rgba(0,0,0,0.45); }
+#touch-controls .act[data-state="locked"] .act-icon { filter: brightness(0.6); }
+#touch-controls .act[data-state="locked"] .act-label { display: none; }
+#touch-controls .act[data-state="locked"] .act-ring {
+  background: conic-gradient(#ffd400 0 calc(var(--p) * 1turn), transparent 0);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3.5px));
+}

@@ -189,6 +189,7 @@ export function toast(text, icon, color) {
   try { (self.__RAD_TOASTS__ = self.__RAD_TOASTS__ || []).push({ text, icon, t: performance.now() }); } catch (_) {}
 }
 
+
 function paint(k, st) {
   const el = els[k]; if (!el) return;
   const p = prev[k] || (prev[k] = {});
@@ -228,6 +229,7 @@ export function updateControls(w, info) {
   // MISSILE
   let mst;
   if (ms.inFlight) mst = { state: 'active', label: 'MISSILE', p: 1 };
+  else if (counting) mst = { state: 'locked', label: '', p: Math.min(1, Math.max(0, 1 - w.race.countdown / (w.race.countdownMs || 3800))) }; // v54.4.1 start lockout: ring fills to GO
   else if (ms.charge > 0 && ms.hasTarget === false && !counting) mst = { state: 'notarget', label: 'NO TARGET', p: null }; // v54.4
   else if (ms.charge > 0) mst = { state: 'ready', label: 'MISSILE', p: null };
   else mst = { state: 'used', label: 'NEXT LAP', p: lapFrac };

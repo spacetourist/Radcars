@@ -72,8 +72,22 @@ console.log(`  slip01 through the first handbrake corner (ms from press : slip01
 
 // ---------------------------------------------------------------- 3. MISSILE NO TARGET
 console.log('=== missile NO TARGET');
-await startRace(0);
-await page.evaluate(() => { const w = window.__RAD_GAME__.world, p = w.player; for (const c of w.cars) if (c !== p) c.dist -= 1500; w.missile.charge = 1; }); // player now leads
+// v54.4.1: real start first — on the grid (countdown) and a few seconds in, 5 cars ahead → never NO TARGET
+await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+await page.goto(u, { waitUntil: 'networkidle2' }); await page.evaluate(() => localStorage.clear()); await page.reload({ waitUntil: 'networkidle2' });
+await page.tap('[data-act=race]'); await page.waitForSelector('#tracks button'); await (await page.$$('#tracks button'))[0].tap();
+await page.waitForFunction(() => window.__RAD_GAME__?.world?.race?.countdown > 0 && window.__RAD_GAME__.world.race.countdown < 2500, { timeout: 20000 });
+await page.evaluate(() => { window.__mst = new Set(); const w = window.__RAD_GAME__.world; const f = () => { window.__mst.add(document.getElementById('btn-missile').dataset.state + (w.race.countdown > 0 ? '@grid' : '@race')); if (w.race.time < 3000) requestAnimationFrame(f); }; requestAnimationFrame(f); });
+const grid = await page.evaluate(() => { const e = document.getElementById('btn-missile'); return { st: e.dataset.state, p: +e.style.getPropertyValue('--p'), label: getComputedStyle(e.querySelector('.act-label')).display, counting: document.getElementById('touch-controls').classList.contains('counting') }; });
+await page.screenshot({ path: `${out}/88-missile-grid${tag}.png` });
+await page.waitForFunction(() => window.__RAD_GAME__.world.race.time >= 3000, { timeout: 20000 });
+const early = await page.evaluate(() => ({ st: document.getElementById('btn-missile').dataset.state, seen: [...window.__mst], place: [...window.__RAD_GAME__.world.cars].sort((a, b) => b.dist - a.dist).indexOf(window.__RAD_GAME__.world.player) + 1 }));
+await page.screenshot({ path: `${out}/88-missile-3s${tag}.png` });
+ok(grid.counting && grid.st === 'locked' && grid.p > 0.2 && grid.p < 1 && grid.label === 'none' && early.st === 'ready' && !early.seen.some((x) => x.startsWith('notarget')), `start: grid state "${grid.st}" ring ${grid.p} label ${grid.label}, 3 s in P${early.place} → "${early.st}"; states seen ${early.seen.join(', ')} (never NO TARGET)`);
+// genuine lead: put the player 600 wu in front of the race leader (on track and in race order)
+await page.evaluate(async () => { const { pointAt } = await import('./js/tracks.js'); const PH = await import('./js/physics.js'); const w = window.__RAD_GAME__.world, p = w.player, t = w.track;
+  const lead = [...w.cars].filter((c) => c !== p).sort((a, b) => b.dist - a.dist)[0]; const q = pointAt(t, lead.sPrev + 600);
+  p.x = q.x; p.y = q.y; p.angle = Math.atan2(q.ty, q.tx); p.vx = Math.cos(p.angle) * 900; p.vy = Math.sin(p.angle) * 900; p.seg = -1; PH.initCarOnTrack(p, t, lead.dist + 600); w.missile.charge = 1; });
 await wait(300);
 const nt = await page.evaluate(() => { const e = document.getElementById('btn-missile'), cs = getComputedStyle(e), v = getComputedStyle(e.querySelector('.act-vis')); return { state: e.dataset.state, label: e.querySelector('.act-label').textContent, pe: cs.pointerEvents, op: cs.opacity, filter: v.filter, disabled: e.disabled || e.classList.contains('disabled') }; });
 await page.screenshot({ path: `${out}/88-missile-no-target${tag}.png` });

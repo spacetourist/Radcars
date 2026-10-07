@@ -113,7 +113,7 @@ export function createGame(canvas, input) {
     const cam = { x: p.x, y: p.y, zoom: ZOOM_GRID };
     world = {
       track, cars, player: p, cam,
-      race: { trackIndex, totalLaps: laps, time: 0, countdown: COUNTDOWN_MS, goFlash: 0, over: false, placesAssigned: 0, lapFlashMs: 0, lapFlashLast: 0, lapFlashBest: 0 }
+      race: { trackIndex, totalLaps: laps, time: 0, countdown: COUNTDOWN_MS, countdownMs: COUNTDOWN_MS, goFlash: 0, over: false, placesAssigned: 0, lapFlashMs: 0, lapFlashLast: 0, lapFlashBest: 0 }
     };
     world.boost = newBoost();
     world.fxEvents = []; world.wallLog = []; world.fxState = newFx(); // v54 feel events (consumed by the renderer's FX) + impact log
@@ -186,9 +186,12 @@ export function createGame(canvas, input) {
    * two clusters. Re-measured on resize and every 500 ms (the layout only changes on resize / orientation).
    */
   let clearAt = -1e9, obsAt = -1e9;
+  let toastWas = false;
   function measureClear(fx, vw, vh) {
     const t = performance.now(), c = fx.clear;
-    if (c && c.W === vw && c.H === vh && t - clearAt < 500) { if (t - obsAt >= 100) { obsAt = t; c.obs = clearObstacles(vw, vh); } return; }
+    const te = document.getElementById ? document.getElementById('tc-toast') : null, toastNow = !!(te && !te.classList.contains('hidden'));
+    const toastLive = toastNow || toastWas; toastWas = toastNow; // v54.4.1: every frame while a toast shows (+1 frame after)
+    if (c && c.W === vw && c.H === vh && t - clearAt < 500) { if (t - obsAt >= 100 || toastLive) { obsAt = t; c.obs = clearObstacles(vw, vh); } return; }
     clearAt = t; obsAt = t;
     const cr = canvas.getBoundingClientRect ? canvas.getBoundingClientRect() : { left: 0, top: 0 }, rel = (e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0 ? { l: b.left - cr.left, t: b.top - cr.top, r: b.right - cr.left, b: b.bottom - cr.top } : null; };
     const pick = (sel) => (document.querySelectorAll ? [...document.querySelectorAll(sel)] : []).map(rel).filter(Boolean);
