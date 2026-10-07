@@ -54,6 +54,9 @@ export async function createPixiRenderer(hudCanvas, app) {
   // Pixi's batch shader picks the texture with an if-chain over every bound unit (16 on most GPUs); software GL
   // (SwiftShader) and weak mobile GPUs run that chain per fragment, so batches are capped to a few textures.
   renderer.limits.maxBatchableTextures = Math.min(renderer.limits.maxBatchableTextures, 4);
+  // track-edge pack prototype (?trackpack=1, Gridlock only): loaded only with the flag, so default play is untouched
+  const TP = /[?&]trackpack=1/.test(location.search) ? await import('./trackpack.js').then((m) => m.loadTrackPack(P, canvasTexture)).catch((e) => { console.warn(String(e)); return null; }) : null;
+  try { if (TP) window.__RAD_TRACKPACK__ = TP; } catch (_) {}
   // #game stays in the layout (game.js reads its size for the camera / aim) but empty and hidden; the HUD code draws
   // into a detached canvas whose changed rectangles become WebGL sprites (see the HUD section below)
   hudCanvas.classList.add('hud-overlay');
@@ -233,8 +236,10 @@ export async function createPixiRenderer(hudCanvas, app) {
       band(hw - 3, '#ffffff', 0.14);
       band(hw - KERB + 5, '#000000', 0.42);
       g.save(); g.beginPath(); g.rect(-(hw - KERB), 0, 2 * (hw - KERB), ROAD_PERIOD); g.clip();
-      const pat = g.createPattern(textureTile('asphalt', track.asphalt, 256), 'repeat');
-      g.fillStyle = pat; g.fillRect(-hw, 0, hw * 2, ROAD_PERIOD); g.restore();
+      if (TP && TP.applies(track)) TP.bakeAsphalt(g, -hw, hw); // trackpack: neutral asphalt × GD grain, baked
+      else { const pat = g.createPattern(textureTile('asphalt', track.asphalt, 256), 'repeat');
+      g.fillStyle = pat; g.fillRect(-hw, 0, hw * 2, ROAD_PERIOD); }
+      g.restore();
       band(hw * 0.5, '#ffffff', 0.025); band(hw * 0.28, '#ffffff', 0.025);
       side(hw - 17, hw + 17, track.wall, 0.18); side(hw - 3, hw + 3, track.wall); // v52: wider 18% neon glow under the edge line
       g.globalAlpha = 0.14; g.fillStyle = '#ffffff'; for (let y = 0; y < ROAD_PERIOD; y += 128) g.fillRect(-3, y, 6, 50); g.globalAlpha = 1;
@@ -295,8 +300,10 @@ export async function createPixiRenderer(hudCanvas, app) {
     // a baked cross-section texture (lateral = x, 256 wu of road = y, repeating) on a mesh along the centreline,
     // so every road pixel is filled once per frame instead of once per layer. Raised-piece shadow = two thin strips.
     if (!tex.road) tex.road = roadTexture(track);
-    trackLayer.addChild(feltAround(track, tex.felt), shadowStrip(track, -1), shadowStrip(track, 1), roadStrip(track, tex.road));
-    renderer.background.color = hexNum(track.ground);
+    const pack = TP && TP.applies(track);
+    if (pack) trackLayer.addChild(...TP.under(track), shadowStrip(track, -1), shadowStrip(track, 1), roadStrip(track, tex.road));
+    else trackLayer.addChild(feltAround(track, tex.felt), shadowStrip(track, -1), shadowStrip(track, 1), roadStrip(track, tex.road));
+    renderer.background.color = pack ? 0x1a2117 : hexNum(track.ground);
     // boost pads
     for (const pad of track.pads || []) {
       const hw = pad.halfW, L = pad.len, pg = new P.Graphics();
@@ -324,6 +331,8 @@ export async function createPixiRenderer(hudCanvas, app) {
     const half = track.halfW - KERB, sq = 16, rows = Math.ceil((half * 2) / sq);
     for (let r = 0; r < rows; r++) for (let c = 0; c < 3; c++) sl.rect(-sq * 1.5 + c * sq, -half + r * sq, sq, Math.min(sq, half * 2 - r * sq)).fill((r + c) % 2 ? 0x111111 : 0xffffff);
     trackLayer.addChild(sl);
+    if (pack) { const L = TP.lights(track); if (L.length) trackLayer.addChild(...L); } // trackpack: flood pools (add) then lamp heads
+    packLit = !!pack;
     // bonus boxes
     bonusLayer.removeChildren().forEach((c) => c.destroy({ children: true }));
     boxes = [];
@@ -338,7 +347,7 @@ export async function createPixiRenderer(hudCanvas, app) {
     }
     builtFor = track; builtN = nCars;
   }
-  let boxes = [];
+  let boxes = [], packLit = false;
 
   // ------------------------------------------------------------------ cars
   const carViews = new Map(); // car object → view
@@ -645,6 +654,7 @@ export async function createPixiRenderer(hudCanvas, app) {
     const debugCars = (typeof window !== 'undefined' && window.__RAD_DEBUG__) ? [] : null;
     const z = cam.zoom;
     world.position.set(W / 2, H / 2); world.scale.set(z); world.pivot.set(cam.x, cam.y);
+    if (packLit) TP.view(cam.x, cam.y, W / 2 / z, H / 2 / z);
     drawBonus(wd, z);
     const tMs = wd.race.time;
     for (const car of cars) { const v = carViews.get(car); if (v) updateCar(car, v, z, tMs, wd, debugCars); }
