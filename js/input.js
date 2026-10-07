@@ -1,3 +1,4 @@
+import { sfx } from './audio.js';
 /**
  * Input (v53 'controls'): auto-throttle, so the player only steers, brakes and fires.
  * Touch (mobile-first, see js/controls.js for the data-driven layout):
@@ -69,7 +70,7 @@ export function createInput() {
     const knob = document.getElementById('aim-knob');
     const zone = document.getElementById('steer-zone');
     if (!root || !knob) return;
-    let pid = null, cx = 0, cy = 0, sx = 0, sy = 0; // ring centre (client px), smoothed unit vector
+    let pid = null, cx = 0, cy = 0, sx = 0, sy = 0, regainT = 0; // ring centre (client px), smoothed unit vector
     const DEAD = 0.08;
     const radius = () => Math.max(1, root.clientWidth / 2);
     function setKnob(nx, ny) {
@@ -100,6 +101,7 @@ export function createInput() {
         cy = Math.min(app.bottom - r - 4, Math.max(app.top + r + 4, ev.clientY));
         root.style.translate = `${cx - (rr.left + r)}px ${cy - (rr.top + r)}px`;
       } else { cx = rr.left + rr.width / 2; cy = rr.top + rr.height / 2; }
+      if (root.classList.contains('lost')) { sfx('steerOn'); root.classList.add('regain'); clearTimeout(regainT); regainT = setTimeout(() => root.classList.remove('regain'), 120); }
       root.classList.add('active'); root.classList.remove('lost');
       state.taps.steer++;
       apply(ev.clientX, ev.clientY);
@@ -126,7 +128,7 @@ export function createInput() {
       g.className = 'tc-aim-ghost'; g.style.width = g.style.height = d + 'px';
       g.style.left = (x - tr.left - d / 2) + 'px'; g.style.top = (y - tr.top - d / 2) + 'px';
       g.addEventListener('animationend', () => g.remove()); tc.appendChild(g); setTimeout(() => g.remove(), 1500);
-      buzz(18);
+      buzz(18); sfx('steerOff');
     }
     for (const [el, float] of [[root, true], [zone, true]]) { // spec: any touch in the steer half re-centres the ring
       if (!el) continue;

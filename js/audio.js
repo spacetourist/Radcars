@@ -75,6 +75,8 @@ export function sfx(name, opts = {}) {
     case 'hit': beep(90, 0.35, 'sawtooth', 0.06, -50); beep(60, 0.3, 'square', 0.04, -30, 0.05); beep(660, 0.12, 'sine', 0.035, 0, 0.16); break;
     case 'miss': beep(200, 0.18, 'triangle', 0.03, -80); break;
     case 'click': beep(300, 0.04, 'square', 0.025, 0, 0, U); break;
+    case 'steerOff': beep(196, 0.07, 'square', 0.018 * 0.7, -30, 0, U); break; // thumb left the steer ring (AE: 'denied' at ~70 %)
+    case 'steerOn': beep(300, 0.04, 'square', 0.025, 0, 0, U); break; // steering taken back (AE: 'click')
     case 'bonus': beep(660, 0.07, 'square', 0.035); beep(880, 0.07, 'square', 0.035, 0, 0.07); beep(1320, 0.12, 'sine', 0.04, 0, 0.14); break;
     case 'power': beep(300, 0.25, 'sawtooth', 0.035, 600); break;
     case 'autopilot': beep(740, 0.12, 'sine', 0.04, 0, 0.12); beep(990, 0.18, 'sine', 0.04, 0, 0.24); break;
