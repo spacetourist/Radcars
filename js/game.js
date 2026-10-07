@@ -3,7 +3,7 @@ import { createCar, CAR_COLORS, AI_NAMES } from './cars.js';
 import { stepCar, initCarOnTrack, resolveCarCollisions, BOOST_TOP_MUL, CAR_LEN, CAR_WID, slip01 } from './physics.js';
 import { stepAI } from './ai.js';
 import { createRenderer } from './render.js';
-import { newFx, stepFx, zoomPunch } from './fx.js';
+import { newFx, stepFx, zoomPunch, SKID_ON, SKID_OFF } from './fx.js';
 import { sfx, setAudioPaused, engineFrame, wallStrength, WALL } from './audio.js';
 import { clamp, angleDiff } from './util.js';
 import { pointAt } from './tracks.js';
@@ -40,6 +40,14 @@ const BOOST_RAMP_OUT_MS = 450;
 /** Player auto-unstick (no brake since v48): gas held, near-zero speed for UNSTICK_AFTER_MS → reverse. */
 const UNSTICK_AFTER_MS = 1500;
 /** v53 BRAKE: v47's 1500 wu/s² at speed (eases to 45% near the floor), never below a 170 wu/s crawl (still turns). */
+/**
+ * v54.4 drift boost: a drift is continuous slip01 ≥ SKID_ON (0.22, the skid / squeal gate) until it drops below
+ * SKID_OFF (0.15). It pays out if it lasted ≥ DB_MIN_MS, turned the car ≥ DB_MIN_ANG and touched no wall. Quality 0..1 =
+ * DB_W_DUR·duration + DB_W_ANG·angle + DB_W_SMOOTH·(no over-slide at the slip cap); the boost runs DB_MS0 + DB_MS1·q ms at
+ * boostLevel DB_LVL0 + DB_LVL1·q through the normal boost path (flame, whoosh edge, shockwave scaled by q).
+ */
+export const DB_MIN_MS = 600, DB_MIN_ANG = Math.PI / 4, DB_FULL_MS = 1500, DB_FULL_ANG = Math.PI * 0.75;
+export const DB_W_DUR = 0.35, DB_W_ANG = 0.4, DB_W_SMOOTH = 0.25, DB_MS0 = 400, DB_MS1 = 700, DB_LVL0 = 0.6, DB_LVL1 = 0.35, DB_PERFECT = 0.8, DB_NEED_HB = true;
 export const PLAYER_BRAKE = 1500;
 export const PLAYER_BRAKE_FLOOR = 170;
 const UNSTICK_REVERSE_MS = 900;
@@ -114,7 +122,7 @@ export function createGame(canvas, input) {
     world.missiles = [];
     world.fx = [];
     world.unstick = { stuckMs: 0, reverseMs: 0, count: 0 };
-    world.brakeStats = { ms: 0 };
+    world.brakeStats = { ms: 0 }; world.hbStats = { presses: 0 }; world.driftLog = []; world.driftFlash = null;
     p.braking = false;
     world.finish = null; // v52: set when the player crosses the line on the final lap (reveal → results)
     clearFinishFlow();
@@ -177,21 +185,31 @@ export function createGame(canvas, input) {
    * landscape / desktop (clusters in the bottom corners): whichever is larger of that band and the column between the
    * two clusters. Re-measured on resize and every 500 ms (the layout only changes on resize / orientation).
    */
-  let clearAt = -1e9;
+  let clearAt = -1e9, obsAt = -1e9;
   function measureClear(fx, vw, vh) {
     const t = performance.now(), c = fx.clear;
-    if (c && c.W === vw && c.H === vh && t - clearAt < 500) return;
-    clearAt = t;
+    if (c && c.W === vw && c.H === vh && t - clearAt < 500) { if (t - obsAt >= 100) { obsAt = t; c.obs = clearObstacles(vw, vh); } return; }
+    clearAt = t; obsAt = t;
     const cr = canvas.getBoundingClientRect ? canvas.getBoundingClientRect() : { left: 0, top: 0 }, rel = (e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0 ? { l: b.left - cr.left, t: b.top - cr.top, r: b.right - cr.left, b: b.bottom - cr.top } : null; };
     const pick = (sel) => (document.querySelectorAll ? [...document.querySelectorAll(sel)] : []).map(rel).filter(Boolean);
-    const hud = pick('#hud > .pill, #btn-pause'), ctl = pick('#touch-controls .act, #aim-pad');
+    const hud = pick('#hud > .pill:not(.pill-laptime), #btn-pause'), ctl = pick('#touch-controls .act, #aim-pad');
     const top = (hud.length ? Math.max(...hud.map((b) => b.b)) : 0) + 12;
     if (!ctl.length) { fx.clear = { W: vw, H: vh, x0: 12, y0: top, x1: vw - 12, y1: vh - 12 }; return; }
     const band = { x0: 12, y0: top, x1: vw - 12, y1: Math.min(...ctl.map((b) => b.t)) - 8 };
     const L = ctl.filter((b) => (b.l + b.r) / 2 < vw / 2), R = ctl.filter((b) => (b.l + b.r) / 2 >= vw / 2);
     const col = { x0: (L.length ? Math.max(...L.map((b) => b.r)) : 0) + 12, y0: top, x1: (R.length ? Math.min(...R.map((b) => b.l)) : vw) - 12, y1: vh - 12 };
     const area = (q) => Math.max(0, q.x1 - q.x0) * Math.max(0, q.y1 - q.y0);
-    fx.clear = { W: vw, H: vh, ...(area(col) > area(band) ? col : band) };
+    fx.clear = { W: vw, H: vh, ...(area(col) > area(band) ? col : band), obs: clearObstacles(vw, vh) };
+  }
+  /** v54.4: rects inside the clear area streaks must also avoid: the canvas-drawn minimap and any visible toast pill. */
+  function clearObstacles(vw, vh) {
+    const out = [], lay = getLayout();
+    if (lay && lay.minimap && lay.vw === vw && lay.vh === vh) { const m = lay.minimap; out.push({ l: m.x, t: m.y, r: m.x + m.w, b: m.y + m.h }); }
+    if (document.querySelectorAll) {
+      const cr = canvas.getBoundingClientRect ? canvas.getBoundingClientRect() : { left: 0, top: 0 };
+      for (const e of document.querySelectorAll('#tc-toast:not(.hidden), #hud > .pill-laptime:not(.hidden)')) { const b = e.getBoundingClientRect(); if (b.width > 0 && b.height > 0) out.push({ l: b.left - cr.left, t: b.top - cr.top, r: b.right - cr.left, b: b.bottom - cr.top }); }
+    }
+    return out;
   }
 
   /** v54: advance the shared FX state, then draw with the camera shake + boost zoom punch applied for this frame only. */
@@ -344,7 +362,7 @@ export function createGame(canvas, input) {
         if (c.isPlayer && !c.finished) sfx('wall', { wallHit: c.wallHit });
       }
       const lvl = c.boostLevel || 0;
-      if (!c.boostArmedOff && lvl > 0.15) { c.boostArmedOff = true; ev.push({ type: 'boost', car: c, x: c.x, y: c.y, t: race.time }); }
+      if (!c.boostArmedOff && lvl > 0.15) { c.boostArmedOff = true; ev.push({ type: 'boost', car: c, x: c.x, y: c.y, t: race.time, q: c.driftBoostMs > 0 && !(c.isPlayer && world.boost.activeMs > 0) && !(c.padMs > 0) ? c.driftBoostQ : null }); }
       else if (c.boostArmedOff && lvl < 0.05) c.boostArmedOff = false;
     }
     if (ev.length > 64) ev.splice(0, ev.length - 64);
@@ -398,6 +416,7 @@ export function createGame(canvas, input) {
       c.drive = ctl.accel || !!ctl.steer; // last frame's drive input (read by the verify scripts)
       stepCar(c, ctl, dt, track);
       if (topSave != null) c.top = topSave;
+      if (c.isPlayer) trackDrift(c, dt, ctl.autopilot || spinning);
       if (!c.finished) stepPads(world, c);
     }
     resolveCarCollisions(cars, track);
@@ -503,6 +522,31 @@ export function createGame(canvas, input) {
     later(() => stopRace(), FINISH_TIMING.finalStopMs);
   }
 
+  /** v54.4: follow the player's slide and award the drift boost on a clean exit. */
+  function trackDrift(c, dt, off) {
+    const s01 = slip01(c);
+    let d = c.driftRun;
+    if (off || c.finished) { c.driftRun = null; return; }
+    if (!d) { if (s01 >= SKID_ON) d = c.driftRun = { ms: 0, ang: 0, lastA: c.angle, capMs: 0, wall: false, peak: 0, hb: false }; else return; }
+    d.ms += dt; d.ang += angleDiff(d.lastA, c.angle); d.lastA = c.angle; d.peak = Math.max(d.peak, s01);
+    if (c.wallHit > 0 || c.driftHoldMs > 0) d.wall = true;
+    if (c.slideCapped) d.capMs += dt;
+    if (c.hbHeld) d.hb = true;
+    if (s01 >= SKID_OFF) return;
+    c.driftRun = null;
+    const ang = Math.abs(d.ang), rec = { t: Math.round(world.race.time), ms: Math.round(d.ms), angDeg: Math.round(ang * 180 / Math.PI), wall: d.wall, capMs: Math.round(d.capMs), peak: +d.peak.toFixed(2), hb: d.hb, q: 0, awarded: false };
+    if (world.driftLog.length < 500) world.driftLog.push(rec);
+    // only a HANDBRAKE drift pays (the Drift handling option's ordinary corner slides would otherwise earn ~10–28 boosts
+    // a race and make that option ~0.1–0.9 s/lap faster): DB_NEED_HB
+    if (d.wall || d.ms < DB_MIN_MS || ang < DB_MIN_ANG || (DB_NEED_HB && !d.hb)) return;
+    const q = clamp(DB_W_DUR * clamp((d.ms - DB_MIN_MS) / (DB_FULL_MS - DB_MIN_MS), 0, 1) + DB_W_ANG * clamp((ang - DB_MIN_ANG) / (DB_FULL_ANG - DB_MIN_ANG), 0, 1)
+      + DB_W_SMOOTH * (1 - clamp(3 * d.capMs / d.ms, 0, 1)), 0, 1);
+    rec.q = +q.toFixed(2); rec.awarded = true;
+    c.driftBoostMs = DB_MS0 + DB_MS1 * q; c.driftBoostLvl = DB_LVL0 + DB_LVL1 * q; c.driftBoostQ = q;
+    world.driftFlash = { text: q >= DB_PERFECT ? 'PERFECT DRIFT' : 'DRIFT BOOST', q, t: world.race.time };
+    sfx('driftBoost', { quality: q });
+  }
+
   /** Race order (finished cars first by place, then by distance). */
   function standings() {
     return [...world.cars].sort((a, b) => {
@@ -545,7 +589,8 @@ export function createGame(canvas, input) {
     const lvl = c.boostLevel || 0;
     // v50: power-up lap boost burns bright green (and its ramp-out stays green unless a normal boost takes over)
     c.boostGreen = lapBoost || (!!c.boostGreen && !other && lvl > 0);
-    const target = on && !c.finished ? 1 : 0;
+    let target = on && !c.finished ? 1 : 0;
+    if (c.driftBoostMs > 0) { c.driftBoostMs = Math.max(0, c.driftBoostMs - dt); if (!c.finished) target = Math.max(target, c.driftBoostLvl); } // v54.4 drift boost
     // v53 fix: at full level (lvl === target === 1) this used to fall into the ramp-out branch every other frame, so a
     // held boost flickered 1 ↔ 0.96 (0.93 at 30 fps); now it holds steady at the target
     c.boostLevel = target > lvl ? Math.min(target, lvl + dt / BOOST_RAMP_IN_MS) : target < lvl ? Math.max(target, lvl - dt / BOOST_RAMP_OUT_MS) : lvl;
@@ -569,7 +614,10 @@ export function createGame(canvas, input) {
     if (!braking && spd < 60) u.stuckMs += dt; else u.stuckMs = 0;
     if (u.stuckMs > UNSTICK_AFTER_MS) { u.stuckMs = 0; u.reverseMs = UNSTICK_REVERSE_MS; u.count++; }
     if (braking) world.brakeStats.ms += dt;
-    return { accel: !braking, brake: braking, brakeRate: PLAYER_BRAKE, brakeFloor: PLAYER_BRAKE_FLOOR, noReverse: true, steer: flags.steer, aimAngle: flags.aimAngle };
+    // v54.4: the BRAKE input is now the HANDBRAKE (rear grip cut, throttle off, modest scrub — js/physics.js HB_*)
+    if (braking && !p.hbHeld) { sfx('handbrake'); world.hbStats.presses++; }
+    p.hbHeld = braking;
+    return { accel: true, brake: false, handbrake: braking, noReverse: true, steer: flags.steer, aimAngle: flags.aimAngle };
   }
 
   /** v50 power-ups: E / POWER tap activates the held one; runs rocket salvos, lap boost and autopilot timers. */
@@ -688,9 +736,10 @@ export function createGame(canvas, input) {
     const ms = world.missile, p = world.player;
     if (ms.flash) { ms.flash.ms -= dt; if (ms.flash.ms <= 0) ms.flash = null; }
     ms.inFlight = world.missiles.some((m) => !m.dead && !m.rocket);
+    ms.hasTarget = !p.finished && !!pickTarget(world, standings()); // v54.4: MISSILE shows NO TARGET (dimmed, still tappable) without one
     if (!flags.missile || p.finished || ms.charge < 1) return;
     const target = pickTarget(world, standings());
-    if (!target) { ms.refused++; ms.flash = { text: 'NO TARGET', ms: MISSILE_FLASH_MS, kind: 'none' }; return; }
+    if (!target) { ms.refused++; ms.flash = { text: 'NO TARGET', ms: MISSILE_FLASH_MS, kind: 'none' }; sfx('denied'); return; }
     ms.charge = 0; ms.shots++; ms.lastSource = flags.missileSource;
     launchMissile(world, target);
     ms.inFlight = true;

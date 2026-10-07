@@ -45,6 +45,14 @@ export const DRIFT_GRIP_LOW = 30, DRIFT_GRIP_HIGH = 9, DRIFT_GRIP_SPD = 380;
 export const DRIFT_KEEP = 0.9;
 export const DRIFT_WALL_HOLD_MS = 900; // after any wall contact the normal (grip) handling runs, so wall recovery is unchanged // share of the scrubbed sideways speed returned to forward speed
 export const DRIFT_CATCH_BETA = 0.3, DRIFT_CATCH_GAIN = 2.5, DRIFT_CENTRE_MUL = 1.8, DRIFT_MAX_BETA = 0.6;
+/**
+ * v54.4 HANDBRAKE (player only; replaces BRAKE): while held the rear lets go — the drift model below runs (heading
+ * first, velocity catches up) with grip cut to HB_GRIP at speed (blended in from HB_SPD_LO → HB_SPD_HI, so it stays
+ * planted at a crawl), the turn rate is raised by HB_YAW_MUL, the throttle drops to HB_THROTTLE so it scrubs a modest amount of
+ * speed (throttle at HB_THROTTLE; with the throttle off HB_DECEL bites down to HB_FLOOR). On release the drift catch assist keeps running for HB_CATCH_MS (grip back to the drift curve,
+ * catch gain, self-centring), then normal handling. Works with the Drift handling option on or off.
+ */
+export const HB_GRIP = 5, HB_SPD_LO = 260, HB_SPD_HI = 520, HB_YAW_MUL = 1.15, HB_THROTTLE = 0.5, HB_DECEL = 150, HB_FLOOR = 300, HB_CATCH_MS = 380, HB_MAX_BETA = 0.75;
 export function driftGripAt(spd, top) {
   const t = clamp((spd - DRIFT_GRIP_SPD) / Math.max(1, top - DRIFT_GRIP_SPD), 0, 1), e = t * t * (3 - 2 * t);
   return DRIFT_GRIP_LOW + (DRIFT_GRIP_HIGH - DRIFT_GRIP_LOW) * e;
@@ -92,14 +100,17 @@ export function stepCar(car, ctl, dtMs, track) {
     const k = clamp(car.wallAssistMs / WALL_ASSIST_MS, 0, 1);
     steer = clamp(steer + car.wallAssistDir * 0.55 * k * (Math.sign(steer) === car.wallAssistDir || !steer ? 1 : 0.4), -1, 1);
   }
-  const yawTarget = steer * turn * Math.sign(vF || 1);
+  const hb = !!ctl.handbrake && !(car.driftHoldMs > 0); // v54.4: ignored for DRIFT_WALL_HOLD_MS after a wall (recovery unchanged)
+  if (hb) car.hbCatchMs = HB_CATCH_MS; else if (car.hbCatchMs > 0) car.hbCatchMs -= dt * 1000;
+  const hbK = hb ? clamp((aSpd - HB_SPD_LO) / (HB_SPD_HI - HB_SPD_LO), 0, 1) : 0;
+  const yawTarget = steer * turn * Math.sign(vF || 1) * (1 + (HB_YAW_MUL - 1) * hbK);
   car.yawRate = (car.yawRate || 0) + (yawTarget - (car.yawRate || 0)) * (1 - Math.exp(-dt / YAW_TAU));
   car.angle = normalizeAngle(car.angle + car.yawRate * dt);
 
   // Throttle / brake along the (new) heading
   const b = clamp(ctl.boost || 0, 0, 1);
   const top = car.top * (1 + BOOST_TOP_MUL * b);
-  const accel = car.accel * (1 + BOOST_ACCEL_MUL * b);
+  const accel = car.accel * (1 + BOOST_ACCEL_MUL * b) * (hb ? HB_THROTTLE : 1); // v54.4: part throttle on the handbrake
   if (ctl.accel && !ctl.brake) {
     if (vF < 0) vF += BRAKE * dt;
     else if (vF < top) vF = Math.min(top, vF + throttleAccel(vF, top, accel) * dt);
@@ -110,6 +121,8 @@ export function stepCar(car, ctl, dtMs, track) {
     if (vF > floor) vF = Math.max(floor, vF - rate * dt * (floor ? clamp(0.45 + vF / 900, 0.45, 1) : 1));
     else if (floor && vF > 0) { /* crawl: hold the speed so the nose still turns */ }
     else if (!ctl.noReverse) vF = Math.max(-REVERSE_TOP, vF - REVERSE_ACCEL * dt);
+  } else if (hb) {
+    if (vF > HB_FLOOR) vF = Math.max(HB_FLOOR, vF - HB_DECEL * dt); // modest scrub (the old BRAKE bit ~4× harder)
   } else {
     const r = ROLL * dt;
     vF = Math.abs(vF) <= r ? 0 : vF - Math.sign(vF) * r;
@@ -117,7 +130,7 @@ export function stepCar(car, ctl, dtMs, track) {
   // over the cap (e.g. boost winding down): ease back towards it rather than snapping
   if (vF > top) vF += (top - vF) * Math.min(1, 3 * dt);
   if (car.driftHoldMs > 0) car.driftHoldMs -= dt * 1000;
-  if (car.drift && !(car.driftHoldMs > 0)) {
+  if ((car.drift || car.hbCatchMs > 0) && !(car.driftHoldMs > 0)) {
     // v54.2 drift: re-measure the velocity against the heading that just turned, so turning creates lateral slip that
     // grip then removes (the classic "heading first, velocity catches up"); throttle / brake already acted on vF above
     // in the old frame, so rebuild the world velocity from that first and split it again
@@ -128,16 +141,19 @@ export function stepCar(car, ctl, dtMs, track) {
     car.vLat = vL;
     const sp = Math.hypot(vF, vL), beta = Math.atan2(Math.abs(vL), Math.max(1, Math.abs(vF)));
     let g = driftGripAt(sp, car.top);
-    if (beta > DRIFT_CATCH_BETA) g *= 1 + DRIFT_CATCH_GAIN * (beta - DRIFT_CATCH_BETA) / DRIFT_CATCH_BETA; // catch assist
+    if (hbK > 0) g += (HB_GRIP - g) * hbK; // v54.4: rear grip cut while the handbrake is held
+    if (beta > DRIFT_CATCH_BETA && !(hbK > 0 && beta < HB_MAX_BETA * 0.8)) g *= 1 + DRIFT_CATCH_GAIN * (beta - DRIFT_CATCH_BETA) / DRIFT_CATCH_BETA; // catch assist
     if (Math.abs(steer) < 0.2) g *= DRIFT_CENTRE_MUL; // self-centring when the steer is released
     const vL0 = vL;
     vL *= Math.exp(-g * dt);
-    const cap = Math.tan(DRIFT_MAX_BETA) * Math.abs(vF);
+    const cap = Math.tan(hb ? HB_MAX_BETA : DRIFT_MAX_BETA) * Math.abs(vF);
+    car.slideCapped = Math.abs(vL) > cap; // v54.4: an over-slide (hit the slip cap) — lowers drift-boost quality
     if (Math.abs(vL) > cap) vL = Math.sign(vL) * cap;
     // arcade: most of the sideways speed that grip removes is handed back along the nose (a slide costs a little
     // time, not a lot), never above the current cap
     if (vF > 0 && vF < top) vF = Math.min(top, Math.sqrt(vF * vF + DRIFT_KEEP * (vL0 * vL0 - vL * vL)));
   } else {
+  car.slideCapped = false;
   car.vLat = vL; // v54: lateral slip before grip (skid marks / smoke / squeal read slip01 from this)
   vL *= Math.exp(-gripAt(Math.hypot(vF, vL), car.top) * dt);
   }

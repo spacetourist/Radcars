@@ -66,6 +66,9 @@ export function sfx(name, opts = {}) {
   const U = 'ui';
   switch (name) {
     case 'wall': { const s = wallStrength(opts.wallHit ?? 450); beep(110, 0.07, 'square', 0.012 + 0.03 * s, -50); break; }
+    case 'denied': beep(196, 0.07, 'square', 0.018, -30, 0, U); break; // v54.4 placeholder: MISSILE tapped with NO TARGET
+    case 'handbrake': break; // v54.4 placeholder: silent until the recorded handbrake chirp is signed off
+    case 'driftBoost': { const q = opts.quality ?? 0.5; beep(660 + 260 * q, 0.1, 'sine', 0.02 + 0.02 * q, 220, 0, U); break; } // v54.4 placeholder
     case 'lap': beep(520, 0.08, 'sine', 0.04, 0, 0, U); beep(680, 0.1, 'sine', 0.04, 0, 0.09, U); break;
     case 'missile': beep(900, 0.28, 'sawtooth', 0.03, -600); beep(240, 0.2, 'triangle', 0.025, -120, 0.04); break;
     case 'hit': beep(90, 0.35, 'sawtooth', 0.06, -50); beep(60, 0.3, 'square', 0.04, -30, 0.05); beep(660, 0.12, 'sine', 0.035, 0, 0.16); break;

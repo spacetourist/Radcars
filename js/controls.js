@@ -44,7 +44,7 @@ export const CONTROL_LAYOUT = {
 
 const ACCENT = { brake: '#e02020', boost: '#00e8ff', missile: '#ffe600', power: '#7c8494' };
 export const POWER_COLOR = { rocket: '#ff2b6a', lapboost: '#b8ff00', autopilot: '#00e8ff' };
-const NAMES = { brake: 'BRAKE', boost: 'BOOST', missile: 'MISSILE', power: 'POWER' };
+const NAMES = { brake: 'HANDBRAKE', boost: 'BOOST', missile: 'MISSILE', power: 'POWER' };
 const POWER_NAME = { rocket: 'ROCKET', lapboost: 'LAP BOOST', autopilot: 'AUTOPILOT' };
 
 let layout = null;          // last computed layout (CSS px) — read by the camera and the minimap
@@ -217,7 +217,7 @@ export function updateControls(w, info) {
   const p = w.player, b = w.boost, ms = w.missile, pw = w.power, L = w.track.length;
   const lapFrac = (((p.dist % L) + L) % L) / L;
   // BRAKE
-  paint('brake', { state: info.braking ? 'active' : 'ready', label: 'BRAKE', p: null });
+  paint('brake', { state: info.braking ? 'active' : 'ready', label: 'HANDBRAKE', p: null }); // v54.4: BRAKE → HANDBRAKE
   // BOOST
   let bs;
   if (b.activeMs > 0) bs = { state: 'active', label: 'BOOST', p: b.activeMs / info.boostMs, badge: b.free };
@@ -228,6 +228,7 @@ export function updateControls(w, info) {
   // MISSILE
   let mst;
   if (ms.inFlight) mst = { state: 'active', label: 'MISSILE', p: 1 };
+  else if (ms.charge > 0 && ms.hasTarget === false && !counting) mst = { state: 'notarget', label: 'NO TARGET', p: null }; // v54.4
   else if (ms.charge > 0) mst = { state: 'ready', label: 'MISSILE', p: null };
   else mst = { state: 'used', label: 'NEXT LAP', p: lapFrac };
   paint('missile', mst);
@@ -245,7 +246,7 @@ export function updateControls(w, info) {
   if (!counting && prev.started) {
     if (prev.boostState && prev.boostState !== 'ready' && bs.state === 'ready') toast('BOOST READY', 'boost', ACCENT.boost);
     if (prev.boostState && prev.boostState !== 'unlimited' && bs.state === 'unlimited' && !(prev.boostState === 'active' && b.free)) toast('LAST · BOOST ∞', 'boost', '#b8ff00');
-    if (prev.msState && prev.msState !== 'ready' && mst.state === 'ready') toast('MISSILE READY', 'missile', ACCENT.missile);
+    if (prev.msState && !['ready', 'notarget'].includes(prev.msState) && ['ready', 'notarget'].includes(mst.state)) toast('MISSILE READY', 'missile', ACCENT.missile);
   }
   const msFlash = ms.flash ? ms.flash.text + ms.flash.ms0 : '';
   if (ms.flash && prev.msFlash !== ms.flash) {
@@ -253,6 +254,8 @@ export function updateControls(w, info) {
     toast(k === 'hit' ? 'HIT! SPUN OUT' : k === 'miss' ? 'MISSED' : 'NO CAR AHEAD', k === 'hit' ? 'hit' : k === 'miss' ? 'miss' : 'missile', k === 'hit' ? '#b8ff00' : k === 'miss' ? '#ff6a6a' : '#ffb000');
   }
   prev.msFlash = ms.flash;
+  if (w.driftFlash && prev.dfFlash !== w.driftFlash) { const q = w.driftFlash.q; toast(w.driftFlash.text, 'boost', q >= 0.8 ? '#ffd23f' : '#b8ff00'); } // v54.4 drift boost
+  prev.dfFlash = w.driftFlash;
   if (pw.flash && prev.pwFlash !== pw.flash) {
     const got = pw.flash.kind === 'got';
     const icon = got ? POWER_ICON[pw.held] || 'gift' : pw.flash.text.startsWith('ROCKET') ? 'rocket3' : 'gift';

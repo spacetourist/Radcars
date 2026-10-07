@@ -609,3 +609,8 @@ canvas.podium { display: block; width: 100%; height: 200px; }
 .kb-help { margin-top: 6px; font-size: 0.72rem; color: #aeb6cc; }
 .kb-help summary { cursor: pointer; font-weight: 700; color: #cfd8ff; }
 .kb-help p { margin: 4px 0 0; }
+/* v54.4: MISSILE with no car ahead — dimmed, NOT disabled (a tap still answers with NO TARGET + the denied blip) */
+#touch-controls .act[data-state="notarget"] .act-vis { filter: saturate(0.4) brightness(0.72); }
+#touch-controls .act[data-state="notarget"] .act-icon { opacity: 0.5; }
+#touch-controls .act[data-state="notarget"] .act-label { color: #c3c6d4; }
+#touch-controls .act[data-state="notarget"] .act-ring { opacity: 0.45; }

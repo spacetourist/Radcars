@@ -121,8 +121,9 @@ export function stepFx(fx, world, dt, view, W, H) {
     else if (e.type === 'boost' && inView(e.x, e.y)) {
       // v54.1: ONE shockwave per 0.15 crossing, left where it fired (drifts at half the car's speed), 0.3× → 1.4× and
       // gone after 260 ms — never a shield riding on the car
-      add(fx, { k: 'ring', x: e.car.x, y: e.car.y, vx: e.car.vx * 0.5, vy: e.car.vy * 0.5, rot: 0, life: 260, s0: 0.3, s1: 1.4, a0: 0.8, tint: CYAN, boost: true, carId: e.car.id });
-      add(fx, { k: 'glow', x: e.car.x, y: e.car.y, vx: e.car.vx * 0.5, vy: e.car.vy * 0.5, rot: 0, life: 140, s0: 2, s1: 3, a0: 0.7, tint: CYAN });
+      const m = e.q == null ? 1 : 0.5 + 0.5 * e.q; // v54.4: a drift boost's shockwave scales with its quality
+      add(fx, { k: 'ring', x: e.car.x, y: e.car.y, vx: e.car.vx * 0.5, vy: e.car.vy * 0.5, rot: 0, life: 260, s0: 0.3, s1: 1.4 * m, a0: 0.8 * m, tint: CYAN, boost: true, carId: e.car.id, q: e.q });
+      add(fx, { k: 'glow', x: e.car.x, y: e.car.y, vx: e.car.vx * 0.5, vy: e.car.vy * 0.5, rot: 0, life: 140, s0: 2 * m, s1: 3 * m, a0: 0.7 * m, tint: CYAN });
       fx.stats.boosts++;
       if (e.car === world.player) fx.punchAt = now;
     }
@@ -185,8 +186,14 @@ export function stepFx(fx, world, dt, view, W, H) {
     sc = Math.min(sc, room(bw, dx), room(bh, dy));
     if (sc >= 0.12) {
       const hx = STREAK_HALF * sc * Math.abs(dx) + STREAK_FADE_PX + 1, hy = STREAK_HALF * sc * Math.abs(dy) + STREAK_FADE_PX + 1;
-      const x = clampN(cx + nx * side * off + dx * along, C.x0 + hx, C.x1 - hx), y = clampN(cy + ny * side * off + dy * along, C.y0 + hy, C.y1 - hy), v = rnd(1500, 2400);
-      if (add(fx, { k: 'streak', scr: true, x, y, vx: -dx * v, vy: -dy * v, dx, dy, rot: Math.atan2(dy, dx) - Math.PI / 2, life: rnd(200, 350), s0: sc, s1: sc, a0: 0.15 + 0.2 * k, tint: 0xffffff, band: C, fade: 1 })) fx.stats.streaks++;
+      let x = 0, y = 0, okSpawn = false;
+      for (let tries = 0; tries < 4 && !okSpawn; tries++) { // v54.4: keep clear of the minimap / toast pills too
+        const sd = tries ? (Math.random() < 0.5 ? -1 : 1) : side, of = tries ? edge(nx, ny) * rnd(0.3, 0.96) : off, al = tries ? edge(dx, dy) * rnd(-0.6, 1.0) : along;
+        x = clampN(cx + nx * sd * of + dx * al, C.x0 + hx, C.x1 - hx); y = clampN(cy + ny * sd * of + dy * al, C.y0 + hy, C.y1 - hy);
+        okSpawn = obsClear(C.obs, x, y, dx, dy, STREAK_HALF * sc) > STREAK_FADE_PX + 2;
+      }
+      const v = rnd(1500, 2400);
+      if (okSpawn && add(fx, { k: 'streak', scr: true, x, y, vx: -dx * v, vy: -dy * v, dx, dy, rot: Math.atan2(dy, dx) - Math.PI / 2, life: rnd(200, 350), s0: sc, s1: sc, a0: 0.15 + 0.2 * k, tint: 0xffffff, band: C, fade: 1 })) fx.stats.streaks++;
     }
   }
   // ---- integrate + expire
@@ -198,7 +205,7 @@ export function stepFx(fx, world, dt, view, W, H) {
     o.x += o.vx * s; o.y += o.vy * s;
     if (o.band) { // v54.3: fade over the last STREAK_FADE_PX before the HUD / controls / screen side, gone once the tip is out
       const B = o.band, h = STREAK_HALF * o.s0, tx = o.x - o.dx * h, ty = o.y - o.dy * h; // leading tip (moves along −d)
-      const m = Math.min(tx - B.x0, B.x1 - tx, ty - B.y0, B.y1 - ty);
+      const m = Math.min(tx - B.x0, B.x1 - tx, ty - B.y0, B.y1 - ty, obsClear(fx.clear && fx.clear.obs, o.x, o.y, o.dx, o.dy, h));
       o.fade = Math.max(0, Math.min(1, m / STREAK_FADE_PX));
       if (m <= 0) { fx.parts.splice(i, 1); continue; }
     }
@@ -214,11 +221,23 @@ export function stepFx(fx, world, dt, view, W, H) {
 const STREAK_HALF = 160;    // CSS px half-length of a streak at scale 1 (Pixi frame 320 px, Canvas 300 px)
 const STREAK_FADE_PX = 24; // v54.3 (GD): fade-out distance before the HUD / controls
 const clampN = (v, a, b) => (b < a ? (a + b) / 2 : Math.max(a, Math.min(b, v)));
+/** v54.4: smallest distance (CSS px, negative inside) from a streak (centre x,y, direction d, half-length h) to the obstacles. */
+function obsClear(obs, x, y, dx, dy, h) {
+  if (!obs || !obs.length) return 1e9;
+  let m = 1e9;
+  for (const r of obs) for (const k of [-1, -0.5, 0, 0.5, 1]) {
+    const px = x + dx * h * k, py = y + dy * h * k;
+    const ox = Math.max(r.l - px, 0, px - r.r), oy = Math.max(r.t - py, 0, py - r.b);
+    const d = ox || oy ? Math.hypot(ox, oy) : -Math.min(px - r.l, r.r - px, py - r.t, r.b - py);
+    if (d < m) m = d;
+  }
+  return m;
+}
 /** v54.3: the clear rectangle streaks live in (screen CSS px): fx.clear from game.js, else the screen minus 12 px. */
 export function streakBand(fx, W, H) {
   const c = fx.clear, m = 12;
   if (!c || c.W !== W || c.H !== H) return { x0: m, y0: m, x1: W - m, y1: H - m };
-  return { x0: Math.max(m, c.x0), y0: Math.max(m, c.y0), x1: Math.min(W - m, c.x1), y1: Math.min(H - m, c.y1) };
+  return { x0: Math.max(m, c.x0), y0: Math.max(m, c.y0), x1: Math.min(W - m, c.x1), y1: Math.min(H - m, c.y1), obs: c.obs };
 }
 
 /** Particle look at time t: {scale, alpha}. */

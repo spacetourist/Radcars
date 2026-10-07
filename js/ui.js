@@ -274,10 +274,10 @@ export function createUI(root, api) {
         </div>
         <div class="card help-card">
           <h3>How to drive</h3>
-          <p>Your car accelerates by itself. Drag the <b>steer ring</b> (it follows your thumb) to point the car · hold <b>BRAKE</b> into tight corners · tap <b>BOOST</b>, <b>MISSILE</b> and <b>POWER</b> when they glow (shortcut: slide up from BRAKE to boost, slide towards the buttons to fire)</p>
+          <p>Your car accelerates by itself. Drag the <b>steer ring</b> (it follows your thumb) to point the car · hold <b>HANDBRAKE</b> into tight corners to slide (a clean drift pays a little boost) · tap <b>BOOST</b>, <b>MISSILE</b> and <b>POWER</b> when they glow (shortcut: slide up from HANDBRAKE to boost, slide towards the buttons to fire)</p>
           <p>Chevron pads give any car a free 0.5 s boost · drive through a <b>?</b> box for a power-up (rocket, lap boost, autopilot)</p>
           <details class="kb-help"><summary>Keyboard controls</summary>
-            <p>Arrows / WASD steer · Down / S brake · Shift boost · Space missile · E power-up · P / Esc pause</p></details>
+            <p>Arrows / WASD steer · Down / S handbrake · Shift boost · Space missile · E power-up · P / Esc pause</p></details>
         </div>
       </div>
       <div class="row foot-row"><button class="btn grey" data-act="back">Back</button></div>`, 'options-screen');
