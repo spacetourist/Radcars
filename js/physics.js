@@ -41,10 +41,10 @@ export function throttleAccel(vF, top, accel) {
  * slip angle grip ramps up hard, releasing the steer (|steer| < 0.2) multiplies grip by DRIFT_CENTRE_MUL, and the
  * slip angle is hard-capped at DRIFT_MAX_BETA — a normal input can never spin the car.
  */
-export const DRIFT_GRIP_LOW = 30, DRIFT_GRIP_HIGH = 9, DRIFT_GRIP_SPD = 380;
-export const DRIFT_KEEP = 0.9;
+export const DRIFT_GRIP_LOW = 30, DRIFT_GRIP_HIGH = 6.5, DRIFT_GRIP_SPD = 380;
+export const DRIFT_KEEP = 0.95; // v54.5: 0.9→0.95 so the longer slides cost about the same lap time
 export const DRIFT_WALL_HOLD_MS = 900; // after any wall contact the normal (grip) handling runs, so wall recovery is unchanged // share of the scrubbed sideways speed returned to forward speed
-export const DRIFT_CATCH_BETA = 0.3, DRIFT_CATCH_GAIN = 2.5, DRIFT_CENTRE_MUL = 1.8, DRIFT_MAX_BETA = 0.6;
+export const DRIFT_CATCH_BETA = 0.42, DRIFT_CATCH_GAIN = 2.5, DRIFT_CENTRE_MUL = 1.8, DRIFT_MAX_BETA = 0.78; // v54.5: DRIFT_GRIP_HIGH 9→6.5, DRIFT_MAX_BETA 0.6→0.78, DRIFT_CATCH_BETA 0.3→0.42 (catch assist starts later)
 /**
  * v54.4 HANDBRAKE (player only; replaces BRAKE): while held the rear lets go — the drift model below runs (heading
  * first, velocity catches up) with grip cut to HB_GRIP at speed (blended in from HB_SPD_LO → HB_SPD_HI, so it stays
@@ -52,7 +52,7 @@ export const DRIFT_CATCH_BETA = 0.3, DRIFT_CATCH_GAIN = 2.5, DRIFT_CENTRE_MUL = 
  * speed (throttle at HB_THROTTLE; with the throttle off HB_DECEL bites down to HB_FLOOR). On release the drift catch assist keeps running for HB_CATCH_MS (grip back to the drift curve,
  * catch gain, self-centring), then normal handling. Works with the Drift handling option on or off.
  */
-export const HB_GRIP = 5, HB_SPD_LO = 260, HB_SPD_HI = 520, HB_YAW_MUL = 1.15, HB_THROTTLE = 0.5, HB_DECEL = 150, HB_FLOOR = 300, HB_CATCH_MS = 380, HB_MAX_BETA = 0.75;
+export const HB_GRIP = 3.5, HB_SPD_LO = 260, HB_SPD_HI = 520, HB_YAW_MUL = 1.15, HB_THROTTLE = 0.5, HB_DECEL = 150, HB_FLOOR = 300, HB_CATCH_MS = 380, HB_MAX_BETA = 0.95; // v54.5 'more slide': HB_GRIP 5→3.5, HB_MAX_BETA 0.75→0.95
 export function driftGripAt(spd, top) {
   const t = clamp((spd - DRIFT_GRIP_SPD) / Math.max(1, top - DRIFT_GRIP_SPD), 0, 1), e = t * t * (3 - 2 * t);
   return DRIFT_GRIP_LOW + (DRIFT_GRIP_HIGH - DRIFT_GRIP_LOW) * e;
