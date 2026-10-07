@@ -3,8 +3,8 @@
  * on by default (?trackpack=0 = off). Loaded with a dynamic import from pixiRender.js the first time a pack track is
  * built, so other tracks never download the module or its images.
  *  - ground: GD grass on a ground mesh like feltAround(), but its holes follow the OPAQUE parts of the edge strips
- *    (outer: up to the armco at 250 wu, inner: the solid gravel at 44 wu), so ground + strips fill each pixel ~once
- *    (the outer strip's transparent grass gap gets the grass composited into the strip texture at load time)
+ *    (outer: up to the armco at 256 wu, inner: the solid gravel at 80 wu), so ground + strips fill each pixel ~once
+ *    (pack v1.1 bakes the grass into the outer strip)
  *  - asphalt-tile: multiplied into the baked road cross-section texture (zero per-frame cost)
  *  - edge-strip (outer, 320 wu) + edge-strip-inner (infield, 80 wu): static MeshSimple strips under the road, u from arc
  *    length on the strip's inner edge (256 wu per repeat, snapped to whole repeats), v outward, several rows across so
@@ -14,37 +14,31 @@
  *  - flood pools (add) + lamp heads on the outside of corners, ~every POOL_EVERY wu, ≤ POOL_MAX per track, ≤ POOLS_ON_SCREEN
  *    drawn (nearest first); static meshes (mesh shader), only visibility changes per frame
  */
-const BASE = 'assets/track/', OUTER_D = 320, INNER_D = 80, INNER_MIN_GAP = 100, PERIOD = 256;
-// outer strip v columns (v = wu / 320): gravel 0–108, [skip 108–148 wu when not composited], AO 148–172, tyres 172–236,
-// armco 240–262, trim 267.5, glow to OUTER_END (alpha 0.02 there). Ground hole at OUTER_HOLE (armco, alpha 1).
-const OUTER_END = 292, OUTER_HOLE = 250, INNER_HOLE = 44;
-const OUTER_V = [0, 0.11, 0.22, 0.3375, 0.4625, 0.5375, 0.6375, 0.7375, OUTER_HOLE / 320, 0.82, 0.86, OUTER_END / 320];
-const INNER_V = [0, INNER_HOLE / 80, 1];
-const CHUNK = 24, POOL_TRIM = 0.7, FOLD_K = 0.78, SQUEEZE_MIN = 0.35, SQUEEZE_WIN = 250;
+const BASE = 'assets/track/', OUTER_D = 320, INNER_D = 96, INNER_MIN_GAP = 116, PERIOD = 256;
+// pack v1.1: outer strip opaque 0–262 wu (grass baked in), tyres 172–236 (tight: one row 210.4–236), armco 240–262,
+// trim 267.5, tail to 282 (mesh ends at OUTER_END). Ground hole at OUTER_HOLE (armco, alpha 1). Rows sit on band edges.
+const OUTER_END = 284, OUTER_HOLE = 256, INNER_HOLE = 80;
+const OUTER_V = [0, 35, 70, 108, 148, 172, 204, 210.4, 236, 240, 256, 262, 268, 284].map((w) => w / 320);
+const INNER_V = [0, 80 / 96, 1];
+const TIGHT_R = 520; // concave side of bends tighter than this uses edge-strip-tight (single tyre row)
+const CHUNK = 24, POOL_TRIM = 0.92, FOLD_K = 0.78, SQUEEZE_MIN = 0.35, SQUEEZE_WIN = 250;
 // POOLS_ON_SCREEN: most flood pools drawn at once (nearest to the camera win); drop to 4 if a phone dips.
 // Quick on-device override: &pools=N
 export const POOLS_ON_SCREEN = +(((typeof location !== 'undefined' && /[?&]pools=(\d+)/.exec(location.search)) || [, 8])[1]);
-const POOL_EVERY = 700, POOL_MAX = 10, POOL_CURV = 1 / 1500, POOL_ALPHA = 0.55, POOL_CORE = 0.45, POOL_CORE_ALPHA = 0.22, POOL_WU = 768, LAMP_WU = 48;
+const POOL_EVERY = 700, POOL_MAX = 10, POOL_CURV = 1 / 1500, POOL_ALPHA = 0.55, POOL_WU = 600, LAMP_WU = 48;
 export const ASPHALT_BASE = '#3c3c3f', GROUND_BG = 0x1a2117;
 
 function loadImg(src) { return new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => rej(new Error('trackpack: ' + src)); im.src = src; }); }
 function toCanvas(im) { const c = document.createElement('canvas'); c.width = im.naturalWidth; c.height = im.naturalHeight; c.getContext('2d').drawImage(im, 0, 0); return c; }
-/** grass under the strip rows v 0..vStop (grass at 2× density so its 512 px tile repeats with the strip's 256 wu) */
 /** static mesh: Pixi's MeshSimple re-uploads its vertex buffer every frame unless autoUpdate is off */
 function still(m) { m.autoUpdate = false; return m; }
-function underlay(im, grass, vStop) {
-  const c = document.createElement('canvas'); c.width = im.naturalWidth; c.height = im.naturalHeight; const g = c.getContext('2d');
-  const pat = g.createPattern(grass, 'repeat'); pat.setTransform(new DOMMatrix([1, 0, 0, 0.8, 0, 0]));
-  g.fillStyle = pat; g.fillRect(0, 0, c.width, Math.round(c.height * vStop)); g.drawImage(im, 0, 0);
-  return c;
-}
 
 export async function loadTrackPack(P, canvasTexture) {
-  const [grass, asphalt, edge, edgeIn, atlasImg, atlas] = await Promise.all([
-    loadImg(BASE + 'grass-tile.png'), loadImg(BASE + 'asphalt-tile.png'), loadImg(BASE + 'edge-strip.png'),
+  const [grass, asphalt, edge, edgeTight, edgeIn, atlasImg, atlas] = await Promise.all([
+    loadImg(BASE + 'grass-tile.png'), loadImg(BASE + 'asphalt-tile.png'), loadImg(BASE + 'edge-strip.png'), loadImg(BASE + 'edge-strip-tight.png'),
     loadImg(BASE + 'edge-strip-inner.png'), loadImg(BASE + 'track-atlas.png'), fetch(BASE + 'track-atlas.json').then((r) => r.json())]);
   // mipmapped + repeat (all power-of-two); the strips wrap along u only (v stays in 0..1)
-  const tex = { grass: canvasTexture(toCanvas(grass), true, true), edge: canvasTexture(underlay(edge, grass, (OUTER_HOLE + 8) / 320), true, true), edgeIn: canvasTexture(toCanvas(edgeIn), true, true), asphaltImg: asphalt };
+  const tex = { grass: canvasTexture(toCanvas(grass), true, true), edge: canvasTexture(toCanvas(edge), true, true), edgeTight: canvasTexture(toCanvas(edgeTight), true, true), edgeIn: canvasTexture(toCanvas(edgeIn), true, true), asphaltImg: asphalt };
   const atl = canvasTexture(toCanvas(atlasImg), true, false), AW = atlasImg.naturalWidth, AH = atlasImg.naturalHeight;
   const frameUV = (k) => { const f = atlas.frames[k].frame; return [f.x / AW, f.y / AH, (f.x + f.w) / AW, (f.y + f.h) / AH]; };
   let poolPos = [], chunks = [];
@@ -66,7 +60,7 @@ export async function loadTrackPack(P, canvasTexture) {
     return out;
   }
   /** Edge strip on side sgn → { mesh, ring } (ring: flat x,y per track point at v = vHole, for the ground hole). */
-  function edgeStrip(track, sgn, texture, D, inner) {
+  function edgeStrip(track, sgn, texture, D, inner, tightTex) {
     const pts = track.pts, n = pts.length, E0 = track.halfW + 12, cl = clearance(track, sgn, E0, inner ? INNER_MIN_GAP : D);
     const V = inner ? INNER_V : OUTER_V, C = V.length, vHole = inner ? INNER_HOLE / D : OUTER_HOLE / D;
     const R = C - 1; // rows (the grass is composited into the outer strip, so no band is skipped)
@@ -74,9 +68,9 @@ export async function loadTrackPack(P, canvasTexture) {
     // concave bends (the road turns TOWARDS this side, e.g. the far side of an S): a full-depth strip would fold
     // through the bend centre, so the stack is squeezed across (v still 0..1) to keep its outer edge at a radius of at
     // least (1 - FOLD_K)·R, eased in/out over ±SQUEEZE_WIN wu so the barrier bends smoothly instead of kinking
-    const kq = new Float32Array(n);
-    for (let i = 0; i < n; i++) { const p = pts[i], q = pts[(i + 1) % n], cross = p.tx * q.ty - p.ty * q.tx;
-      kq[i] = Math.sign(cross) === sgn && p.radius ? Math.max(SQUEEZE_MIN, Math.min(1, (p.radius * FOLD_K - E0) / D)) : 1; }
+    const kq = new Float32Array(n), tight = new Uint8Array(n);
+    for (let i = 0; i < n; i++) { const p = pts[i], q = pts[(i + 1) % n], cross = p.tx * q.ty - p.ty * q.tx, cc = Math.sign(cross) === sgn && p.radius;
+      kq[i] = cc ? Math.max(SQUEEZE_MIN, Math.min(1, (p.radius * FOLD_K - E0) / D)) : 1; tight[i] = cc && p.radius < TIGHT_R ? 1 : 0; }
     const step = track.length / n, wn = Math.max(1, Math.round(SQUEEZE_WIN / step)), kmin = new Float32Array(n), ks = new Float32Array(n);
     for (let i = 0; i < n; i++) { let m = 1; for (let j = -wn; j <= wn; j++) m = Math.min(m, kq[(i + j + n) % n]); kmin[i] = m; }
     for (let i = 0; i < n; i++) { let a = 0; for (let j = -wn; j <= wn; j++) a += kmin[(i + j + n) % n]; ks[i] = a / (2 * wn + 1); }
@@ -95,14 +89,17 @@ export async function loadTrackPack(P, canvasTexture) {
     for (let i = 0; i < uv.length; i += 2) uv[i] *= f;
     // split into chunks of CHUNK track points, each culled against the view per frame (software GL and weak GPUs
     // pay for every submitted triangle, even off screen)
-    const cont = new P.Container();
+    const cont = new P.Container(); let nTight = 0;
     for (let i0 = 0; i0 < n; i0 += CHUNK) {
       const i1 = Math.min(n, i0 + CHUNK), m = i1 - i0, cv = vert.slice(i0 * C * 2, (i1 + 1) * C * 2), cu = uv.slice(i0 * C * 2, (i1 + 1) * C * 2), ci = new Uint32Array(m * R * 6);
       for (let i = 0; i < m; i++) for (let r = 0; r < R; r++) { const a0 = i * C + r, b0 = a0 + C; ci.set([a0, a0 + 1, b0, a0 + 1, b0 + 1, b0], (i * R + r) * 6); }
       let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; for (let k = 0; k < cv.length; k += 2) { x0 = Math.min(x0, cv[k]); x1 = Math.max(x1, cv[k]); y0 = Math.min(y0, cv[k + 1]); y1 = Math.max(y1, cv[k + 1]); }
-      const mesh = still(new P.MeshSimple({ texture, vertices: cv, uvs: cu, indices: ci })); cont.addChild(mesh); chunks.push({ mesh, x0, y0, x1, y1 });
+      // tight texture if any point in this chunk or half a chunk either side qualifies (hysteresis, no flicker)
+      let tq = false; if (tightTex) for (let j = i0 - (CHUNK >> 1); j < i1 + (CHUNK >> 1) && !tq; j++) tq = !!tight[(j + n) % n];
+      if (tq) nTight++;
+      const mesh = still(new P.MeshSimple({ texture: tq ? tightTex : texture, vertices: cv, uvs: cu, indices: ci })); cont.addChild(mesh); chunks.push({ mesh, x0, y0, x1, y1 });
     }
-    return { mesh: cont, ring };
+    return { mesh: cont, ring, nTight };
   }
   /** Outer side: the side whose offset polygon is larger (same test as feltAround). */
   function outerSign(track) {
@@ -153,14 +150,11 @@ export async function loadTrackPack(P, canvasTexture) {
     }
     poolPos = pools;
     const out = [];
-    // per pool a tiny static container so view() can cap how many are drawn (POOLS_ON_SCREEN): the pool octagon at
-    // POOL_ALPHA plus a smaller copy (POOL_CORE of its size, POOL_CORE_ALPHA) for a slightly brighter core
+    // per pool a tiny static mesh so view() can cap how many are drawn (POOLS_ON_SCREEN); the core is baked (pack v1.1)
     if (pools.length) {
       const pc = new P.Container();
       for (const q of pools) {
-        const box = new P.Container(), pm = octs([q], 'flood-pool'), core = octs([{ x: q.x, y: q.y, size: q.size * POOL_CORE }], 'flood-pool');
-        pm.blendMode = core.blendMode = 'add'; pm.alpha = POOL_ALPHA; core.alpha = POOL_CORE_ALPHA;
-        box.addChild(pm, core); q.mesh = box; pc.addChild(box);
+        const pm = octs([q], 'flood-pool'); pm.blendMode = 'add'; pm.alpha = POOL_ALPHA; q.mesh = pm; pc.addChild(pm);
       }
       out.push(pc);
     }
@@ -172,7 +166,8 @@ export async function loadTrackPack(P, canvasTexture) {
     /** bottom layers (replace feltAround; under the shadow strips / road): ground, inner strip, outer strip */
     under(track) {
       const so = outerSign(track), out = []; chunks = [];
-      const inS = edgeStrip(track, -so, tex.edgeIn, INNER_D, true), outS = edgeStrip(track, so, tex.edge, OUTER_D, false);
+      const inS = edgeStrip(track, -so, tex.edgeIn, INNER_D, true), outS = edgeStrip(track, so, tex.edge, OUTER_D, false, tex.edgeTight);
+      if (typeof window !== 'undefined') window.__tpTight = outS.nTight;
       out.push(ground(track, Array.from(outS.ring), Array.from(inS.ring)), inS.mesh, outS.mesh);
       return out;
     },
