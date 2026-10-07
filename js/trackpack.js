@@ -10,8 +10,8 @@
  *    iso-v lines (cyan trim) stay straight. Per vertex the depth is squeezed on concave bends (no folding) and clamped
  *    so a strip never reaches another section's road / the half-way line to it; the inner strip is dropped where the
  *    infield is narrower than INNER_MIN_GAP
- *  - flood pools (add) + lamp heads on the outside of corners, ~every POOL_EVERY wu, ≤ POOL_MAX per track: one static
- *    MeshSimple each (mesh shader, no per-frame work)
+ *  - flood pools (add) + lamp heads on the outside of corners, ~every POOL_EVERY wu, ≤ POOL_MAX per track, ≤ POOLS_ON_SCREEN
+ *    drawn (nearest first); static meshes (mesh shader), only visibility changes per frame
  */
 export const TRACKPACK_TRACKS = ['gridlock'];
 // profiling: ?tpcut=pools,lamps,inner,outer,overlap drops layers / the hole trick (prototype only)
@@ -23,6 +23,9 @@ const OUTER_END = 292, OUTER_HOLE = 250, INNER_HOLE = 44;
 const OUTER_V = [0, 0.11, 0.22, 0.3375, 0.4625, 0.5375, 0.6375, 0.7375, OUTER_HOLE / 320, 0.82, 0.86, OUTER_END / 320];
 const INNER_V = [0, INNER_HOLE / 80, 1];
 const CHUNK = 24, POOL_TRIM = 0.7, FOLD_K = 0.78, SQUEEZE_MIN = 0.35, SQUEEZE_WIN = 250;
+// POOLS_ON_SCREEN: most flood pools drawn at once (nearest to the camera win); drop to 4 if a phone dips.
+// Prototype override for quick tests: &pools=N
+export const POOLS_ON_SCREEN = +(((typeof location !== 'undefined' && /[?&]pools=(\d+)/.exec(location.search)) || [, 8])[1]);
 const POOL_EVERY = 700, POOL_MAX = 10, POOL_CURV = 1 / 1500, POOL_ALPHA = 0.4, POOL_WU = 768, LAMP_WU = 48;
 export const ASPHALT_BASE = '#3c3c3f', GROUND_BG = 0x1a2117;
 
@@ -158,7 +161,8 @@ export async function loadTrackPack(P, canvasTexture) {
     }
     stats.pools = pools.length; poolPos = pools;
     const out = [];
-    if (pools.length && !CUT.has('pools')) { const pm = octs(pools, 'flood-pool'); pm.blendMode = 'add'; pm.alpha = POOL_ALPHA; out.push(pm); }
+    // one tiny static mesh per pool so view() can cap how many are drawn (POOLS_ON_SCREEN)
+    if (pools.length && !CUT.has('pools')) { const pc = new P.Container(); for (const q of pools) { const pm = octs([q], 'flood-pool'); pm.blendMode = 'add'; pm.alpha = POOL_ALPHA; q.mesh = pm; pc.addChild(pm); } out.push(pc); }
     if (lamps.length && !CUT.has('lamps')) out.push(quads(lamps, 'lamp-head'));
     return out;
   }
@@ -178,7 +182,12 @@ export async function loadTrackPack(P, canvasTexture) {
     /** per frame: cull strip chunks to the view; pool stats for verification */
     view(cx, cy, hx, hy) {
       let on = 0; for (const c of chunks) { const v = c.x1 > cx - hx && c.x0 < cx + hx && c.y1 > cy - hy && c.y0 < cy + hy; c.mesh.visible = v; if (v) on++; } stats.chunksOn = on; stats.chunks = chunks.length;
-      const r = POOL_WU / 2; let k = 0; for (const q of poolPos) if (Math.abs(q.x - cx) < hx + r && Math.abs(q.y - cy) < hy + r) k++; stats.poolsInView = k; if (k > stats.poolsInViewMax) stats.poolsInViewMax = k; },
+      const r = POOL_WU / 2 * POOL_TRIM / Math.cos(Math.PI / 8), inView = [];
+      for (const q of poolPos) { const v = Math.abs(q.x - cx) < hx + r && Math.abs(q.y - cy) < hy + r; if (v) inView.push(q); else if (q.mesh) q.mesh.visible = false; }
+      if (inView.length > POOLS_ON_SCREEN) inView.sort((a, b) => Math.hypot(a.x - cx, a.y - cy) - Math.hypot(b.x - cx, b.y - cy));
+      inView.forEach((q, k) => { if (q.mesh) q.mesh.visible = k < POOLS_ON_SCREEN; });
+      stats.poolsInView = inView.length; stats.poolsDrawn = Math.min(inView.length, POOLS_ON_SCREEN); stats.poolsCap = POOLS_ON_SCREEN;
+      if (inView.length > stats.poolsInViewMax) stats.poolsInViewMax = inView.length; },
     /** bake the asphalt grain into the road cross-section (g is in world units; 512 px tile = 256 wu) */
     bakeAsphalt(g, a0, a1) {
       g.fillStyle = ASPHALT_BASE; g.fillRect(a0, 0, a1 - a0, PERIOD);
