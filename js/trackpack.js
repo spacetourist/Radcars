@@ -25,7 +25,7 @@ const CHUNK = 24, POOL_TRIM = 0.92, FOLD_K = 0.78, SQUEEZE_MIN = 0.35, SQUEEZE_W
 // POOLS_ON_SCREEN: most flood pools drawn at once (nearest to the camera win); drop to 4 if a phone dips.
 // Quick on-device override: &pools=N
 export const POOLS_ON_SCREEN = +(((typeof location !== 'undefined' && /[?&]pools=(\d+)/.exec(location.search)) || [, 8])[1]);
-const POOL_EVERY = 700, POOL_MAX = 10, POOL_CURV = 1 / 1500, POOL_ALPHA = 0.55, POOL_WU = 600, LAMP_WU = 48;
+const POOL_EVERY = 700, POOL_MAX = 24, POOL_CURV = 1 / 1500, POOL_ALPHA = 0.55, POOL_WU = 600, LAMP_WU = 48;
 export const ASPHALT_BASE = '#3c3c3f', GROUND_BG = 0x1a2117;
 
 function loadImg(src) { return new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => rej(new Error('trackpack: ' + src)); im.src = src; }); }
@@ -87,17 +87,33 @@ export async function loadTrackPack(P, canvasTexture) {
     }
     const cyc = Math.max(1, Math.round(s / PERIOD)), f = cyc / (s / PERIOD); // whole repeats → no seam at the loop close
     for (let i = 0; i < uv.length; i += 2) uv[i] *= f;
-    // split into chunks of CHUNK track points, each culled against the view per frame (software GL and weak GPUs
-    // pay for every submitted triangle, even off screen)
-    const cont = new P.Container(); let nTight = 0;
-    for (let i0 = 0; i0 < n; i0 += CHUNK) {
-      const i1 = Math.min(n, i0 + CHUNK), m = i1 - i0, cv = vert.slice(i0 * C * 2, (i1 + 1) * C * 2), cu = uv.slice(i0 * C * 2, (i1 + 1) * C * 2), ci = new Uint32Array(m * R * 6);
-      for (let i = 0; i < m; i++) for (let r = 0; r < R; r++) { const a0 = i * C + r, b0 = a0 + C; ci.set([a0, a0 + 1, b0, a0 + 1, b0 + 1, b0], (i * R + r) * 6); }
+    // tight texture per 256 wu repeat (pack v1.1 review): a repeat is tight if a tight point touches it or a
+    // neighbouring repeat (hysteresis), and the swap happens exactly on a repeat edge (a cross-section is inserted there)
+    const rep = new Uint8Array(cyc), tRep = new Uint8Array(cyc), U = (i) => uv[i * C * 2];
+    if (tightTex) { for (let i = 0; i < n; i++) if (tight[i]) { rep[Math.floor(U(i)) % cyc] = 1; rep[Math.floor(U(i + 1) - 1e-6) % cyc] = 1; }
+      for (let k = 0; k < cyc; k++) tRep[k] = rep[k] | rep[(k + 1) % cyc] | rep[(k + cyc - 1) % cyc]; }
+    const secV = [], secU = [], segT = []; // cross-sections, and the tight flag of the segment that ends at each one
+    for (let i = 0; i <= n; i++) {
+      if (i) { const ua = U(i - 1), ub = U(i);
+        for (let m = Math.floor(ua) + 1; tightTex && m < ub - 1e-4; m++) { if (m - ua < 1e-4) continue; const t = (m - ua) / (ub - ua), o0 = (i - 1) * C * 2, o1 = i * C * 2, sv = new Float32Array(C * 2), su = new Float32Array(C * 2);
+          for (let k = 0; k < C * 2; k++) { sv[k] = vert[o0 + k] + (vert[o1 + k] - vert[o0 + k]) * t; su[k] = uv[o0 + k] + (uv[o1 + k] - uv[o0 + k]) * t; }
+          segT.push(tRep[(m - 1) % cyc]); secV.push(sv); secU.push(su); }
+        segT.push(tRep[Math.floor((secU.at(-1)[0] + ub) / 2) % cyc]); }
+      else segT.push(0);
+      secV.push(vert.subarray(i * C * 2, (i + 1) * C * 2)); secU.push(uv.subarray(i * C * 2, (i + 1) * C * 2));
+    }
+    // split into chunks of ≤ CHUNK segments (and at every tight/normal change), each culled against the view per
+    // frame (software GL and weak GPUs pay for every submitted triangle, even off screen)
+    const cont = new P.Container(), NS = secV.length; let nTight = 0;
+    for (let a0 = 0; a0 < NS - 1;) {
+      const tq = !!segT[a0 + 1]; let a1 = a0 + 1; while (a1 < NS - 1 && a1 - a0 < CHUNK && !!segT[a1 + 1] === tq) a1++;
+      const m = a1 - a0, cv = new Float32Array((m + 1) * C * 2), cu = new Float32Array((m + 1) * C * 2), ci = new Uint32Array(m * R * 6);
+      for (let k = 0; k <= m; k++) { cv.set(secV[a0 + k], k * C * 2); cu.set(secU[a0 + k], k * C * 2); }
+      for (let i = 0; i < m; i++) for (let r = 0; r < R; r++) { const q0 = i * C + r, b0 = q0 + C; ci.set([q0, q0 + 1, b0, q0 + 1, b0 + 1, b0], (i * R + r) * 6); }
       let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; for (let k = 0; k < cv.length; k += 2) { x0 = Math.min(x0, cv[k]); x1 = Math.max(x1, cv[k]); y0 = Math.min(y0, cv[k + 1]); y1 = Math.max(y1, cv[k + 1]); }
-      // tight texture if any point in this chunk or half a chunk either side qualifies (hysteresis, no flicker)
-      let tq = false; if (tightTex) for (let j = i0 - (CHUNK >> 1); j < i1 + (CHUNK >> 1) && !tq; j++) tq = !!tight[(j + n) % n];
       if (tq) nTight++;
       const mesh = still(new P.MeshSimple({ texture: tq ? tightTex : texture, vertices: cv, uvs: cu, indices: ci })); cont.addChild(mesh); chunks.push({ mesh, x0, y0, x1, y1 });
+      a0 = a1;
     }
     return { mesh: cont, ring, nTight };
   }
@@ -167,7 +183,6 @@ export async function loadTrackPack(P, canvasTexture) {
     under(track) {
       const so = outerSign(track), out = []; chunks = [];
       const inS = edgeStrip(track, -so, tex.edgeIn, INNER_D, true), outS = edgeStrip(track, so, tex.edge, OUTER_D, false, tex.edgeTight);
-      if (typeof window !== 'undefined') window.__tpTight = outS.nTight;
       out.push(ground(track, Array.from(outS.ring), Array.from(inS.ring)), inS.mesh, outS.mesh);
       return out;
     },
