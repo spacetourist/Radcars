@@ -100,7 +100,7 @@ export function createInput() {
         cy = Math.min(app.bottom - r - 4, Math.max(app.top + r + 4, ev.clientY));
         root.style.translate = `${cx - (rr.left + r)}px ${cy - (rr.top + r)}px`;
       } else { cx = rr.left + rr.width / 2; cy = rr.top + rr.height / 2; }
-      root.classList.add('active');
+      root.classList.add('active'); root.classList.remove('lost');
       state.taps.steer++;
       apply(ev.clientX, ev.clientY);
     }
@@ -112,8 +112,21 @@ export function createInput() {
       pid = null;
       state.aimActive = false; state.aimAngle = null;
       root.classList.remove('active');
+      thumbOff(cx, cy);
       root.style.translate = ''; // snap back
       setKnob(0, 0); syncSteer();
+    }
+    // thumb came off mid-race (Callum, v54.7): a ghost ring flares amber where the thumb was, the home ring pulses
+    // amber and stays amber until the next touch, plus a short haptic tick, so a slide-off is noticed at once
+    function thumbOff(x, y) {
+      const tc = document.getElementById('touch-controls');
+      if (!tc || tc.classList.contains('hidden') || tc.classList.contains('fading') || tc.classList.contains('counting')) return;
+      root.classList.remove('lost'); void root.offsetWidth; root.classList.add('lost');
+      const tr = tc.getBoundingClientRect(), d = root.clientWidth, g = document.createElement('div');
+      g.className = 'tc-aim-ghost'; g.style.width = g.style.height = d + 'px';
+      g.style.left = (x - tr.left - d / 2) + 'px'; g.style.top = (y - tr.top - d / 2) + 'px';
+      g.addEventListener('animationend', () => g.remove()); tc.appendChild(g); setTimeout(() => g.remove(), 1500);
+      buzz(18);
     }
     for (const [el, float] of [[root, true], [zone, true]]) { // spec: any touch in the steer half re-centres the ring
       if (!el) continue;

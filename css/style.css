@@ -386,6 +386,13 @@ canvas.podium { display: block; width: 100%; height: 200px; }
 }
 .tc-aim-label { position: absolute; left: 50%; bottom: -16px; transform: translateX(-50%); font: 900 9px/1 var(--font-display); letter-spacing: 0.12em; color: #00e8ff; pointer-events: none; }
 #app.landscape .tc-aim-label { display: none; }
+/* thumb off the steer ring mid-race: amber until the next touch (3 quick pulses first) + a ghost ring at the lift point */
+.tc-aim-pad.lost { opacity: 0.9; border-color: #ffb020; box-shadow: 0 0 20px rgba(255,176,32,0.6), inset 0 0 22px rgba(255,176,32,0.22); animation: tcLost 0.3s ease-in-out 6 alternate; }
+.tc-aim-pad.lost .tc-aim-ring { border-color: rgba(255,176,32,0.6); }
+.tc-aim-pad.lost .tc-aim-label { color: #ffb020; }
+@keyframes tcLost { from { box-shadow: 0 0 6px rgba(255,176,32,0.3); } to { box-shadow: 0 0 34px rgba(255,176,32,0.95), inset 0 0 26px rgba(255,176,32,0.35); } }
+.tc-aim-ghost { position: absolute; border-radius: 50%; box-sizing: border-box; border: 3px solid #ffb020; box-shadow: 0 0 18px rgba(255,176,32,0.7); pointer-events: none; z-index: 2; animation: tcGhost 0.7s ease-out forwards; }
+@keyframes tcGhost { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(1.35); } }
 
 /* action buttons: the element is the round hit area (visual + up to 12 px, never overlapping a neighbour); .act-vis is the visible disc (--d) */
 .act {

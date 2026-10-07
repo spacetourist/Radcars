@@ -277,6 +277,7 @@ export function updateControls(w, info) {
 export function resetControls() {
   for (const k of Object.keys(prev)) delete prev[k];
   if (els.toast) els.toast.classList.add('hidden');
+  if (els.pad) els.pad.classList.remove('lost');
   try { self.__RAD_TOASTS__ = []; } catch (_) {}
   relayout();
 }
