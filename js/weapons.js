@@ -170,12 +170,16 @@ export function stepMissiles(world, dtMs, onEnd) {
 /** Boost pads: any car over a pad gets (at least) PAD_MS of boost left. */
 export function stepPads(world, car) {
   const { track } = world;
+  let on = -1;
   for (let i = 0; i < track.pads.length; i++) {
     const pad = track.pads[i];
     const d = wrapS(track, car.sPrev - pad.s);
     if (d < pad.len && Math.abs(car.lat - pad.lat) < pad.halfW + 10) {
       if (!(car.padMs > 0)) { car.padHits = (car.padHits || 0) + 1; car.lastPadIdx = i; }
+      if (car.padIn !== i) car.padLand = (car.padLand || 0) + 1; // v54.6: a pad ENTERED (one landing per pad, for DOUBLE BOOST)
+      on = i;
       car.padMs = Math.max(car.padMs || 0, PAD_MS);
     }
   }
+  car.padIn = on;
 }

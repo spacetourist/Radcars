@@ -4,7 +4,7 @@
  */
 import { getLayout } from './controls.js';
 import { CAR_LEN, CAR_WID } from './physics.js';
-import { partLook } from './fx.js';
+import { partLook, chainK, chainFlash, streakBand, CHAIN_FLAME_MUL } from './fx.js';
 import { pointAt, buildStartingGrid } from './tracks.js';
 import { TROPHY, trophyScale, ringState, partAlpha, trophyAnchor, outFade, PLACE_TEXT_Y } from './celebrate.js';
 import { styleFor, carSprite, shadowSprite, scaleBucket, textureTile, SPRITE_W, SPRITE_H, TOY_FONT } from './toyart.js';
@@ -323,7 +323,7 @@ export function createRenderer(canvas, opts = {}) {
     const autopilot = world.power && world.power.active === 'autopilot';
     if (autopilot) drawAutopilotGlow(world.player, cam.zoom, world.race.time, world.power.activeMs, false);
     if (fx) { const g = fx.ghosts.get(world.player); if (g) { // v54 boost ghosts (player only on Canvas)
-      ctx.save(); for (let i = g.pts.length - 1; i >= 1; i--) { ctx.globalAlpha = 0.3 * g.level * (1 - i / 4.2); drawCar({ ...world.player, x: g.pts[i].x, y: g.pts[i].y, angle: g.pts[i].a, isPlayer: false }, cam.zoom); } ctx.restore(); } }
+      ctx.save(); for (let i = g.pts.length - 1; i >= 1; i--) { ctx.globalAlpha = 0.3 * Math.min(1, g.level) * (1 - i / 4.2); drawCar({ ...world.player, x: g.pts[i].x, y: g.pts[i].y, angle: g.pts[i].a, isPlayer: false }, cam.zoom); } ctx.restore(); } }
     if (world.player.boostLevel > 0.02) drawBoostFlame(world.player, cam.zoom, world.race.time);
     drawCar(world.player, cam.zoom);
     if (autopilot) drawAutopilotGlow(world.player, cam.zoom, world.race.time, world.power.activeMs, true);
@@ -332,6 +332,15 @@ export function createRenderer(canvas, opts = {}) {
     if (fx) drawFeelParts(fx, false, cam.zoom);
     ctx.restore();
     if (fx) drawFeelParts(fx, true);
+    // v54.6 DOUBLE BOOST: 120 ms white edge flash just inside the clear play area (same rect as the streaks)
+    const fa = fx ? chainFlash(fx, world.race.time) : 0;
+    if (fa > 0) {
+      const C = streakBand(fx, W, H), th = 10;
+      ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.55 * fa; ctx.fillStyle = '#fff';
+      ctx.fillRect(C.x0, C.y0, C.x1 - C.x0, th); ctx.fillRect(C.x0, C.y1 - th, C.x1 - C.x0, th);
+      ctx.fillRect(C.x0, C.y0 + th, th, C.y1 - C.y0 - 2 * th); ctx.fillRect(C.x1 - th, C.y0 + th, th, C.y1 - C.y0 - 2 * th);
+      ctx.restore();
+    }
     if (!world.finish) drawMinimap(world);
     else drawCelebration(world.finish.cele);
     if (debugCars) window.__RAD_DEBUG__.frame = { cars: debugCars, cam: { ...cam }, W, H, DPR };
@@ -414,12 +423,24 @@ export function createRenderer(canvas, opts = {}) {
   }
 
   function drawBoostFlame(car, zoom, tMs) {
-    const lvl = car.boostLevel;
+    const lvl = Math.min(1, car.boostLevel), ck = chainK(car); // v54.6: boostLevel above 1 = DOUBLE BOOST rush
     if (car.spinMs > 0) return;
     const s = Math.max(1, 34 / (CAR_LEN * zoom));
     const hl = CAR_LEN * s / 2, hw = CAR_WID * 0.88 * s / 2;
     const fl = 0.85 + 0.15 * Math.sin(tMs * 0.047) + 0.08 * Math.sin(tMs * 0.113);
-    const len = (26 + 34 * lvl) * s * fl;
+    const len = (26 + 34 * lvl) * s * fl * (1 + (CHAIN_FLAME_MUL - 1) * ck);
+    // v54.6: pink core inside each flame while the chain rush is on (drawn after the flames, additive, eases out)
+    const pinkCore = () => {
+      if (ck <= 0.01) return;
+      ctx.save(); ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = ck * 0.85; ctx.fillStyle = '#ff2b6a'; // normal blend: reads pink over the cyan flame
+      for (const side of [-1, 1]) {
+        const y = side * hw * 0.42, l = len * 0.8;
+        ctx.beginPath(); ctx.moveTo(-hl + 3 * s, y - 3.2 * s);
+        ctx.quadraticCurveTo(-hl - l * 0.55, y - 2.4 * s, -hl - l, y); ctx.quadraticCurveTo(-hl - l * 0.55, y + 2.4 * s, -hl + 3 * s, y + 3.2 * s);
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.restore();
+    };
     ctx.save();
     ctx.translate(car.x, car.y);
     ctx.rotate(car.angle);
@@ -446,6 +467,7 @@ export function createRenderer(canvas, opts = {}) {
         ctx.drawImage(fxAtlasImg, f.x, f.y, f.w, f.h, -w / 2, -h * 0.1, w, h);
         ctx.restore();
       }
+      pinkCore();
       ctx.restore();
       return;
     }
@@ -465,6 +487,7 @@ export function createRenderer(canvas, opts = {}) {
       ctx.quadraticCurveTo(-hl - len * 0.35, y + 2.5 * s, -hl + 2 * s, y + 3.5 * s);
       ctx.closePath(); ctx.fill();
     }
+    pinkCore();
     ctx.restore();
   }
 

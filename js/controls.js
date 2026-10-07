@@ -178,11 +178,13 @@ export function relayout() {
 // ---------------------------------------------------------------- per-frame state painting
 const prev = {};
 let toastT = 0, toastKey = '';
-export function toast(text, icon, color) {
+export function toast(text, icon, color, glow) {
   const t = els.toast; if (!t) return;
   t.querySelector('.tt-icon').innerHTML = icon ? ICONS[icon] : '';
   t.querySelector('.tt-text').textContent = text;
   t.style.setProperty('--ac', color || '#ffffff');
+  if (glow) t.style.setProperty('--glow', glow); else t.style.removeProperty('--glow');
+  t.classList.toggle('tt-chain', !!glow); // v54.6: DOUBLE BOOST — yellow text, pink glow
   t.classList.remove('hidden', 'show'); void t.offsetWidth; t.classList.add('show');
   clearTimeout(toastT); toastT = setTimeout(() => t.classList.add('hidden'), 1400);
   toastKey = text;
@@ -258,6 +260,8 @@ export function updateControls(w, info) {
   prev.msFlash = ms.flash;
   if (w.driftFlash && prev.dfFlash !== w.driftFlash) { const q = w.driftFlash.q; toast(w.driftFlash.text, 'boost', q >= 0.8 ? '#ffd23f' : '#b8ff00'); } // v54.4 drift boost
   prev.dfFlash = w.driftFlash;
+  if (w.chainFlash && prev.chFlash !== w.chainFlash) toast(w.chainFlash.text, 'boost', '#ffe600', '#ff2b6a'); // v54.6 DOUBLE BOOST (yellow, pink glow)
+  prev.chFlash = w.chainFlash;
   if (pw.flash && prev.pwFlash !== pw.flash) {
     const got = pw.flash.kind === 'got';
     const icon = got ? POWER_ICON[pw.held] || 'gift' : pw.flash.text.startsWith('ROCKET') ? 'rocket3' : 'gift';

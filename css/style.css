@@ -472,11 +472,13 @@ canvas.podium { display: block; width: 100%; height: 200px; }
   height: calc(26px * var(--cs, 1)); box-sizing: border-box; padding: 0 0.9em 0 0.35em;
   display: flex; align-items: center; gap: 0.4em;
   border: 2px solid var(--ac); border-radius: 999px; background: rgba(8,10,22,0.88);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--ac) 55%, transparent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--glow, var(--ac)) 55%, transparent);
   font: 900 calc(11px * var(--cs, 1))/1 var(--font-display); letter-spacing: 0.06em; color: #fff; white-space: nowrap;
   pointer-events: none;
 }
 .tc-toast.hidden { display: none; }
+/* v54.6 DOUBLE BOOST: yellow ring, stronger pink glow (set via --glow) */
+.tc-toast.tt-chain { box-shadow: 0 0 14px color-mix(in srgb, var(--glow) 80%, transparent), 0 0 4px var(--glow); color: var(--ac); text-shadow: 0 0 6px var(--glow), 0 0 2px var(--glow); }
 .tc-toast.show { animation: toastIn 0.22s ease-out; }
 @keyframes toastIn { from { transform: translateY(-8px) scale(0.9); opacity: 0; } to { transform: none; opacity: 1; } }
 .tt-icon { width: calc(22px * var(--cs, 1)); height: calc(22px * var(--cs, 1)); display: block; flex: none; }

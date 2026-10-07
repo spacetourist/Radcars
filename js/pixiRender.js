@@ -17,7 +17,7 @@
 import * as P from '../vendor/pixi-lean.mjs';
 import { createRenderer, minimapBox } from './render.js';
 import { CAR_LEN, CAR_WID } from './physics.js';
-import { partLook } from './fx.js';
+import { partLook, chainK, chainFlash, streakBand, CHAIN_PINK, CHAIN_FLAME_MUL } from './fx.js';
 import { pointAt, buildStartingGrid } from './tracks.js';
 import { TROPHY, trophyScale, ringState, partAlpha, trophyAnchor, outFade, PLACE_TEXT_Y } from './celebrate.js';
 import { styleFor, carSprite, shadowSprite, textureTile, scaleBucket, SPRITE_W, SPRITE_H, TOY_FONT } from './toyart.js';
@@ -54,9 +54,25 @@ export async function createPixiRenderer(hudCanvas, app) {
   // Pixi's batch shader picks the texture with an if-chain over every bound unit (16 on most GPUs); software GL
   // (SwiftShader) and weak mobile GPUs run that chain per fragment, so batches are capped to a few textures.
   renderer.limits.maxBatchableTextures = Math.min(renderer.limits.maxBatchableTextures, 4);
-  // track-edge pack prototype (?trackpack=1, Gridlock only): loaded only with the flag, so default play is untouched
-  const TP = /[?&]trackpack=1/.test(location.search) ? await import('./trackpack.js').then((m) => m.loadTrackPack(P, canvasTexture)).catch((e) => { console.warn(String(e)); return null; }) : null;
-  try { if (TP) window.__RAD_TRACKPACK__ = TP; } catch (_) {}
+  // v54.6 track-edge pack (GD night circuit, assets/track/, js/trackpack.js): ON by default on the tracks below, off with
+  // ?trackpack=0. Module + images are fetched only when such a track is first built (so other tracks never download
+  // them); until they arrive the track draws as before, then it is rebuilt with the pack (normally during the countdown)
+  const PACK_TRACKS = ['gridlock'], PACK_ON = !/[?&]trackpack=0/.test(location.search);
+  let TP = null, tpState = PACK_ON ? 'idle' : 'off'; // idle → loading → ready | failed
+  const tpWait = new Set(); // pack tracks built while it was still loading
+  const packFor = (track) => {
+    if (!PACK_TRACKS.includes(track.id) || tpState === 'off' || tpState === 'failed') return false;
+    if (tpState === 'idle') {
+      tpState = 'loading';
+      import('./trackpack.js').then((m) => m.loadTrackPack(P, canvasTexture)).then((tp) => {
+        TP = tp; tpState = 'ready';
+        for (const tr of tpWait) { const c = trackCache.get(tr); if (c && c.road) { c.road.destroy(true); delete c.road; } } // re-bake their asphalt
+        tpWait.clear(); builtFor = null; // rebuild with the pack on the next frame
+      }).catch((e) => { tpState = 'failed'; console.warn('[radcars] track pack:', String(e)); });
+    }
+    if (tpState === 'loading') tpWait.add(track);
+    return tpState === 'ready';
+  };
   // #game stays in the layout (game.js reads its size for the camera / aim) but empty and hidden; the HUD code draws
   // into a detached canvas whose changed rectangles become WebGL sprites (see the HUD section below)
   hudCanvas.classList.add('hud-overlay');
@@ -177,7 +193,7 @@ export async function createPixiRenderer(hudCanvas, app) {
         for (let i = 1; i < g.pts.length; i++) {
           const q = g.pts[i], sp = ghostPool.get(v.body.texture);
           sp.anchor.copyFrom(v.body.anchor); sp.scale.copyFrom(v.body.scale); sp.position.set(q.x, q.y); sp.rotation = q.a;
-          sp.tint = 0x7ff4ff; sp.alpha = 0.34 * g.level * (1 - i / 4.2); sp.blendMode = 'add';
+          sp.tint = 0x7ff4ff; sp.alpha = 0.34 * Math.min(1, g.level) * (1 - i / 4.2); sp.blendMode = 'add';
         }
       }
       for (const o of fx.parts) {
@@ -191,6 +207,15 @@ export async function createPixiRenderer(hudCanvas, app) {
         if (o.k === 'spark') { sp.rotation = o.rot; sp.scale.set(o.lenPx ? o.lenPx * lk.scale / (SPARK_VIS * wd.cam.zoom) : lk.scale, o.lenPx ? 0.55 : 0.45); } // heavy: lenPx = CSS px of the visible streak
         else if (o.k === 'streak') { sp.rotation = o.rot || 0; sp.scale.set(0.5, lk.scale); } // v54.2: along the direction of travel
         else { sp.rotation = o.rot || 0; sp.scale.set(lk.scale); }
+      }
+      // v54.6 DOUBLE BOOST: 120 ms white edge flash, drawn just inside the clear play area (fx.clear) — 4 soft bars
+      const fa = chainFlash(fx, wd.race.time);
+      if (fa > 0) {
+        const C = streakBand(fx, W, H), th = 10;
+        for (const [x, y, w, h] of [[C.x0, C.y0, C.x1 - C.x0, th], [C.x0, C.y1 - th, C.x1 - C.x0, th], [C.x0, C.y0 + th, th, C.y1 - C.y0 - 2 * th], [C.x1 - th, C.y0 + th, th, C.y1 - C.y0 - 2 * th]]) {
+          const sp = scrPool.get(white); sp.anchor.set(0); sp.rotation = 0; sp.position.set(x, y); sp.width = w; sp.height = h;
+          sp.tint = 0xffffff; sp.blendMode = 'add'; sp.alpha = 0.55 * fa;
+        }
       }
     }
     partPool.end(); scrPool.end(); ghostPool.end();
@@ -236,7 +261,7 @@ export async function createPixiRenderer(hudCanvas, app) {
       band(hw - 3, '#ffffff', 0.14);
       band(hw - KERB + 5, '#000000', 0.42);
       g.save(); g.beginPath(); g.rect(-(hw - KERB), 0, 2 * (hw - KERB), ROAD_PERIOD); g.clip();
-      if (TP && TP.applies(track)) TP.bakeAsphalt(g, -hw, hw); // trackpack: neutral asphalt × GD grain, baked
+      if (packFor(track)) TP.bakeAsphalt(g, -hw, hw); // track pack: neutral asphalt × GD grain, baked
       else { const pat = g.createPattern(textureTile('asphalt', track.asphalt, 256), 'repeat');
       g.fillStyle = pat; g.fillRect(-hw, 0, hw * 2, ROAD_PERIOD); }
       g.restore();
@@ -300,10 +325,10 @@ export async function createPixiRenderer(hudCanvas, app) {
     // a baked cross-section texture (lateral = x, 256 wu of road = y, repeating) on a mesh along the centreline,
     // so every road pixel is filled once per frame instead of once per layer. Raised-piece shadow = two thin strips.
     if (!tex.road) tex.road = roadTexture(track);
-    const pack = TP && TP.applies(track);
+    const pack = packFor(track);
     if (pack) trackLayer.addChild(...TP.under(track), shadowStrip(track, -1), shadowStrip(track, 1), roadStrip(track, tex.road));
     else trackLayer.addChild(feltAround(track, tex.felt), shadowStrip(track, -1), shadowStrip(track, 1), roadStrip(track, tex.road));
-    renderer.background.color = pack ? 0x1a2117 : hexNum(track.ground);
+    renderer.background.color = pack ? 0x1a2117 : hexNum(track.ground); // track pack: dark grass behind the ground mesh
     // boost pads
     for (const pad of track.pads || []) {
       const hw = pad.halfW, L = pad.len, pg = new P.Graphics();
@@ -331,7 +356,7 @@ export async function createPixiRenderer(hudCanvas, app) {
     const half = track.halfW - KERB, sq = 16, rows = Math.ceil((half * 2) / sq);
     for (let r = 0; r < rows; r++) for (let c = 0; c < 3; c++) sl.rect(-sq * 1.5 + c * sq, -half + r * sq, sq, Math.min(sq, half * 2 - r * sq)).fill((r + c) % 2 ? 0x111111 : 0xffffff);
     trackLayer.addChild(sl);
-    if (pack) { const L = TP.lights(track); if (L.length) trackLayer.addChild(...L); } // trackpack: flood pools (add) then lamp heads
+    if (pack) { const L = TP.lights(track); if (L.length) trackLayer.addChild(...L); } // track pack: flood pools (add) then lamp heads
     packLit = !!pack;
     // bonus boxes
     bonusLayer.removeChildren().forEach((c) => c.destroy({ children: true }));
@@ -383,6 +408,7 @@ export async function createPixiRenderer(hudCanvas, app) {
       v.flame = new P.Container();
       v.streaks = [0, 1, 2, 3].map(() => { const s = new P.Sprite(white); s.anchor.set(1, 0.5); v.flame.addChild(s); return s; });
       v.flames = [0, 1].map(() => { const s = new P.Sprite(flameOrange); s.anchor.set(1, 0.5); v.flame.addChild(s); return s; });
+      v.cores = [0, 1].map(() => { const s = new P.Sprite(flameOrange); s.anchor.set(1, 0.5); s.visible = false; v.flame.addChild(s); return s; }); // v54.6 DOUBLE BOOST pink core
       v.shadow = new P.Sprite(t.shadow); v.shadow.anchor.set((SPRITE_W * R / 2) / t.w, (SPRITE_H * R / 2) / t.h);
       v.body = new P.Sprite(t.body); v.body.anchor.set((SPRITE_W * R / 2) / t.w, (SPRITE_H * R / 2) / t.h);
       if (car.isPlayer) {
@@ -407,11 +433,11 @@ export async function createPixiRenderer(hudCanvas, app) {
     v.shadow.position.set(car.x + 3.5 * s, car.y + 5 * s); v.shadow.rotation = ang; v.shadow.scale.set(k);
     v.body.position.set(car.x, car.y); v.body.rotation = ang; v.body.scale.set(k);
     // boost flame (same sizes / flicker as the Canvas version; hidden while spinning)
-    const lvl = car.boostLevel || 0;
+    const lvlRaw = car.boostLevel || 0, lvl = Math.min(1, lvlRaw), ck = chainK(car); // v54.6: above 1 = DOUBLE BOOST rush
     if (lvl > 0.02 && !(car.spinMs > 0)) {
       const t = tMs + (car.isPlayer ? 0 : car.id * 97);
       const fl = 0.85 + 0.15 * Math.sin(t * 0.047) + 0.08 * Math.sin(t * 0.113);
-      const len = (26 + 34 * lvl) * s * fl, green = !!car.boostGreen;
+      const len = (26 + 34 * lvl) * s * fl * (1 + (CHAIN_FLAME_MUL - 1) * ck), green = !!car.boostGreen;
       v.flame.visible = true; v.flame.alpha = Math.min(1, lvl * 1.4);
       v.flame.position.set(car.x, car.y); v.flame.rotation = car.angle;
       if (fxAtlas) { // v54.1: GD's atlas flame_0..2 (cyan → pink), additive, 24 fps cycle with a ±8 % flicker; LAP BOOST tinted green
@@ -419,8 +445,17 @@ export async function createPixiRenderer(hudCanvas, app) {
           const fr = fxAtlas['flame_' + (Math.floor(t / 41.7 + i) % 3)], fk = 1 + 0.08 * Math.sin(t * 0.09 + i * 1.7);
           f.texture = fr.tex; f.anchor.set(fr.ax, fr.ay); f.rotation = Math.PI / 2; f.blendMode = 'add'; f.tint = green ? 0x8dff6a : 0xffffff;
           f.position.set(-hl + 4 * s, (i ? 1 : -1) * hw * 0.42); f.scale.set(12 * s * 1.6 * fk / 80, len * 1.3 * fk / (0.9 * 160));
+          // v54.6: pink core inside each flame while the chain rush is on (atlas glow, normal blend so it reads pink over
+          // the additive cyan flame; eases out with the rush)
+          const c = v.cores[i], gl = fxAtlas.glow; c.visible = ck > 0.01 && !!gl;
+          if (c.visible) { c.texture = gl.tex; c.anchor.set(0.5); c.rotation = 0; c.blendMode = 'normal'; c.tint = CHAIN_PINK; c.alpha = 0.9 * ck;
+            c.position.set(-hl + 4 * s - len * 0.42, f.position.y); c.width = len * 0.9; c.height = 8 * s; }
         });
-      } else v.flames.forEach((f, i) => { f.texture = green ? flameGreen : flameOrange; f.position.set(-hl + 2 * s, (i ? 1 : -1) * hw * 0.42); f.scale.set((len + 2 * s) / 120, s / 2); });
+      } else v.flames.forEach((f, i) => {
+        f.texture = green ? flameGreen : flameOrange; f.position.set(-hl + 2 * s, (i ? 1 : -1) * hw * 0.42); f.scale.set((len + 2 * s) / 120, s / 2);
+        const c = v.cores[i]; c.visible = ck > 0.01;
+        if (c.visible) { c.texture = softDot; c.anchor.set(0.5); c.tint = CHAIN_PINK; c.alpha = 0.9 * ck; c.blendMode = 'normal'; c.position.set(-hl + 2 * s - len * 0.42, f.position.y); c.width = len * 0.9; c.height = 8 * s; }
+      });
       const lines = [[-hw * 1.35, 1], [hw * 1.35, 0.8], [-hw * 0.7, 0.55], [hw * 0.7, 0.65]];
       v.streaks.forEach((st, i) => {
         const [dy, kk] = lines[i], ph = ((t * 0.004 + kk * 3.1) % 1);

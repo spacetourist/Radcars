@@ -8,7 +8,7 @@
  * 512×512 canvas tiles (1 px per world unit, created lazily, faded ~2 %/s one tile at a time) — never live sprites.
  * When the frame rate sags, smoke is dropped first, then streaks (quality 2 → 1 → 0). `?fx=0|1|2` pins the level.
  */
-import { slip01 } from './physics.js';
+import { slip01, CHAIN_RUSH_LVL } from './physics.js';
 import { CAR_LEN, CAR_WID } from './physics.js';
 
 export const FX_CAP = 64;
@@ -17,6 +17,12 @@ export const SKID_LEN = 10, SKID_STEP = SKID_LEN / 4; // stamp length (wu) and t
 export const SKID_ON = 0.22, SKID_OFF = 0.15; // v54.3 slip01 hysteresis, shared with the squeal gate
 export const SKID_TILE = 256, SKID_MAX_TILES = 64; // 256² tiles keep each re-upload small; least-recently-stamped tile is recycled past 64
 const SPARK_HOT = 0xffe600, SPARK_AMBER = 0xffb347, SODIUM = 0xffb347, CYAN = 0x00e8ff;
+/** v54.6 DOUBLE BOOST (GD): pink #ff2b6a second shockwave at 1.3× the cyan one, 120 ms white edge flash, 1.5× streaks. */
+export const CHAIN_PINK = 0xff2b6a, CHAIN_RING_MUL = 1.3, CHAIN_FLASH_MS = 120, CHAIN_STREAK_MUL = 1.5, CHAIN_FLAME_MUL = 1.4;
+/** 0..1: how far into the DOUBLE BOOST rush this car is (boostLevel above 1; eases back with the rush). */
+export const chainK = (c) => Math.max(0, Math.min(1, (((c && c.boostLevel) || 0) - 1) / (CHAIN_RUSH_LVL - 1)));
+/** 0..1 alpha of the white edge flash (CHAIN_FLASH_MS after a DOUBLE BOOST lands; linear fade). */
+export const chainFlash = (fx, now) => { const el = now - (fx.flashAt ?? -1e9); return el >= 0 && el < CHAIN_FLASH_MS ? 1 - el / CHAIN_FLASH_MS : 0; };
 const rnd = (a, b) => a + Math.random() * (b - a);
 
 export function newFx() {
@@ -127,6 +133,12 @@ export function stepFx(fx, world, dt, view, W, H) {
       fx.stats.boosts++;
       if (e.car === world.player) fx.punchAt = now;
     }
+    else if (e.type === 'boostChain') {
+      // v54.6 DOUBLE BOOST (GD): a second shockwave in pink at 1.3× the cyan one + the 120 ms white edge flash
+      add(fx, { k: 'ring', x: e.car.x, y: e.car.y, vx: e.car.vx * 0.5, vy: e.car.vy * 0.5, rot: 0, life: 300, s0: 0.3 * CHAIN_RING_MUL, s1: 1.4 * CHAIN_RING_MUL, a0: 0.9, tint: CHAIN_PINK, boost: true, chain: true, carId: e.car.id });
+      add(fx, { k: 'glow', x: e.car.x, y: e.car.y, vx: e.car.vx * 0.5, vy: e.car.vy * 0.5, rot: 0, life: 160, s0: 2.4, s1: 3.6, a0: 0.75, tint: CHAIN_PINK });
+      fx.flashAt = now; fx.stats.chains = (fx.stats.chains || 0) + 1;
+    }
   }
   ev.length = 0;
   // ---- per-car: skid marks, tyre smoke, boost ghosts
@@ -168,9 +180,10 @@ export function stepFx(fx, world, dt, view, W, H) {
   }
   // ---- speed streaks (screen space) above 80 % of top speed
   const p = world.player, frac = Math.hypot(p.vx, p.vy) / (p.top || 1000);
-  if (fx.quality >= 1 && frac > 0.8 && !p.finished && now >= fx.streakAt && fx.parts.filter((o) => o.k === 'streak').length < 6) {
+  const ck = chainK(p), sMul = 1 + (CHAIN_STREAK_MUL - 1) * ck; // v54.6: ~1.5× the streaks during the DOUBLE BOOST rush
+  if (fx.quality >= 1 && frac > 0.8 && !p.finished && now >= fx.streakAt && fx.parts.filter((o) => o.k === 'streak').length < Math.round(6 * sMul)) {
     const k = Math.min(1, (frac - 0.8) / 0.2);
-    fx.streakAt = now + 70 - 30 * k;
+    fx.streakAt = now + (70 - 30 * k) / sMul;
     // v54.2 (GD): streaks follow the car's on-screen direction of travel (the camera never rotates, so that is the
     // velocity direction): each line lies along it, flows backwards past the car, and spawns near the screen edges on
     // either side of that direction (and from ahead, so it sweeps across the side band)

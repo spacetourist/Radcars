@@ -1,6 +1,6 @@
 import { getTrack, buildStartingGrid } from './tracks.js';
 import { createCar, CAR_COLORS, AI_NAMES } from './cars.js';
-import { stepCar, initCarOnTrack, resolveCarCollisions, BOOST_TOP_MUL, CAR_LEN, CAR_WID, slip01 } from './physics.js';
+import { stepCar, initCarOnTrack, resolveCarCollisions, BOOST_TOP_MUL, CAR_LEN, CAR_WID, slip01, CHAIN_RUSH_LVL } from './physics.js';
 import { stepAI } from './ai.js';
 import { createRenderer } from './render.js';
 import { newFx, stepFx, zoomPunch, SKID_ON, SKID_OFF } from './fx.js';
@@ -36,6 +36,18 @@ const PLAYER_ACCEL = 640;
 export const BOOST_MS = 2000;
 const BOOST_RAMP_IN_MS = 220;
 const BOOST_RAMP_OUT_MS = 450;
+/**
+ * v54.6 DOUBLE BOOST (player only). A second boost landing (pad entered, drift boost paid, BOOST pressed, LAP BOOST
+ * power) while a boost is already active chains: max 2 stacks. The chain holds the boost on for the time left PLUS the
+ * new boost's time (the timer extends, never resets), capped at CHAIN_CAP_MS from the moment it lands, and adds a brief
+ * rush: boostLevel CHAIN_RUSH_LVL (physics: top +54 % instead of +40 %) for CHAIN_RUSH_MS, easing back to 1 over the
+ * last CHAIN_EASE_MS. A third landing while chained only extends the timer (up to the cap): no new rush, no sound.
+ */
+export const CHAIN_MAX = 2;
+export const CHAIN_RUSH_MS = 1200;
+export const CHAIN_EASE_MS = 400;
+export const CHAIN_CAP_MS = 3000;
+export { CHAIN_RUSH_LVL };
 
 /** Player auto-unstick (no brake since v48): gas held, near-zero speed for UNSTICK_AFTER_MS → reverse. */
 const UNSTICK_AFTER_MS = 1500;
@@ -55,6 +67,11 @@ const MISSILE_FLASH_MS = 1400;
 
 function newBoost() {
   return { charge: 1, activeMs: 0, level: 0, free: false, uses: 0, freeUses: 0, lastTriggerMs: -1, source: null };
+}
+
+/** v54.6 DOUBLE BOOST state (player only): stacks 0–2, the chain's hold/rush timers and the landing counters seen. */
+function newChain() {
+  return { stacks: 0, holdMs: 0, rushMs: 0, wasOn: false, count: 0, extends: 0, landT: -1, sfxT: -1, log: [], seen: { trig: 0, pad: 0, drift: 0, lap: false } };
 }
 
 export function createGame(canvas, input) {
@@ -115,7 +132,7 @@ export function createGame(canvas, input) {
       track, cars, player: p, cam,
       race: { trackIndex, totalLaps: laps, time: 0, countdown: COUNTDOWN_MS, countdownMs: COUNTDOWN_MS, goFlash: 0, over: false, placesAssigned: 0, lapFlashMs: 0, lapFlashLast: 0, lapFlashBest: 0 }
     };
-    world.boost = newBoost();
+    world.boost = newBoost(); world.chain = newChain(); world.chainFlash = null;
     world.fxEvents = []; world.wallLog = []; world.fxState = newFx(); // v54 feel events (consumed by the renderer's FX) + impact log
     world.missile = newMissileState();
     world.power = newPowerState();
@@ -365,7 +382,12 @@ export function createGame(canvas, input) {
         if (c.isPlayer && !c.finished) sfx('wall', { wallHit: c.wallHit });
       }
       const lvl = c.boostLevel || 0;
-      if (!c.boostArmedOff && lvl > 0.15) { c.boostArmedOff = true; ev.push({ type: 'boost', car: c, x: c.x, y: c.y, t: race.time, q: c.driftBoostMs > 0 && !(c.isPlayer && world.boost.activeMs > 0) && !(c.padMs > 0) ? c.driftBoostQ : null }); }
+      if (!c.boostArmedOff && lvl > 0.15) {
+        c.boostArmedOff = true;
+        // v54.6: the boost whoosh hook ('boost' is a silent placeholder until the recording lands); never on the frame
+        // a DOUBLE BOOST lands (that frame plays 'boostChain' instead)
+        if (c.isPlayer && !(world.chain && world.chain.sfxT === race.time)) sfx('boost');
+        ev.push({ type: 'boost', car: c, x: c.x, y: c.y, t: race.time, q: c.driftBoostMs > 0 && !(c.isPlayer && world.boost.activeMs > 0) && !(c.padMs > 0) ? c.driftBoostQ : null }); }
       else if (c.boostArmedOff && lvl < 0.05) c.boostArmedOff = false;
     }
     if (ev.length > 64) ev.splice(0, ev.length - 64);
@@ -545,7 +567,7 @@ export function createGame(canvas, input) {
     const q = clamp(DB_W_DUR * clamp((d.ms - DB_MIN_MS) / (DB_FULL_MS - DB_MIN_MS), 0, 1) + DB_W_ANG * clamp((ang - DB_MIN_ANG) / (DB_FULL_ANG - DB_MIN_ANG), 0, 1)
       + DB_W_SMOOTH * (1 - clamp(3 * d.capMs / d.ms, 0, 1)), 0, 1);
     rec.q = +q.toFixed(2); rec.awarded = true;
-    c.driftBoostMs = DB_MS0 + DB_MS1 * q; c.driftBoostLvl = DB_LVL0 + DB_LVL1 * q; c.driftBoostQ = q;
+    c.driftBoostMs = DB_MS0 + DB_MS1 * q; c.driftBoostLvl = DB_LVL0 + DB_LVL1 * q; c.driftBoostQ = q; c.driftLand = (c.driftLand || 0) + 1;
     world.driftFlash = { text: q >= DB_PERFECT ? 'PERFECT DRIFT' : 'DRIFT BOOST', q, t: world.race.time };
     sfx('driftBoost', { quality: q });
   }
@@ -575,7 +597,7 @@ export function createGame(canvas, input) {
     if (flags.boost && !p.finished && b.activeMs <= 0) {
       if (b.last) { b.activeMs = BOOST_MS; b.free = true; b.freeUses++; }
       else if (b.charge > 0) { b.charge = 0; b.activeMs = BOOST_MS; b.free = false; b.uses++; }
-      if (b.activeMs > 0) { b.lastTriggerMs = world.race.time; b.source = flags.boostSource; } // v54: no press sound — the boostLevel 0.15 edge drives boost FX (+ the whoosh later)
+      if (b.activeMs > 0) { b.lastTriggerMs = world.race.time; b.source = flags.boostSource; b.trig = (b.trig || 0) + 1; } // v54: no press sound — the boostLevel 0.15 edge drives boost FX (+ the whoosh later)
     }
     if (b.activeMs > 0) b.activeMs = Math.max(0, b.activeMs - dt);
     if (p.finished) b.activeMs = 0;
@@ -596,8 +618,49 @@ export function createGame(canvas, input) {
     if (c.driftBoostMs > 0) { c.driftBoostMs = Math.max(0, c.driftBoostMs - dt); if (!c.finished) target = Math.max(target, c.driftBoostLvl); } // v54.4 drift boost
     // v53 fix: at full level (lvl === target === 1) this used to fall into the ramp-out branch every other frame, so a
     // held boost flickered 1 ↔ 0.96 (0.93 at 30 fps); now it holds steady at the target
+    if (c.isPlayer) target = chainBoost(c, dt, target, lapBoost, onRail);
     c.boostLevel = target > lvl ? Math.min(target, lvl + dt / BOOST_RAMP_IN_MS) : target < lvl ? Math.max(target, lvl - dt / BOOST_RAMP_OUT_MS) : lvl;
     if (c.isPlayer) world.boost.level = c.boostLevel;
+  }
+
+  /**
+   * v54.6 DOUBLE BOOST: detect boost landings this frame (counters, so a pad held for several frames or a timer refresh
+   * is not a new landing), chain on the second, extend on the third, and return the player's boost target.
+   */
+  function chainBoost(c, dt, target, lapBoost, onRail) {
+    const b = world.boost, ch = world.chain || (world.chain = newChain());
+    const seen = ch.seen;
+    const land = [];
+    const btnMs = b.activeMs || 0, padMs = onRail ? 0 : c.padMs || 0, driftMs = c.driftBoostMs || 0;
+    if ((b.trig || 0) !== seen.trig) land.push(['button', btnMs]);
+    if ((c.padLand || 0) !== seen.pad && !onRail) land.push(['pad', padMs]);
+    if ((c.driftLand || 0) !== seen.drift) land.push(['drift', driftMs]);
+    if (lapBoost && !seen.lap) land.push(['lapboost', 0]);
+    seen.trig = b.trig || 0; seen.pad = c.padLand || 0; seen.drift = c.driftLand || 0; seen.lap = lapBoost;
+    if (ch.holdMs > 0) ch.holdMs = Math.max(0, ch.holdMs - dt);
+    if (ch.rushMs > 0) ch.rushMs = Math.max(0, ch.rushMs - dt);
+    if (c.finished) { ch.stacks = 0; ch.holdMs = 0; ch.rushMs = 0; ch.wasOn = false; return target; }
+    if (land.length && ch.wasOn) {
+      const kinds = land.map((l) => l[0]);
+      // time the boost had left before this landing, and the new boost's own time
+      const rem = Math.max(ch.holdMs, kinds.includes('button') ? 0 : btnMs, kinds.includes('pad') ? 0 : padMs, kinds.includes('drift') ? 0 : driftMs);
+      const add = Math.max(...land.map((l) => l[1]));
+      ch.holdMs = Math.min(CHAIN_CAP_MS, Math.max(ch.holdMs, rem + add));
+      if (ch.stacks < CHAIN_MAX) {
+        ch.stacks = CHAIN_MAX; ch.rushMs = CHAIN_RUSH_MS; ch.count++; ch.landT = world.race.time;
+        world.chainFlash = { text: 'DOUBLE BOOST', t: world.race.time };
+        world.fxEvents.push({ type: 'boostChain', car: c, x: c.x, y: c.y, t: world.race.time });
+        sfx('boostChain'); ch.sfxT = world.race.time; // INSTEAD of 'boost' (emitFeelEvents skips it this frame)
+      } else ch.extends++;
+      if (ch.log.length < 200) ch.log.push({ t: Math.round(world.race.time), src: kinds.join('+'), stacks: ch.stacks, holdMs: Math.round(ch.holdMs), rushMs: Math.round(ch.rushMs), rem: Math.round(rem), add: Math.round(add) });
+    }
+    const on = target > 0 || ch.holdMs > 0;
+    if (on && ch.stacks === 0) ch.stacks = 1;
+    if (!on) { ch.stacks = 0; ch.rushMs = 0; }
+    ch.wasOn = on;
+    if (ch.holdMs > 0) target = Math.max(target, 1);
+    if (ch.rushMs > 0) target = Math.max(target, 1 + (CHAIN_RUSH_LVL - 1) * Math.min(1, ch.rushMs / CHAIN_EASE_MS));
+    return target;
   }
 
   /** Player controls (v53): auto-throttle + BRAKE + steer, with the automatic unstick reverse. */

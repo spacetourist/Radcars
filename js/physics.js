@@ -63,6 +63,8 @@ export function gripAt(spd, top) {
 }
 /** Boost (player only, v47): at full boost level the top-speed cap is +40% and thrust +70%. */
 export const BOOST_TOP_MUL = 0.40;
+/** v54.6 DOUBLE BOOST rush: the player's boostLevel peaks here (top +54 % vs +40 %) for ~1.2 s; AI never above 1. */
+export const CHAIN_RUSH_LVL = 1.35;
 export const BOOST_ACCEL_MUL = 0.70;
 
 /** Place a car on the track and initialise its progress tracking. */
@@ -108,7 +110,7 @@ export function stepCar(car, ctl, dtMs, track) {
   car.angle = normalizeAngle(car.angle + car.yawRate * dt);
 
   // Throttle / brake along the (new) heading
-  const b = clamp(ctl.boost || 0, 0, 1);
+  const b = clamp(ctl.boost || 0, 0, CHAIN_RUSH_LVL); // v54.6: up to CHAIN_RUSH_LVL during the player's DOUBLE BOOST rush (AI never above 1)
   const top = car.top * (1 + BOOST_TOP_MUL * b);
   const accel = car.accel * (1 + BOOST_ACCEL_MUL * b) * (hb ? HB_THROTTLE : 1); // v54.4: part throttle on the handbrake
   if (ctl.accel && !ctl.brake) {

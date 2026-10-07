@@ -1,6 +1,7 @@
 /**
- * Track-edge pack PROTOTYPE (GD night-circuit pack, assets/track/). Pixi only, behind ?trackpack=1, Gridlock only.
- * Loaded with a dynamic import from pixiRender.js only when the flag is set, so default play never touches it.
+ * Track-edge pack (GD night-circuit pack, assets/track/), v54.6. Pixi only, Gridlock only (pixiRender.js PACK_TRACKS),
+ * on by default (?trackpack=0 = off). Loaded with a dynamic import from pixiRender.js the first time a pack track is
+ * built, so other tracks never download the module or its images.
  *  - ground: GD grass on a ground mesh like feltAround(), but its holes follow the OPAQUE parts of the edge strips
  *    (outer: up to the armco at 250 wu, inner: the solid gravel at 44 wu), so ground + strips fill each pixel ~once
  *    (the outer strip's transparent grass gap gets the grass composited into the strip texture at load time)
@@ -13,9 +14,6 @@
  *  - flood pools (add) + lamp heads on the outside of corners, ~every POOL_EVERY wu, ≤ POOL_MAX per track, ≤ POOLS_ON_SCREEN
  *    drawn (nearest first); static meshes (mesh shader), only visibility changes per frame
  */
-export const TRACKPACK_TRACKS = ['gridlock'];
-// profiling: ?tpcut=pools,lamps,inner,outer,overlap drops layers / the hole trick (prototype only)
-const CUT = new Set(((typeof location !== 'undefined' && /[?&]tpcut=([a-z,]+)/.exec(location.search)) || [, ''])[1].split(',').filter(Boolean));
 const BASE = 'assets/track/', OUTER_D = 320, INNER_D = 80, INNER_MIN_GAP = 100, PERIOD = 256;
 // outer strip v columns (v = wu / 320): gravel 0–108, [skip 108–148 wu when not composited], AO 148–172, tyres 172–236,
 // armco 240–262, trim 267.5, glow to OUTER_END (alpha 0.02 there). Ground hole at OUTER_HOLE (armco, alpha 1).
@@ -24,9 +22,9 @@ const OUTER_V = [0, 0.11, 0.22, 0.3375, 0.4625, 0.5375, 0.6375, 0.7375, OUTER_HO
 const INNER_V = [0, INNER_HOLE / 80, 1];
 const CHUNK = 24, POOL_TRIM = 0.7, FOLD_K = 0.78, SQUEEZE_MIN = 0.35, SQUEEZE_WIN = 250;
 // POOLS_ON_SCREEN: most flood pools drawn at once (nearest to the camera win); drop to 4 if a phone dips.
-// Prototype override for quick tests: &pools=N
+// Quick on-device override: &pools=N
 export const POOLS_ON_SCREEN = +(((typeof location !== 'undefined' && /[?&]pools=(\d+)/.exec(location.search)) || [, 8])[1]);
-const POOL_EVERY = 700, POOL_MAX = 10, POOL_CURV = 1 / 1500, POOL_ALPHA = 0.4, POOL_WU = 768, LAMP_WU = 48;
+const POOL_EVERY = 700, POOL_MAX = 10, POOL_CURV = 1 / 1500, POOL_ALPHA = 0.55, POOL_CORE = 0.45, POOL_CORE_ALPHA = 0.22, POOL_WU = 768, LAMP_WU = 48;
 export const ASPHALT_BASE = '#3c3c3f', GROUND_BG = 0x1a2117;
 
 function loadImg(src) { return new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => rej(new Error('trackpack: ' + src)); im.src = src; }); }
@@ -45,12 +43,10 @@ export async function loadTrackPack(P, canvasTexture) {
   const [grass, asphalt, edge, edgeIn, atlasImg, atlas] = await Promise.all([
     loadImg(BASE + 'grass-tile.png'), loadImg(BASE + 'asphalt-tile.png'), loadImg(BASE + 'edge-strip.png'),
     loadImg(BASE + 'edge-strip-inner.png'), loadImg(BASE + 'track-atlas.png'), fetch(BASE + 'track-atlas.json').then((r) => r.json())]);
-  const overlap = !CUT.has('overlap');
   // mipmapped + repeat (all power-of-two); the strips wrap along u only (v stays in 0..1)
-  const tex = { grass: canvasTexture(toCanvas(grass), true, true), edge: canvasTexture(overlap ? underlay(edge, grass, (OUTER_HOLE + 8) / 320) : toCanvas(edge), true, true), edgeIn: canvasTexture(toCanvas(edgeIn), true, true), asphaltImg: asphalt };
+  const tex = { grass: canvasTexture(toCanvas(grass), true, true), edge: canvasTexture(underlay(edge, grass, (OUTER_HOLE + 8) / 320), true, true), edgeIn: canvasTexture(toCanvas(edgeIn), true, true), asphaltImg: asphalt };
   const atl = canvasTexture(toCanvas(atlasImg), true, false), AW = atlasImg.naturalWidth, AH = atlasImg.naturalHeight;
   const frameUV = (k) => { const f = atlas.frames[k].frame; return [f.x / AW, f.y / AH, (f.x + f.w) / AW, (f.y + f.h) / AH]; };
-  const stats = { strips: 0, innerSkipped: 0, clampedPts: 0, squeezedPts: 0, pools: 0, poolsInView: 0, poolsInViewMax: 0 };
   let poolPos = [], chunks = [];
 
   /** Per-point clearance on side sgn: largest depth d ≤ D such that the strip edge stays ≥ d away from any other
@@ -73,8 +69,7 @@ export async function loadTrackPack(P, canvasTexture) {
   function edgeStrip(track, sgn, texture, D, inner) {
     const pts = track.pts, n = pts.length, E0 = track.halfW + 12, cl = clearance(track, sgn, E0, inner ? INNER_MIN_GAP : D);
     const V = inner ? INNER_V : OUTER_V, C = V.length, vHole = inner ? INNER_HOLE / D : OUTER_HOLE / D;
-    // transparent band skipped only when the grass is NOT composited into the strip (then the ground shows there)
-    const SK = !inner && !overlap ? [3] : [], R = C - 1 - SK.length;
+    const R = C - 1; // rows (the grass is composited into the outer strip, so no band is skipped)
     const vert = new Float32Array((n + 1) * C * 2), uv = new Float32Array((n + 1) * C * 2), ring = new Float32Array(n * 2);
     // concave bends (the road turns TOWARDS this side, e.g. the far side of an S): a full-depth strip would fold
     // through the bend centre, so the stack is squeezed across (v still 0..1) to keep its outer edge at a radius of at
@@ -89,8 +84,7 @@ export async function loadTrackPack(P, canvasTexture) {
     for (let i = 0; i <= n; i++) {
       const k0 = i % n, p = pts[k0], full = D * ks[k0];
       let d = Math.min(full, cl[k0]), vEnd = d / full; // squeeze: geometry only (v still reaches 1); clamp: the stack is cut
-      if (i < n) { if (ks[k0] < 1) stats.squeezedPts++; if (cl[k0] < full) stats.clampedPts++; }
-      if (inner && cl[k0] < INNER_MIN_GAP) { d = 0; vEnd = 0; if (i < n) stats.innerSkipped++; }
+      if (inner && cl[k0] < INNER_MIN_GAP) { d = 0; vEnd = 0; }
       const ax = p.x + p.nx * sgn * E0, ay = p.y + p.ny * sgn * E0;
       if (i) s += Math.hypot(ax - px, ay - py); px = ax; py = ay;
       for (let r = 0; r < C; r++) { const o = (i * C + r) * 2, v = Math.min(V[r], vEnd), dd = E0 + v * full;
@@ -99,19 +93,17 @@ export async function loadTrackPack(P, canvasTexture) {
     }
     const cyc = Math.max(1, Math.round(s / PERIOD)), f = cyc / (s / PERIOD); // whole repeats → no seam at the loop close
     for (let i = 0; i < uv.length; i += 2) uv[i] *= f;
-    stats.strips++;
     // split into chunks of CHUNK track points, each culled against the view per frame (software GL and weak GPUs
     // pay for every submitted triangle, even off screen)
     const cont = new P.Container();
     for (let i0 = 0; i0 < n; i0 += CHUNK) {
       const i1 = Math.min(n, i0 + CHUNK), m = i1 - i0, cv = vert.slice(i0 * C * 2, (i1 + 1) * C * 2), cu = uv.slice(i0 * C * 2, (i1 + 1) * C * 2), ci = new Uint32Array(m * R * 6);
-      for (let i = 0; i < m; i++) for (let r = 0, k = 0; r < C - 1; r++) { if (SK.includes(r)) continue; const a0 = i * C + r, b0 = a0 + C; ci.set([a0, a0 + 1, b0, a0 + 1, b0 + 1, b0], (i * R + k++) * 6); }
+      for (let i = 0; i < m; i++) for (let r = 0; r < R; r++) { const a0 = i * C + r, b0 = a0 + C; ci.set([a0, a0 + 1, b0, a0 + 1, b0 + 1, b0], (i * R + r) * 6); }
       let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9; for (let k = 0; k < cv.length; k += 2) { x0 = Math.min(x0, cv[k]); x1 = Math.max(x1, cv[k]); y0 = Math.min(y0, cv[k + 1]); y1 = Math.max(y1, cv[k + 1]); }
       const mesh = still(new P.MeshSimple({ texture, vertices: cv, uvs: cu, indices: ci })); cont.addChild(mesh); chunks.push({ mesh, x0, y0, x1, y1 });
     }
     return { mesh: cont, ring };
   }
-  function offsetRing(track, sgn, off) { const r = []; for (const p of track.pts) r.push(p.x + p.nx * sgn * off, p.y + p.ny * sgn * off); return r; }
   /** Outer side: the side whose offset polygon is larger (same test as feltAround). */
   function outerSign(track) {
     const pts = track.pts, n = pts.length, area = (sg) => { let a = 0; for (let i = 0; i < n; i++) { const p = pts[i], q = pts[(i + 1) % n]; const ax = p.x + p.nx * sg * 300, ay = p.y + p.ny * sg * 300, bx = q.x + q.nx * sg * 300, by = q.y + q.ny * sg * 300; a += ax * by - bx * ay; } return Math.abs(a / 2); };
@@ -159,35 +151,40 @@ export async function loadTrackPack(P, canvasTexture) {
       pools.push({ x: p.x + p.nx * sgn * (E0 + 170), y: p.y + p.ny * sgn * (E0 + 170), size: POOL_WU });
       lamps.push({ x: p.x + p.nx * sgn * (E0 + 302), y: p.y + p.ny * sgn * (E0 + 302), size: LAMP_WU, rot: Math.atan2(-p.ny * sgn, -p.nx * sgn) }); // lens (+x) faces the road
     }
-    stats.pools = pools.length; poolPos = pools;
+    poolPos = pools;
     const out = [];
-    // one tiny static mesh per pool so view() can cap how many are drawn (POOLS_ON_SCREEN)
-    if (pools.length && !CUT.has('pools')) { const pc = new P.Container(); for (const q of pools) { const pm = octs([q], 'flood-pool'); pm.blendMode = 'add'; pm.alpha = POOL_ALPHA; q.mesh = pm; pc.addChild(pm); } out.push(pc); }
-    if (lamps.length && !CUT.has('lamps')) out.push(quads(lamps, 'lamp-head'));
+    // per pool a tiny static container so view() can cap how many are drawn (POOLS_ON_SCREEN): the pool octagon at
+    // POOL_ALPHA plus a smaller copy (POOL_CORE of its size, POOL_CORE_ALPHA) for a slightly brighter core
+    if (pools.length) {
+      const pc = new P.Container();
+      for (const q of pools) {
+        const box = new P.Container(), pm = octs([q], 'flood-pool'), core = octs([{ x: q.x, y: q.y, size: q.size * POOL_CORE }], 'flood-pool');
+        pm.blendMode = core.blendMode = 'add'; pm.alpha = POOL_ALPHA; core.alpha = POOL_CORE_ALPHA;
+        box.addChild(pm, core); q.mesh = box; pc.addChild(box);
+      }
+      out.push(pc);
+    }
+    if (lamps.length) out.push(quads(lamps, 'lamp-head'));
     return out;
   }
   return {
-    tex, stats, cut: CUT,
-    applies: (track) => TRACKPACK_TRACKS.includes(track.id),
+    tex,
     /** bottom layers (replace feltAround; under the shadow strips / road): ground, inner strip, outer strip */
     under(track) {
-      const so = outerSign(track), E0 = track.halfW + 12, out = []; chunks = [];
-      const inS = CUT.has('inner') ? null : edgeStrip(track, -so, tex.edgeIn, INNER_D, true);
-      const outS = CUT.has('outer') ? null : edgeStrip(track, so, tex.edge, OUTER_D, false);
-      out.push(ground(track, overlap && outS ? Array.from(outS.ring) : offsetRing(track, so, E0), overlap && inS ? Array.from(inS.ring) : offsetRing(track, -so, E0)));
-      if (inS) out.push(inS.mesh); if (outS) out.push(outS.mesh);
+      const so = outerSign(track), out = []; chunks = [];
+      const inS = edgeStrip(track, -so, tex.edgeIn, INNER_D, true), outS = edgeStrip(track, so, tex.edge, OUTER_D, false);
+      out.push(ground(track, Array.from(outS.ring), Array.from(inS.ring)), inS.mesh, outS.mesh);
       return out;
     },
     lights,
-    /** per frame: cull strip chunks to the view; pool stats for verification */
+    /** per frame: cull strip chunks to the view; draw the POOLS_ON_SCREEN nearest pools in view */
     view(cx, cy, hx, hy) {
-      let on = 0; for (const c of chunks) { const v = c.x1 > cx - hx && c.x0 < cx + hx && c.y1 > cy - hy && c.y0 < cy + hy; c.mesh.visible = v; if (v) on++; } stats.chunksOn = on; stats.chunks = chunks.length;
+      for (const c of chunks) c.mesh.visible = c.x1 > cx - hx && c.x0 < cx + hx && c.y1 > cy - hy && c.y0 < cy + hy;
       const r = POOL_WU / 2 * POOL_TRIM / Math.cos(Math.PI / 8), inView = [];
       for (const q of poolPos) { const v = Math.abs(q.x - cx) < hx + r && Math.abs(q.y - cy) < hy + r; if (v) inView.push(q); else if (q.mesh) q.mesh.visible = false; }
       if (inView.length > POOLS_ON_SCREEN) inView.sort((a, b) => Math.hypot(a.x - cx, a.y - cy) - Math.hypot(b.x - cx, b.y - cy));
       inView.forEach((q, k) => { if (q.mesh) q.mesh.visible = k < POOLS_ON_SCREEN; });
-      stats.poolsInView = inView.length; stats.poolsDrawn = Math.min(inView.length, POOLS_ON_SCREEN); stats.poolsCap = POOLS_ON_SCREEN;
-      if (inView.length > stats.poolsInViewMax) stats.poolsInViewMax = inView.length; },
+    },
     /** bake the asphalt grain into the road cross-section (g is in world units; 512 px tile = 256 wu) */
     bakeAsphalt(g, a0, a1) {
       g.fillStyle = ASPHALT_BASE; g.fillRect(a0, 0, a1 - a0, PERIOD);
