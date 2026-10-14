@@ -29,6 +29,15 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   const same = url.origin === self.location.origin;
+  // v54.7: the sound files (~0.6 MB) are immutable within a build (their URLs carry ?b=<build>) → cache-first from this
+  // build's cache, so a returning player never downloads them again; a new build has a new cache name.
+  if (same && url.pathname.includes('/assets/audio/')) {
+    e.respondWith(caches.open(CACHE).then((c) => c.match(req).then((hit) => hit || fetch(req).then((res) => {
+      if (res.ok && res.status === 200) c.put(req, res.clone());
+      return res;
+    }))).catch(() => fetch(req)));
+    return;
+  }
   const net = req.mode === 'navigate' ? fetch(url.href, { cache: 'no-store', credentials: 'same-origin' })
     : same ? fetch(req, req.cache === 'reload' ? undefined : { cache: 'no-store' }) // 'reload' = hard refresh re-priming the HTTP cache
     : fetch(req);

@@ -1,6 +1,6 @@
 // Single source of truth for the build name. Loaded as a classic script by index.html (sets self.RADCARS_BUILD for the
 // menu label) and by sw.js via importScripts (cache name). Bump here on every release.
-self.RADCARS_BUILD = { version: 'v54.6', name: 'double-boost' };
+self.RADCARS_BUILD = { version: 'v54.7', name: 'sound' };
 self.RADCARS_BUILD.label = `${self.RADCARS_BUILD.version} · ${self.RADCARS_BUILD.name}`;
 self.RADCARS_BUILD.cache = `radcars-${self.RADCARS_BUILD.version}-${self.RADCARS_BUILD.name}`;
 // Files the service worker pre-caches and the menu's hard refresh re-downloads (relative to the site root).
@@ -26,6 +26,7 @@ self.RADCARS_BUILD.assets = [
   './js/input.js',
   './js/career.js',
   './js/audio.js',
+  './js/audio-engine.mjs',                               // v54.7: Audio Engineer's mixer / voices (sound files load at runtime)
   './js/render.js',
   './js/ui.js',
   './js/util.js',

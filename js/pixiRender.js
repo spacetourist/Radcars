@@ -17,7 +17,7 @@
 import * as P from '../vendor/pixi-lean.mjs';
 import { createRenderer, minimapBox } from './render.js';
 import { CAR_LEN, CAR_WID } from './physics.js';
-import { partLook, chainK, chainFlash, streakBand, CHAIN_PINK, CHAIN_FLAME_MUL } from './fx.js';
+import { partLook, boostRingK, chainK, chainFlash, streakBand, CHAIN_PINK, CHAIN_FLAME_MUL } from './fx.js';
 import { pointAt, buildStartingGrid } from './tracks.js';
 import { TROPHY, trophyScale, ringState, partAlpha, trophyAnchor, outFade, PLACE_TEXT_Y } from './celebrate.js';
 import { styleFor, carSprite, shadowSprite, textureTile, scaleBucket, SPRITE_W, SPRITE_H, TOY_FONT } from './toyart.js';
@@ -196,6 +196,7 @@ export async function createPixiRenderer(hudCanvas, app) {
           sp.tint = 0x7ff4ff; sp.alpha = 0.34 * Math.min(1, g.level) * (1 - i / 4.2); sp.blendMode = 'add';
         }
       }
+      const ringK = boostRingK(wd.cam.zoom, W, H, 106);
       for (const o of fx.parts) {
         const lk = partLook(o), name = o.k === 'smoke' ? 'smoke_' + (o.frame || 0) : FX_FRAME[o.k], fr = fxAtlas && fxAtlas[name];
         const sp = (o.scr ? scrPool : partPool).get(fr ? fr.tex : disc);
@@ -206,6 +207,7 @@ export async function createPixiRenderer(hudCanvas, app) {
         if (!fr) { sp.width = sp.height = 24 * lk.scale; sp.rotation = 0; continue; }
         if (o.k === 'spark') { sp.rotation = o.rot; sp.scale.set(o.lenPx ? o.lenPx * lk.scale / (SPARK_VIS * wd.cam.zoom) : lk.scale, o.lenPx ? 0.55 : 0.45); } // heavy: lenPx = CSS px of the visible streak
         else if (o.k === 'streak') { sp.rotation = o.rot || 0; sp.scale.set(0.5, lk.scale); } // v54.2: along the direction of travel
+        else if (o.mine) { sp.rotation = 0; sp.scale.set(lk.scale * ringK); } // v54.7: screen-sized boost rings
         else { sp.rotation = o.rot || 0; sp.scale.set(lk.scale); }
       }
       // v54.6 DOUBLE BOOST: 120 ms white edge flash, drawn just inside the clear play area (fx.clear) — 4 soft bars

@@ -1,6 +1,6 @@
 import { TRACKS, pointAt } from './tracks.js';
 import { DIFFICULTIES } from './game.js';
-import { sfx, setMuted } from './audio.js';
+import { sfx, setMuted, getVolumes, setMusicVolume, setSfxVolume } from './audio.js';
 import { persistSave } from './career.js';
 import { fmtTime } from './util.js';
 import { CAR_COLORS } from './cars.js';
@@ -258,12 +258,19 @@ export function createUI(root, api) {
     const stepper = (k, val) => `<div class="stepper"><button class="btn round" data-k="${k}" data-d="-1" aria-label="less">−</button>
           <span class="val">${val}</span>
           <button class="btn round" data-k="${k}" data-d="1" aria-label="more">+</button></div>`;
+    // v54.7: Music / Effects volume (0–10 → 0..1; gain = v² in the mixer); the Sound toggle stays the master mute
+    const vols = getVolumes();
+    const volRow = (k, label, v) => `<div class="opt-row vol-row${save.mute ? ' dim' : ''}"><strong>${label}</strong>
+          <span class="vol-ctl"><input type="range" class="vol" min="0" max="10" step="1" value="${Math.round(v * 10)}" data-vol="${k}" aria-label="${label} volume" style="--v:${Math.round(v * 100)}%" />
+          <span class="val vol-val">${Math.round(v * 10)}</span></span></div>`;
     const el = screen(`
       <h1>Options</h1>
       <div class="opt-wrap">
         <div class="card opt-card">
           <div class="opt-row"><strong>Sound</strong>
             <button class="btn toggle ${save.mute ? '' : 'on'}" id="mute">${save.mute ? 'Off' : 'On'}</button></div>
+          ${volRow('music', 'Music', vols.music)}
+          ${volRow('sfx', 'Effects', vols.sfx)}
           <div class="opt-row"><strong>AI difficulty</strong>${stepper('difficulty', DIFFICULTIES[o.difficulty].label)}</div>
           <div class="opt-row"><strong>AI rivals <span class="muted">1–7</span></strong>${stepper('aiCount', o.aiCount)}</div>
           <div class="opt-row"><strong>Laps <span class="muted">1–10</span></strong>${stepper('laps', o.laps)}</div>
@@ -304,6 +311,11 @@ export function createUI(root, api) {
       sfx('click');
       showOptions(save);
     };
+    el.querySelectorAll('input[data-vol]').forEach((r) => {
+      const set = r.dataset.vol === 'music' ? setMusicVolume : setSfxVolume;
+      r.oninput = () => { const v = Number(r.value) / 10; set(v); r.style.setProperty('--v', `${v * 100}%`); r.nextElementSibling.textContent = r.value; };
+      r.onchange = () => sfx('click'); // hear the Effects level (the click is on the ui bus, inside Effects)
+    });
     el.querySelector('#mute').onclick = () => {
       save.mute = !save.mute;
       setMuted(save.mute);

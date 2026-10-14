@@ -292,6 +292,17 @@ canvas.parade {
 .btn.round { width: 48px; height: 48px; padding: 0; border-radius: 50%; font-size: 1.4rem; font-style: normal; line-height: 1; --accent: #00e8ff; }
 .btn.toggle { min-width: 92px; --accent: #c6cbe0; }
 .btn.toggle.on { --accent: #b8ff00; background: #b8ff00; color: #0c0c12; }
+/* v54.7 Music / Effects volume sliders (Options) */
+.vol-ctl { display: flex; align-items: center; gap: 10px; }
+.vol-row.dim .vol-ctl { opacity: 0.45; }
+.vol-val { min-width: 1.6em; text-align: right; font: 900 0.95rem/1 var(--font-display); color: #fff; }
+input.vol { -webkit-appearance: none; appearance: none; width: 150px; height: 44px; margin: 0; background: transparent; cursor: pointer; touch-action: pan-y; --v: 80%; }
+input.vol::-webkit-slider-runnable-track { height: 8px; border-radius: 4px; background: linear-gradient(90deg, #b8ff00 0 var(--v), rgba(255,255,255,0.16) var(--v)); }
+input.vol::-moz-range-track { height: 8px; border-radius: 4px; background: rgba(255,255,255,0.16); }
+input.vol::-moz-range-progress { height: 8px; border-radius: 4px; background: #b8ff00; }
+input.vol::-webkit-slider-thumb { -webkit-appearance: none; width: 26px; height: 26px; margin-top: -9px; border-radius: 50%; background: #fff; border: 3px solid #b8ff00; box-shadow: 0 2px 6px rgba(0,0,0,0.5); }
+input.vol::-moz-range-thumb { width: 20px; height: 20px; border-radius: 50%; background: #fff; border: 3px solid #b8ff00; box-shadow: 0 2px 6px rgba(0,0,0,0.5); }
+input.vol:focus-visible { outline: 2px solid #00e8ff; outline-offset: 2px; border-radius: 6px; }
 .help-card h3 { color: #00e8ff; }
 .help-card p { margin-top: 6px; font-size: 0.8rem; }
 .help-card b { color: #fff; }

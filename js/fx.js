@@ -128,14 +128,14 @@ export function stepFx(fx, world, dt, view, W, H) {
       // v54.1: ONE shockwave per 0.15 crossing, left where it fired (drifts at half the car's speed), 0.3× → 1.4× and
       // gone after 260 ms — never a shield riding on the car
       const m = e.q == null ? 1 : 0.5 + 0.5 * e.q; // v54.4: a drift boost's shockwave scales with its quality
-      add(fx, { k: 'ring', x: e.car.x, y: e.car.y, vx: e.car.vx * 0.5, vy: e.car.vy * 0.5, rot: 0, life: 260, s0: 0.3, s1: 1.4 * m, a0: 0.8 * m, tint: CYAN, boost: true, carId: e.car.id, q: e.q });
+      add(fx, { k: 'ring', x: e.car.x, y: e.car.y, vx: e.car.vx * 0.5, vy: e.car.vy * 0.5, rot: 0, life: 260, s0: 0.3, s1: 1.4 * m, a0: 0.8 * m, tint: CYAN, boost: true, carId: e.car.id, q: e.q, mine: e.car === world.player });
       add(fx, { k: 'glow', x: e.car.x, y: e.car.y, vx: e.car.vx * 0.5, vy: e.car.vy * 0.5, rot: 0, life: 140, s0: 2 * m, s1: 3 * m, a0: 0.7 * m, tint: CYAN });
       fx.stats.boosts++;
       if (e.car === world.player) fx.punchAt = now;
     }
     else if (e.type === 'boostChain') {
       // v54.6 DOUBLE BOOST (GD): a second shockwave in pink at 1.3× the cyan one + the 120 ms white edge flash
-      add(fx, { k: 'ring', x: e.car.x, y: e.car.y, vx: e.car.vx * 0.5, vy: e.car.vy * 0.5, rot: 0, life: 300, s0: 0.3 * CHAIN_RING_MUL, s1: 1.4 * CHAIN_RING_MUL, a0: 0.9, tint: CHAIN_PINK, boost: true, chain: true, carId: e.car.id });
+      add(fx, { k: 'ring', x: e.car.x, y: e.car.y, vx: e.car.vx * 0.5, vy: e.car.vy * 0.5, rot: 0, life: 300, s0: 0.3 * CHAIN_RING_MUL, s1: 1.4 * CHAIN_RING_MUL, a0: 0.9, tint: CHAIN_PINK, boost: true, chain: true, carId: e.car.id, mine: true });
       add(fx, { k: 'glow', x: e.car.x, y: e.car.y, vx: e.car.vx * 0.5, vy: e.car.vy * 0.5, rot: 0, life: 160, s0: 2.4, s1: 3.6, a0: 0.75, tint: CHAIN_PINK });
       fx.flashAt = now; fx.stats.chains = (fx.stats.chains || 0) + 1;
     }
@@ -253,6 +253,18 @@ export function streakBand(fx, W, H) {
   return { x0: Math.max(m, c.x0), y0: Math.max(m, c.y0), x1: Math.min(W - m, c.x1), y1: Math.min(H - m, c.y1), obs: c.obs };
 }
 
+/**
+ * v54.7 (GD): the player's boost shockwave rings are sized on SCREEN, not in the world (rivals' pad rings keep their
+ * world size so they never read as your own boost): at the far zoom (≈0.24) a world-sized ring
+ * was barely car-sized. Multiply a boost ring's scale by this so a full cyan ring (s1 1.4) is ≈140 CSS px across and
+ * the pink DOUBLE BOOST ring (1.3×) ≈180 px on a 390 px-wide phone, growing a little with bigger screens.
+ * diam = the ring's visual diameter at scale 1 in world units for that renderer (Pixi atlas frame ≈106, Canvas arc ≈115).
+ */
+export const BOOST_RING_PX = 140;
+export function boostRingK(zoom, vw, vh, diam) {
+  const scr = Math.min(1.4, Math.max(0.85, Math.min(vw || 390, vh || 844) / 390));
+  return BOOST_RING_PX * scr / (diam * 1.4 * Math.max(0.05, zoom || 1));
+}
 /** Particle look at time t: {scale, alpha}. */
 export function partLook(o) {
   const t = o.ms / o.life;

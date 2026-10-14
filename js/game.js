@@ -4,7 +4,7 @@ import { stepCar, initCarOnTrack, resolveCarCollisions, BOOST_TOP_MUL, CAR_LEN, 
 import { stepAI } from './ai.js';
 import { createRenderer } from './render.js';
 import { newFx, stepFx, zoomPunch, SKID_ON, SKID_OFF } from './fx.js';
-import { sfx, setAudioPaused, engineFrame, wallStrength, WALL } from './audio.js';
+import { sfx, setAudioPaused, engineFrame, wallStrength, WALL, raceAudioStart, raceAudioEnd } from './audio.js';
 import { clamp, angleDiff } from './util.js';
 import { pointAt } from './tracks.js';
 import { newMissileState, pickTarget, launchMissile, stepMissiles, stepSpin, stepPads } from './weapons.js';
@@ -147,6 +147,7 @@ export function createGame(canvas, input) {
     lastDigit = null;
     running = true;
     paused = false;
+    raceAudioStart(COUNTDOWN_MS); // v54.7: music out, fresh engine voices, engine held −6 dB until GO
     last = performance.now();
     input.showTouch(true);
     resetControls();
@@ -155,6 +156,7 @@ export function createGame(canvas, input) {
   }
 
   function stopRace() {
+    raceAudioEnd(); // v54.7: every race voice stops (ramped)
     clearFinishFlow();
     running = false;
     input.showTouch(false);
@@ -338,6 +340,7 @@ export function createGame(canvas, input) {
       const digit = c > 2800 ? '3' : c > 1800 ? '2' : c > 800 ? '1' : 'GO';
       if (digit !== lastDigit) { lastDigit = digit; sfx(digit === 'GO' ? 'countdownGo' : 'countdown'); }
       if (race.countdown <= 0) { race.countdown = 0; race.goFlash = 700; }
+      audioFrame(); // v54.7: the grid idles (engine held −6 dB until GO)
       return;
     }
     if (race.goFlash > 0) race.goFlash -= dt;
@@ -391,7 +394,10 @@ export function createGame(canvas, input) {
       else if (c.boostArmedOff && lvl < 0.05) c.boostArmedOff = false;
     }
     if (ev.length > 64) ev.splice(0, ev.length - 64);
-    // engine hook (silent for now): speed vs base 1100, slip, and the 3 nearest rivals
+    audioFrame();
+  }
+  /** v54.7 engine hook (js/audio.js engineFrame): speed vs base 1100, slip, and the 3 nearest rivals. */
+  function audioFrame() {
     const p = world.player, lay = getLayout();
     const others = world.cars.filter((c) => c !== p).map((c) => ({ c, d: Math.hypot(c.x - p.x, c.y - p.y) })).sort((a, b) => a.d - b.d).slice(0, 3)
       .map(({ c, d }) => ({ id: c.id, speed01: Math.hypot(c.vx, c.vy) / 1100, boostLevel: c.boostLevel || 0, dist: d,
@@ -514,6 +520,7 @@ export function createGame(canvas, input) {
       f.cele.outAt = f.ms; // the renderers fade the trophy / light out with the text
       later(() => {
         f.phase = 'results';
+        raceAudioEnd(); // v54.7: the engines stop when the results come up (the finish sting plays on)
         if (revealView) { revealView.remove(); revealView = null; }
         if (f.final) deliverFinal(); else liveResults();
       }, FINISH_TIMING.outMs);

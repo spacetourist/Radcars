@@ -65,7 +65,7 @@ function readSafe() {
 
 function btnHtml(id, kind) {
   return `<button type="button" id="${id}" class="act act-${kind}" data-act="${kind}" data-state="ready" aria-label="${NAMES[kind]}">
-    <span class="act-vis"><span class="act-ring"></span><span class="act-icon">${ICONS[kind === 'power' ? 'gift' : kind]}</span><span class="act-badge">∞</span></span>
+    <span class="act-vis"><span class="act-ring"></span><span class="act-icon">${ICONS[kind === 'power' ? 'gift' : kind]}</span><span class="act-badge">∞</span>${kind === 'boost' ? '<span class="act-pip" aria-hidden="true">×2</span>' : ''}</span>
     <span class="act-label">${NAMES[kind]}</span></button>`;
 }
 
@@ -207,6 +207,8 @@ function paint(k, st) {
   if (p.p !== f) { el.style.setProperty('--p', String(Math.max(0, f))); p.p = f; }
   const badge = !!st.badge;
   if (p.badge !== badge) { el.classList.toggle('has-badge', badge); p.badge = badge; }
+  const chain = !!st.chain;
+  if (p.chain !== chain) { el.classList.toggle('chain', chain); p.chain = chain; }
 }
 
 /**
@@ -223,7 +225,16 @@ export function updateControls(w, info) {
   paint('brake', { state: info.braking ? 'active' : 'ready', label: 'HANDBRAKE', p: null }); // v54.4: BRAKE → HANDBRAKE
   // BOOST
   let bs;
-  if (b.activeMs > 0) bs = { state: 'active', label: 'BOOST', p: b.activeMs / info.boostMs, badge: b.free };
+  // v54.7 (GD) DOUBLE BOOST: while the chain rushes the button stays full and pulses cyan/pink at 4 Hz with a pink ×2
+  // pip where the ∞ badge sits; after the rush it drains the chain's remaining time in plain cyan. (A button that can
+  // still be tapped — a charge left, or ∞ while last — keeps its own state: tapping it extends the chain.)
+  const ch = w.chain, chRem = ch ? Math.max(ch.holdMs || 0, b.activeMs || 0) : 0;
+  const chainShow = !counting && ch && ch.stacks >= 2 && chRem > 0 && (b.activeMs > 0 || !(b.charge > 0 || b.last));
+  if (!chainShow || (ch.rushMs || 0) > 0) prev.chainDrainFrom = 0;
+  else if (!prev.chainDrainFrom) prev.chainDrainFrom = chRem;
+  if (chainShow && ch.rushMs > 0) bs = { state: 'active', label: 'BOOST', p: 1, chain: true };
+  else if (chainShow) bs = { state: 'active', label: 'BOOST', p: Math.min(1, chRem / Math.max(1, prev.chainDrainFrom)) };
+  else if (b.activeMs > 0) bs = { state: 'active', label: 'BOOST', p: b.activeMs / info.boostMs, badge: b.free };
   else if (b.last && !counting) bs = { state: 'unlimited', label: 'BOOST', p: null, badge: true };
   else if (b.charge > 0) bs = { state: 'ready', label: 'BOOST', p: null };
   else bs = { state: 'used', label: 'NEXT LAP', p: lapFrac };

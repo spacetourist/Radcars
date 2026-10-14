@@ -4,7 +4,7 @@
  */
 import { getLayout } from './controls.js';
 import { CAR_LEN, CAR_WID } from './physics.js';
-import { partLook, chainK, chainFlash, streakBand, CHAIN_FLAME_MUL } from './fx.js';
+import { partLook, boostRingK, chainK, chainFlash, streakBand, CHAIN_FLAME_MUL } from './fx.js';
 import { pointAt, buildStartingGrid } from './tracks.js';
 import { TROPHY, trophyScale, ringState, partAlpha, trophyAnchor, outFade, PLACE_TEXT_Y } from './celebrate.js';
 import { styleFor, carSprite, shadowSprite, scaleBucket, textureTile, SPRITE_W, SPRITE_H, TOY_FONT } from './toyart.js';
@@ -355,6 +355,7 @@ export function createRenderer(canvas, opts = {}) {
   const hex = (n) => '#' + (n >>> 0).toString(16).padStart(6, '0');
   function drawFeelParts(fx, screen, zoom = 1) {
     ctx.save();
+    const ringK = boostRingK(zoom, W, H, 115);
     for (const o of fx.parts) {
       if (!!o.scr !== screen) continue;
       const lk = partLook(o); if (lk.alpha <= 0) continue;
@@ -364,7 +365,7 @@ export function createRenderer(canvas, opts = {}) {
       const col = hex(o.tint ?? 0xffffff);
       if (o.k === 'spark') { const L = o.lenPx ? o.lenPx * lk.scale / zoom : 80 * lk.scale; ctx.strokeStyle = col; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(o.x, o.y); ctx.lineTo(o.x - Math.cos(o.rot) * L, o.y - Math.sin(o.rot) * L); ctx.stroke(); }
       else if (o.k === 'dot' || o.k === 'glow') { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(o.x, o.y, (o.k === 'glow' ? 18 : 8) * lk.scale, 0, 6.2832); ctx.fill(); }
-      else if (o.k === 'ring') { ctx.strokeStyle = col; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(o.x, o.y, 56 * lk.scale, 0, 6.2832); ctx.stroke(); }
+      else if (o.k === 'ring') { const rk = o.mine ? ringK : 1; ctx.strokeStyle = col; ctx.lineWidth = 6 * rk; ctx.beginPath(); ctx.arc(o.x, o.y, 56 * lk.scale * rk, 0, 6.2832); ctx.stroke(); } // v54.7: boost rings screen-sized
       else if (o.k === 'streak') { const L = 300 * lk.scale, ux = o.dx ?? 0, uy = o.dy ?? -1; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(o.x + ux * L / 2, o.y + uy * L / 2); ctx.lineTo(o.x - ux * L / 2, o.y - uy * L / 2); ctx.stroke(); } // v54.2: along the direction of travel
     }
     ctx.restore();

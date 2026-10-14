@@ -1,5 +1,5 @@
 import { loadSave, persistSave } from './career.js';
-import { setMuted, unlockAudio } from './audio.js';
+import { setMuted, unlockAudio, preloadAudio, musicMenu } from './audio.js';
 import { createInput } from './input.js';
 import { buildControls, setLeftHanded } from './controls.js';
 import { createUI } from './ui.js';
@@ -49,6 +49,10 @@ const rendererReady = new Promise((resolve) => {
   }, 0));
 });
 try { window.__RAD_RENDERER__ = rendererReady; } catch (_) {}
+// v54.7: the recorded sound set downloads only once the page has loaded and the renderer is up (sprite + engine first,
+// music after), so it never competes with the first paint, the menu photo or the Pixi bundle
+const pageLoaded = document.readyState === 'complete' ? Promise.resolve() : new Promise((r) => window.addEventListener('load', r, { once: true }));
+Promise.all([rendererReady, pageLoaded]).then(() => setTimeout(preloadAudio, 0));
 
 const ui = createUI(uiRoot, {
   onMenu(act) {
@@ -91,13 +95,13 @@ function startRaceNow(trackIndex) {
       persistSave(save);
     }
     ui.hideHud();
-    ui.showResults(result, (next) => { game.stopRace(); if (next === 'again') startRace(trackIndex); else ui.showTitle(); });
+    ui.showResults(result, (next) => { game.stopRace(); if (next === 'again') startRace(trackIndex); else { musicMenu(1.0); ui.showTitle(); } });
   });
   game.setOnReveal((info) => ui.showFinishReveal(info));
   game.setPauseHandler(() => {
     ui.showPause(
       () => game.setPaused(false),
-      () => { game.stopRace(); ui.hideHud(); ui.showTitle(); }
+      () => { game.stopRace(); musicMenu(); ui.hideHud(); ui.showTitle(); }
     );
   });
   game.startRace({

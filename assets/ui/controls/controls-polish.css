@@ -257,3 +257,21 @@
 /* v54 (GD / Pep): small-disc labels never below 9 CSS px on phones (landscape arc / narrow screens gave ~8 px) */
 .act:not(.act-brake) .act-label { font-size: max(9px, calc(var(--d) * 0.15)); }
 @media (max-resolution: 1.5dppx) { .act:not(.act-brake) .act-label { font-size: max(9px, calc(var(--d) * 0.16)); } }
+
+/* v54.7 (GD) DOUBLE BOOST on the BOOST button: full, pulsing cyan ↔ pink at 4 Hz (opacity-only overlay, compositor
+   friendly) with a pink ×2 pip where the ∞ badge sits; js/controls.js drops .chain after the rush and drains in cyan */
+.act-pip {
+  display: none; position: absolute; z-index: 3; right: -9px; top: -6px; min-width: 28px; height: 18px; padding: 0 4px;
+  box-sizing: border-box; border-radius: 9px; border: 1.5px solid #fff; background: #ff2b6a; color: #fff;
+  font: 900 12px/15px var(--font-display); text-align: center; letter-spacing: 0.02em; pointer-events: none;
+  box-shadow: 0 0 8px rgba(255, 43, 106, 0.95), 0 2px 4px rgba(0, 0, 0, 0.6);
+}
+.act.chain .act-pip { display: block; }
+.act.chain .act-badge { display: none !important; }
+.act.chain[data-state="active"] .act-vis::after {
+  content: ""; position: absolute; inset: 0; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle at 50% 62%, #ff86ad 0%, #ff2b6a 46%, #8c0d38 100%);
+  box-shadow: 0 0 14px #ff2b6a, 0 0 34px rgba(255, 43, 106, 0.55);
+  opacity: 0; animation: actChainPulse 0.25s ease-in-out infinite;
+}
+@keyframes actChainPulse { 0%, 100% { opacity: 0; } 50% { opacity: 0.92; } }
