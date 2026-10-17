@@ -139,3 +139,11 @@ See docs/reports/v548-*.txt (races both renderers, drift verify, FPS). The shots
   - shots/v548/v548b-middrift-412.png
   - shots/v548/v548b-recharge-412.png
   - v548b-exit-412.png, with `-canvas` versions.
+
+## v54.8 final (GD signed off, then released)
+- Smoke peak on-screen opacity is now 0.7 at full drift01 (`DRIFT_SMOKE_A` = 0.38 → 0.75, multiplied by the 0.93 envelope); it was 0.55.
+- The drift_smoke atlas frames are recoloured once at load (fx.js `recolourSmoke`) to a cool light grey, about #e8ecef, keeping the puff shading. The measured mean is #ebeff1.
+  - Pixi uploads the recoloured canvas as a CanvasSource; Canvas 2D draws it directly.
+  - The fallback discs use #e8ecef.
+- The 24-puff cap is unchanged; peak live count was 7.
+- Release: version.js stays v54.8 'drift', so the SW cache name goes from `radcars-v54.7.1-pickups` to `radcars-v54.8-drift`.

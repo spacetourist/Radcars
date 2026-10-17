@@ -178,7 +178,8 @@ export async function createPixiRenderer(hudCanvas, app) {
     const pr = loadDriftAtlas(); if (!pr) return;
     pr.then((a) => {
       if (!a) return;
-      const source = new P.ImageSource({ resource: a.img, scaleMode: 'linear', autoGenerateMipmaps: true }), out = {};
+      const isCv = typeof HTMLCanvasElement !== 'undefined' && a.img instanceof HTMLCanvasElement; // recoloured smoke (fx.js)
+      const source = new (isCv ? P.CanvasSource : P.ImageSource)({ resource: a.img, scaleMode: 'linear', autoGenerateMipmaps: true }), out = {};
       for (const [name, f] of Object.entries(a.meta.frames)) out[name] = { tex: new P.Texture({ source, frame: new P.Rectangle(f.frame.x, f.frame.y, f.frame.w, f.frame.h) }), ax: f.anchor?.x ?? 0.5, ay: f.anchor?.y ?? 0.5 };
       driftAtlas = out;
     });
@@ -213,7 +214,7 @@ export async function createPixiRenderer(hudCanvas, app) {
       for (const o of fx.parts) {
         if (o.k === 'drift') { // v54.8 drift puff: GD atlas, normal blend, untinted
           const lk = partLook(o), fr = driftAtlas && driftAtlas['drift_smoke_' + (o.frame || 0)], sp = partPool.get(fr ? fr.tex : disc);
-          sp.anchor.set(0.5); sp.position.set(o.x, o.y); sp.alpha = lk.alpha; sp.blendMode = 'normal'; sp.tint = fr ? 0xffffff : 0xebe6de; sp.rotation = o.rot || 0;
+          sp.anchor.set(0.5); sp.position.set(o.x, o.y); sp.alpha = lk.alpha; sp.blendMode = 'normal'; sp.tint = fr ? 0xffffff : 0xe8ecef; sp.rotation = o.rot || 0;
           if (fr) sp.scale.set(lk.scale); else { sp.width = sp.height = 160 * lk.scale; }
           continue;
         }

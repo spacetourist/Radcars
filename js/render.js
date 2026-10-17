@@ -366,7 +366,7 @@ export function createRenderer(canvas, opts = {}) {
         ctx.globalCompositeOperation = 'source-over';
         const f = driftAtlas && driftAtlas.meta && driftAtlas.meta.frames['drift_smoke_' + (o.frame || 0)];
         if (f) { const sz = 256 * lk.scale; ctx.save(); ctx.translate(o.x, o.y); ctx.rotate(o.rot || 0); ctx.drawImage(driftAtlas.img, f.frame.x, f.frame.y, f.frame.w, f.frame.h, -sz / 2, -sz / 2, sz, sz); ctx.restore(); }
-        else { ctx.fillStyle = '#ebe6de'; ctx.beginPath(); ctx.arc(o.x, o.y, 80 * lk.scale, 0, 6.2832); ctx.fill(); }
+        else { ctx.fillStyle = '#e8ecef'; ctx.beginPath(); ctx.arc(o.x, o.y, 80 * lk.scale, 0, 6.2832); ctx.fill(); }
         continue;
       }
       if (o.k === 'smoke') { ctx.globalCompositeOperation = 'source-over'; ctx.fillStyle = '#e6e6ec'; ctx.beginPath(); ctx.arc(o.x, o.y, 40 * lk.scale, 0, 6.2832); ctx.fill(); continue; }

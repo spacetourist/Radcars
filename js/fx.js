@@ -39,7 +39,9 @@ export const DRIFT_SMOKE_MS = [60, 140], DRIFT_SMOKE_CAP = 24, DRIFT_SKID_A = [0
 //   screen at full drift), slower tail (1 − t)^0.9. Spawn interval 200 → 80 ms by drift01 so the live count stays ≤ the 24 cap.
 //   skids: per-stamp alpha 0.38–0.46 → a stripe ≈ 0.40–0.46 black (measured at the 3 wu spacing; v54.8 was ≈ 0.16–0.27);
 //   a tile with a drift mark holds DRIFT_SKID_HOLD_MS after its last drift stamp, then fades out over ~1.2 s and is cleared.
-export const DRIFT_SMOKE_MS_B = [80, 200], DRIFT_SMOKE_SCALE = 1.6, DRIFT_SMOKE_LIFE = [1600, 2000], DRIFT_SMOKE_A = [0.30, 0.60];
+export const DRIFT_SMOKE_MS_B = [80, 200], DRIFT_SMOKE_SCALE = 1.6, DRIFT_SMOKE_LIFE = [1600, 2000], DRIFT_SMOKE_A = [0.38, 0.75]; // v54.8 final (GD): on-screen peak ≈ 0.7 at full drift01 (0.75 × the 0.93 fade-in/tail envelope)
+/** v54.8 final (GD): the smoke frames are recoloured once at load to a cool light grey (≈ #e8ecef), keeping the puff shading. */
+export const DRIFT_SMOKE_RGB = [0xe8, 0xec, 0xef];
 export const DRIFT_SKID_A_B = [0.38, 0.46], DRIFT_SKID_HOLD_MS = 4000, DRIFT_SKID_FADE_STEP_MS = 120, DRIFT_SKID_FADE_STEPS = 10;
 let driftSkidImg = null, driftAtlasP = null;
 /** v54.8: GD's drift atlas (drift_smoke_0..5 + drift_skid), fetched on the first race frame (never during page load). */
@@ -48,10 +50,29 @@ export function loadDriftAtlas() {
     driftAtlasP = Promise.all([
       fetch('assets/drift/drift-atlas.json').then((r) => r.json()),
       new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = 'assets/drift/drift-atlas.png'; })
-    ]).then(([meta, img]) => ({ meta, img })).catch(() => null);
+    ]).then(([meta, img]) => ({ meta, img: recolourSmoke(meta, img) })).catch(() => null);
     driftSkid();
   }
   return driftAtlasP;
+}
+/** Repaint the drift_smoke_* frames to DRIFT_SMOKE_RGB (alpha untouched; each pixel scaled by its luminance relative to the
+ *  frame's mean, clamped 0.85–1.08, so the puff keeps its volume and averages ≈ #e8ecef). Returns a canvas, or the image if
+ *  a canvas isn't available. */
+function recolourSmoke(meta, img) {
+  try {
+    const cv = document.createElement('canvas'); cv.width = img.naturalWidth || img.width; cv.height = img.naturalHeight || img.height;
+    const ctx = cv.getContext('2d', { willReadFrequently: true }); ctx.drawImage(img, 0, 0);
+    for (const [name, f] of Object.entries(meta.frames || {})) {
+      if (!/^drift_smoke_/.test(name)) continue;
+      const { x, y, w, h } = f.frame, id = ctx.getImageData(x, y, w, h), d = id.data;
+      let sum = 0, n = 0; for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 24) { sum += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; n++; }
+      const mean = n ? sum / n : 1;
+      for (let i = 0; i < d.length; i += 4) { const k = Math.min(1.08, Math.max(0.85, (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / mean));
+        d[i] = Math.min(255, DRIFT_SMOKE_RGB[0] * k); d[i + 1] = Math.min(255, DRIFT_SMOKE_RGB[1] * k); d[i + 2] = Math.min(255, DRIFT_SMOKE_RGB[2] * k); }
+      ctx.putImageData(id, x, y);
+    }
+    return cv;
+  } catch (_) { return img; }
 }
 function driftSkid() {
   if (driftSkidImg === null && typeof Image !== 'undefined') { driftSkidImg = new Image(); driftSkidImg.src = 'assets/drift/drift-skid.png'; }
