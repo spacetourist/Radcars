@@ -1,0 +1,92 @@
+# v547 race verification · pixi · 412×915 DPR 2.625 · 3 laps · build v54.7 · sound · 2026-10-17T17:04:40.978Z
+
+=== neon · pixi ===
+  [ok] first touch unlocked the AudioContext (running)
+  [ok] renderer pixi
+    shot shots/v547/v547-neon-countdown-pixi-412.png
+    shot shots/v547/v547-neon-race-early-pixi-412.png
+    shot shots/v547/v547-neon-boost-pixi-412.png
+    shot shots/v547/v547-neon-race-mid-pixi-412.png
+    shot shots/v547/v547-neon-finish-pixi-412.png
+    shot shots/v547/v547-neon-results-pixi-412.png
+  [ok] race completed → results (66 s wall)
+  [ok] finish reveal shown
+  [ok] laps 3/3: 0:18.95 · 0:17.72 · 0:17.73
+  [ok] all 6 cars finished (DNF: none); player P1 in 0:54.40
+  [ok] AI cars race: all 5 covered distance by mid race (22358, 23261, 23622, 23304, 23907 wu)
+  [ok] cars point the way they drive: sprite axis vs heading max err player 0.000 / AI 0.000 rad
+  [ok] no keyboard hints in the gameplay UI (none)
+  [ok] keyboard: arrow keys steered the whole race; Shift fired BOOST (active 1733 ms, button active)
+  [ok] FPS avg 57.2, p5 59.5, worst frame 749.9 ms, 31 frames > 25 ms of 3719
+  [ok] audio files loaded (11 files, failures 0)
+  [ok] sfx scheduled: countdown×3 GO×1 lap×2 boost×10 wall×0 finish=slam,win
+  [ok] mid race: music music_race, context running, engine voices true
+    audio main-thread cost 0.043 ms/frame over 3683 frames
+
+=== gridlock · pixi ===
+  [ok] renderer pixi
+    shot shots/v547/v547-gridlock-countdown-pixi-412.png
+    shot shots/v547/v547-gridlock-race-early-pixi-412.png
+    shot shots/v547/v547-gridlock-boost-pixi-412.png
+    shot shots/v547/v547-gridlock-race-mid-pixi-412.png
+    shot shots/v547/v547-gridlock-finish-pixi-412.png
+    shot shots/v547/v547-gridlock-results-pixi-412.png
+  [ok] race completed → results (74 s wall)
+  [ok] finish reveal shown
+  [ok] laps 3/3: 0:20.48 · 0:18.20 · 0:18.43
+  [ok] all 6 cars finished (DNF: none); player P1 in 0:57.11
+  [ok] AI cars race: all 5 covered distance by mid race (21439, 21965, 21890, 21847, 23103 wu)
+  [ok] cars point the way they drive: sprite axis vs heading max err player 0.000 / AI 0.000 rad
+  [ok] no keyboard hints in the gameplay UI (none)
+  [ok] keyboard: arrow keys steered the whole race; Shift fired BOOST (active 1717 ms, button active)
+  [ok] FPS avg 53.8, p5 30.0, worst frame 800.0 ms, 266 frames > 25 ms of 3892
+  [ok] audio files loaded (11 files, failures 0)
+  [ok] sfx scheduled: countdown×3 GO×1 lap×2 boost×5 wall×0 finish=slam,win
+  [ok] mid race: music music_race, context running, engine voices true
+    audio main-thread cost 0.044 ms/frame over 7338 frames
+
+=== razor · pixi ===
+  [ok] renderer pixi
+    shot shots/v547/v547-razor-countdown-pixi-412.png
+    shot shots/v547/v547-razor-race-early-pixi-412.png
+    shot shots/v547/v547-razor-boost-pixi-412.png
+    shot shots/v547/v547-razor-race-mid-pixi-412.png
+    shot shots/v547/v547-razor-finish-pixi-412.png
+    shot shots/v547/v547-razor-results-pixi-412.png
+  [ok] race completed → results (62 s wall)
+  [ok] finish reveal shown
+  [ok] laps 3/3: 0:17.07 · 0:15.28 · 0:15.38
+  [ok] all 6 cars finished (DNF: none); player P1 in 0:47.73
+  [ok] AI cars race: all 5 covered distance by mid race (21205, 22157, 21997, 21745, 22277 wu)
+  [ok] cars point the way they drive: sprite axis vs heading max err player 0.000 / AI 0.000 rad
+  [ok] no keyboard hints in the gameplay UI (none)
+  [ok] keyboard: arrow keys steered the whole race; Shift fired BOOST (active 1717 ms, button active)
+  [ok] FPS avg 56.3, p5 59.5, worst frame 683.2 ms, 72 frames > 25 ms of 3393
+  [ok] audio files loaded (11 files, failures 0)
+  [ok] sfx scheduled: countdown×3 GO×1 lap×2 boost×3 wall×0 finish=slam,win
+  [ok] mid race: music music_race, context running, engine voices true
+    audio main-thread cost 0.046 ms/frame over 10591 frames
+
+=== cargo · pixi ===
+  [ok] renderer pixi
+    shot shots/v547/v547-cargo-countdown-pixi-412.png
+    shot shots/v547/v547-cargo-race-early-pixi-412.png
+    shot shots/v547/v547-cargo-boost-pixi-412.png
+    shot shots/v547/v547-cargo-race-mid-pixi-412.png
+    shot shots/v547/v547-cargo-finish-pixi-412.png
+    shot shots/v547/v547-cargo-results-pixi-412.png
+  [ok] race completed → results (69 s wall)
+  [ok] finish reveal shown
+  [ok] laps 3/3: 0:19.20 · 0:16.60 · 0:16.67
+  [ok] all 6 cars finished (DNF: none); player P1 in 0:52.46
+  [ok] AI cars race: all 5 covered distance by mid race (20564, 21823, 21271, 21685, 21719 wu)
+  [ok] cars point the way they drive: sprite axis vs heading max err player 0.000 / AI 0.000 rad
+  [ok] no keyboard hints in the gameplay UI (none)
+  [ok] keyboard: arrow keys steered the whole race; Shift fired BOOST (active 1733 ms, button active)
+  [ok] FPS avg 57.1, p5 59.5, worst frame 683.3 ms, 52 frames > 25 ms of 3871
+  [ok] audio files loaded (11 files, failures 0)
+  [ok] sfx scheduled: countdown×3 GO×1 lap×2 boost×1 wall×0 finish=slam,win
+  [ok] mid race: music music_race, context running, engine voices true
+    audio main-thread cost 0.046 ms/frame over 14138 frames
+  [ok] no console errors / warnings (none)
+RESULT: ALL OK

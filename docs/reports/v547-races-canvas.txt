@@ -1,0 +1,92 @@
+# v547 race verification · canvas · 412×915 DPR 2.625 · 3 laps · build v54.7 · sound · 2026-10-17T17:10:37.448Z
+
+=== neon · canvas ===
+  [ok] first touch unlocked the AudioContext (running)
+  [ok] renderer canvas
+    shot shots/v547/v547-neon-countdown-canvas-412.png
+    shot shots/v547/v547-neon-race-early-canvas-412.png
+    shot shots/v547/v547-neon-boost-canvas-412.png
+    shot shots/v547/v547-neon-race-mid-canvas-412.png
+    shot shots/v547/v547-neon-finish-canvas-412.png
+    shot shots/v547/v547-neon-results-canvas-412.png
+  [ok] race completed → results (66 s wall)
+  [ok] finish reveal shown
+  [ok] laps 3/3: 0:18.92 · 0:17.73 · 0:17.73
+  [ok] all 6 cars finished (DNF: none); player P1 in 0:54.38
+  [ok] AI cars race: all 5 covered distance by mid race (22366, 23360, 23698, 22940, 23787 wu)
+  [ok] cars point the way they drive: sprite axis vs heading max err player 0.000 / AI 0.000 rad
+  [ok] no keyboard hints in the gameplay UI (none)
+  [ok] keyboard: arrow keys steered the whole race; Shift fired BOOST (active 1750 ms, button active)
+  [ok] FPS avg 57.0, p5 59.5, worst frame 683.3 ms, 40 frames > 25 ms of 3691
+  [ok] audio files loaded (11 files, failures 0)
+  [ok] sfx scheduled: countdown×3 GO×1 lap×2 boost×10 wall×0 finish=slam,win
+  [ok] mid race: music music_race, context running, engine voices true
+    audio main-thread cost 0.037 ms/frame over 3666 frames
+
+=== gridlock · canvas ===
+  [ok] renderer canvas
+    shot shots/v547/v547-gridlock-countdown-canvas-412.png
+    shot shots/v547/v547-gridlock-race-early-canvas-412.png
+    shot shots/v547/v547-gridlock-boost-canvas-412.png
+    shot shots/v547/v547-gridlock-race-mid-canvas-412.png
+    shot shots/v547/v547-gridlock-finish-canvas-412.png
+    shot shots/v547/v547-gridlock-results-canvas-412.png
+  [ok] race completed → results (74 s wall)
+  [ok] finish reveal shown
+  [ok] laps 3/3: 0:20.23 · 0:18.22 · 0:18.25
+  [ok] all 6 cars finished (DNF: none); player P1 in 0:56.70
+  [ok] AI cars race: all 5 covered distance by mid race (21201, 21986, 21835, 22022, 22060 wu)
+  [ok] cars point the way they drive: sprite axis vs heading max err player 0.000 / AI 0.000 rad
+  [ok] no keyboard hints in the gameplay UI (none)
+  [ok] keyboard: arrow keys steered the whole race; Shift fired BOOST (active 1717 ms, button active)
+  [ok] FPS avg 54.6, p5 30.0, worst frame 683.3 ms, 245 frames > 25 ms of 3938
+  [ok] audio files loaded (11 files, failures 0)
+  [ok] sfx scheduled: countdown×3 GO×1 lap×2 boost×4 wall×0 finish=slam,win
+  [ok] mid race: music music_race, context running, engine voices true
+    audio main-thread cost 0.040 ms/frame over 7323 frames
+
+=== razor · canvas ===
+  [ok] renderer canvas
+    shot shots/v547/v547-razor-countdown-canvas-412.png
+    shot shots/v547/v547-razor-race-early-canvas-412.png
+    shot shots/v547/v547-razor-boost-canvas-412.png
+    shot shots/v547/v547-razor-race-mid-canvas-412.png
+    shot shots/v547/v547-razor-finish-canvas-412.png
+    shot shots/v547/v547-razor-results-canvas-412.png
+  [ok] race completed → results (62 s wall)
+  [ok] finish reveal shown
+  [ok] laps 3/3: 0:17.10 · 0:15.25 · 0:15.35
+  [ok] all 6 cars finished (DNF: none); player P1 in 0:47.70
+  [ok] AI cars race: all 5 covered distance by mid race (21006, 22091, 21933, 21880, 22060 wu)
+  [ok] cars point the way they drive: sprite axis vs heading max err player 0.000 / AI 0.000 rad
+  [ok] no keyboard hints in the gameplay UI (none)
+  [ok] keyboard: arrow keys steered the whole race; Shift fired BOOST (active 1733 ms, button active)
+  [FAIL] FPS avg 50.0, p5 29.9, worst frame 733.2 ms, 445 frames > 25 ms of 3050
+  [ok] audio files loaded (11 files, failures 0)
+  [ok] sfx scheduled: countdown×3 GO×1 lap×2 boost×3 wall×0 finish=slam,win
+  [ok] mid race: music music_race, context running, engine voices true
+    audio main-thread cost 0.048 ms/frame over 10204 frames
+
+=== cargo · canvas ===
+  [ok] renderer canvas
+    shot shots/v547/v547-cargo-countdown-canvas-412.png
+    shot shots/v547/v547-cargo-race-early-canvas-412.png
+    shot shots/v547/v547-cargo-boost-canvas-412.png
+    shot shots/v547/v547-cargo-race-mid-canvas-412.png
+    shot shots/v547/v547-cargo-finish-canvas-412.png
+    shot shots/v547/v547-cargo-results-canvas-412.png
+  [ok] race completed → results (70 s wall)
+  [ok] finish reveal shown
+  [ok] laps 3/3: 0:18.13 · 0:16.55 · 0:16.65
+  [ok] all 6 cars finished (DNF: none); player P1 in 0:51.33
+  [ok] AI cars race: all 5 covered distance by mid race (20411, 21540, 21144, 21388, 21628 wu)
+  [ok] cars point the way they drive: sprite axis vs heading max err player 0.000 / AI 0.000 rad
+  [ok] no keyboard hints in the gameplay UI (none)
+  [ok] keyboard: arrow keys steered the whole race; Shift fired BOOST (active 1750 ms, button active)
+  [ok] FPS avg 55.7, p5 59.5, worst frame 716.7 ms, 128 frames > 25 ms of 3823
+  [ok] audio files loaded (11 files, failures 0)
+  [ok] sfx scheduled: countdown×3 GO×1 lap×2 boost×2 wall×0 finish=slam,win
+  [ok] mid race: music music_race, context running, engine voices true
+    audio main-thread cost 0.046 ms/frame over 13634 frames
+  [ok] no console errors / warnings (none)
+RESULT: 1 FAIL

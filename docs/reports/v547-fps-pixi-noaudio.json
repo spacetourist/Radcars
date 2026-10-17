@@ -1,0 +1,34 @@
+[
+ {
+  "track": "neon",
+  "fps": 60,
+  "p5": 59.5,
+  "worstMs": 16.8,
+  "over25": 0,
+  "frames": 900
+ },
+ {
+  "track": "gridlock",
+  "fps": 57.9,
+  "p5": 59.5,
+  "worstMs": 49.9,
+  "over25": 31,
+  "frames": 868
+ },
+ {
+  "track": "razor",
+  "fps": 52.5,
+  "p5": 30,
+  "worstMs": 899.9,
+  "over25": 58,
+  "frames": 788
+ },
+ {
+  "track": "cargo",
+  "fps": 57.1,
+  "p5": 30,
+  "worstMs": 33.4,
+  "over25": 44,
+  "frames": 857
+ }
+]

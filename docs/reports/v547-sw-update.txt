@@ -1,0 +1,4 @@
+  [ok] tab controlled by the v54.6 · double-boost worker (tag "v54.6 · double-boost", caches ["radcars-v54.6-double-boost"])
+  [ok] new v54.7 · sound worker installed mid-race, no reload during the race (navigations 0, running true, pending true, new worker in control after 54.5 s, update checks 2)
+  [ok] after quitting to the menu the tab reloaded onto "v54.7 · sound" (caches ["radcars-v54.7-sound"])
+RESULT: ALL OK
