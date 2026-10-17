@@ -19,3 +19,26 @@
 }
 .act-brake[data-state="active"] .act-label { text-shadow: 0 1px 2px color-mix(in srgb, var(--heat) 30%, #300); }
 @media (prefers-reduced-motion: reduce) { .act-brake .act-icon, .act-brake .act-vis { transition: none; } }
+
+/* v54.8b (GD review): no red after a drift. RECHARGE (data-state="recharge", ~0.5 s): a dimmed orange puck whose radial fill
+   sweeps round clockwise with --p (0 → 1 as the drift recharges), the icon and label dimmed. READY again: one full orange
+   flare (.ready-flare, 520 ms, the same frame as sfx('driftReady')), then the normal orange ready rim. */
+.act-brake[data-state="recharge"] .act-vis {
+  border: 2px solid color-mix(in srgb, #ff8a1f 50%, #1a1030);
+  background: radial-gradient(circle at 50% 62%, #4a2c16 0%, #2e1c10 58%, #1c120b 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06), 0 0 8px rgba(255, 138, 31, 0.22), 0 0 0 1px rgba(0, 0, 0, 0.5), 0 6px 10px -3px rgba(0, 0, 0, 0.55);
+  outline: none;
+}
+.act-brake[data-state="recharge"] .act-ring {
+  display: block; inset: 2px; -webkit-mask: none; mask: none;
+  background: conic-gradient(rgba(255, 150, 50, 0.62) 0 calc(var(--p) * 1turn), rgba(0, 0, 0, 0.28) 0);
+}
+.act-brake[data-state="recharge"] .act-icon { opacity: 0.6; filter: saturate(0.55); }
+.act-brake[data-state="recharge"] .act-label { color: color-mix(in srgb, #ff8a1f 60%, #555); }
+.act-brake.ready-flare .act-vis, .act-brake.ready-flare.pop[data-state="ready"] .act-vis { animation: driftReadyFlare 520ms cubic-bezier(0.2, 0.8, 0.3, 1) 1; }
+@keyframes driftReadyFlare {
+  0% { transform: scale(1.14); background: radial-gradient(circle at 50% 62%, #ffe2b8 0%, #ff8a1f 50%, #a2470a 100%); border-color: #fff3e0;
+       box-shadow: 0 0 0 3px #fff3e0, 0 0 28px 10px #ff8a1f, 0 0 64px 18px rgba(255, 138, 31, 0.7); }
+  100% { transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) { .act-brake.ready-flare .act-vis { animation: none; } }

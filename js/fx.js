@@ -34,6 +34,13 @@ const rnd = (a, b) => a + Math.random() * (b - a);
  *   - the DRIFT button flare on driftStart is in controls.js (world.driftFx).
  */
 export const DRIFT_SMOKE_MS = [60, 140], DRIFT_SMOKE_CAP = 24, DRIFT_SKID_A = [0.14, 0.24];
+// v54.8b (GD review): bigger, denser-looking, longer puffs that hang as a trail; darker skid arcs held ~4 s then faded out.
+//   smoke: ×1.6 size, life 1.6–2.0 s (+0.5 s), sprite peak alpha 0.30 → 0.60 by drift01 (× the puff texture's 0.92 ≈ 0.55 on
+//   screen at full drift), slower tail (1 − t)^0.9. Spawn interval 200 → 80 ms by drift01 so the live count stays ≤ the 24 cap.
+//   skids: per-stamp alpha 0.38–0.46 → a stripe ≈ 0.40–0.46 black (measured at the 3 wu spacing; v54.8 was ≈ 0.16–0.27);
+//   a tile with a drift mark holds DRIFT_SKID_HOLD_MS after its last drift stamp, then fades out over ~1.2 s and is cleared.
+export const DRIFT_SMOKE_MS_B = [80, 200], DRIFT_SMOKE_SCALE = 1.6, DRIFT_SMOKE_LIFE = [1600, 2000], DRIFT_SMOKE_A = [0.30, 0.60];
+export const DRIFT_SKID_A_B = [0.38, 0.46], DRIFT_SKID_HOLD_MS = 4000, DRIFT_SKID_FADE_STEP_MS = 120, DRIFT_SKID_FADE_STEPS = 10;
 let driftSkidImg = null, driftAtlasP = null;
 /** v54.8: GD's drift atlas (drift_smoke_0..5 + drift_skid), fetched on the first race frame (never during page load). */
 export function loadDriftAtlas() {
@@ -75,7 +82,7 @@ function add(fx, p) {
 }
 
 /** Skid stamp into the lazily created 512² tiles (1 px = 1 wu). */
-function stamp(fx, x, y, a, alpha, brush) {
+function stamp(fx, x, y, a, alpha, brush, drift) {
   const S = SKID_TILE, r = 7;
   const i0 = Math.floor((x - r) / S), i1 = Math.floor((x + r) / S), j0 = Math.floor((y - r) / S), j1 = Math.floor((y + r) / S);
   for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
@@ -91,6 +98,7 @@ function stamp(fx, x, y, a, alpha, brush) {
       t = { key, cv, ctx, x0: i * S, y0: j * S, used: 0 }; fx.skid.tiles.set(key, t);
     }
     t.used = fx.stats.stamps;
+    if (drift) { t.driftT = fx.nowMs || 0; t.dfade = 0; } // v54.8b: hold this tile's drift marks DRIFT_SKID_HOLD_MS
     const g = t.ctx; g.save(); g.translate(x - t.x0, y - t.y0); g.rotate(a);
     g.globalAlpha = alpha;
     if (brush) g.drawImage(brush, -6, -3, 12, 6); // v54.8 GD drift_skid stamp (x along travel)
@@ -103,10 +111,21 @@ function stamp(fx, x, y, a, alpha, brush) {
 
 function fadeSkids(fx, now) {
   const tiles = [...fx.skid.tiles.values()];
+  // v54.8b: drift-marked tiles: hold, then a quick fade (dst-out 0.25 per step; 10 steps leave < 6 %), then clear
+  let n = 0;
+  for (const t of tiles) {
+    if (t.driftT == null || now - t.driftT < DRIFT_SKID_HOLD_MS || now < (t.dfadeAt || 0) || n >= 2) continue;
+    n++; t.dfadeAt = now + DRIFT_SKID_FADE_STEP_MS;
+    if (t.dfade === 0) fx.stats.skidHoldMin = Math.min(fx.stats.skidHoldMin ?? 1e9, now - t.driftT); // (verify: hold before the fade)
+    if (++t.dfade >= DRIFT_SKID_FADE_STEPS) { t.ctx.clearRect(0, 0, SKID_TILE, SKID_TILE); t.driftT = null; t.dfade = 0; }
+    else { t.ctx.globalCompositeOperation = 'destination-out'; t.ctx.fillStyle = 'rgba(0,0,0,0.25)'; t.ctx.fillRect(0, 0, SKID_TILE, SKID_TILE); t.ctx.globalCompositeOperation = 'source-over'; }
+    fx.skid.dirty.add(t); fx.stats.driftSkidFades = (fx.stats.driftSkidFades || 0) + 1;
+  }
   if (!tiles.length || now < fx.skid.fadeAt) return;
   // ~2 %/s overall: each tile is faded by 2 % once a second, spread across frames (one upload at a time)
   fx.skid.fadeAt = now + 1000 / tiles.length;
   const t = tiles[fx.skid.fadeIdx++ % tiles.length];
+  if (t.driftT != null) return; // (drift-marked tiles run their own hold + fade above)
   t.ctx.globalCompositeOperation = 'destination-out'; t.ctx.fillStyle = 'rgba(0,0,0,0.02)'; t.ctx.fillRect(0, 0, SKID_TILE, SKID_TILE);
   t.ctx.globalCompositeOperation = 'source-over'; fx.skid.dirty.add(t);
 }
@@ -140,7 +159,7 @@ function wallBurst(fx, e, onScreen) {
  * Advance FX by dt ms. `view` = {x, y, hw, hh} world-space half extents of the screen (cull spawns), W/H = CSS px.
  */
 export function stepFx(fx, world, dt, view, W, H) {
-  const now = world.race.time;
+  const now = world.race.time; fx.nowMs = now;
   // ---- quality step-down / step-up from the real frame interval
   if (dt > 0) fx.fpsAvg += (1000 / Math.max(4, dt) - fx.fpsAvg) * 0.05;
   if (fx.pinned < 0) {
@@ -268,27 +287,29 @@ function driftFx(fx, c, now, ca, sa) {
   const wheels = [];
   for (const side of [-1, 1]) wheels.push({ x: c.x - ca * CAR_LEN * 0.32 - sa * side * CAR_WID * 0.36, y: c.y - sa * CAR_LEN * 0.32 + ca * side * CAR_WID * 0.36, side });
   // skid marks: one continuous stripe per rear tyre, stamps ≤ 3 wu apart
-  const last = fx.lastStamp.get(c), brush = driftSkid(), a1 = DRIFT_SKID_A[0] + (DRIFT_SKID_A[1] - DRIFT_SKID_A[0]) * d01;
+  const last = fx.lastStamp.get(c), brush = driftSkid(), a1 = DRIFT_SKID_A_B[0] + (DRIFT_SKID_A_B[1] - DRIFT_SKID_A_B[0]) * d01;
   for (let k = 0; k < 2; k++) {
     const w1 = wheels[k], w0 = last ? last[k] : null;
     const dx = w0 ? w1.x - w0.x : 0, dy = w0 ? w1.y - w0.y : 0, dd = Math.hypot(dx, dy);
-    if (!w0 || dd > 120) { stamp(fx, w1.x, w1.y, c.angle, a1, brush); continue; }
+    if (!w0 || dd > 120) { stamp(fx, w1.x, w1.y, c.angle, a1, brush, true); continue; }
     const ang = dd > 0.5 ? Math.atan2(dy, dx) : c.angle, nSt = Math.max(1, Math.ceil(dd / 3));
-    for (let i = 1; i <= nSt; i++) stamp(fx, w0.x + dx * i / nSt, w0.y + dy * i / nSt, ang, a1, brush);
+    for (let i = 1; i <= nSt; i++) stamp(fx, w0.x + dx * i / nSt, w0.y + dy * i / nSt, ang, a1, brush, true);
   }
   fx.lastStamp.set(c, wheels);
   fx.stats.driftStamps = (fx.stats.driftStamps || 0) + 2;
   // smoke: denser with drift01, alternating wheels, capped at DRIFT_SMOKE_CAP live puffs (skip, never evict)
   if (fx.quality < 1) return;
-  const every = (DRIFT_SMOKE_MS[1] + (DRIFT_SMOKE_MS[0] - DRIFT_SMOKE_MS[1]) * d01) * (fx.quality >= 2 ? 1 : 2);
+  const every = (DRIFT_SMOKE_MS_B[1] + (DRIFT_SMOKE_MS_B[0] - DRIFT_SMOKE_MS_B[1]) * d01) * (fx.quality >= 2 ? 1 : 2);
   if (now < (fx.smokeAt.get(c) || 0)) return;
   fx.smokeAt.set(c, now + every);
   let live = 0; for (const o of fx.parts) if (o.k === 'drift') live++;
+  fx.stats.driftLivePeak = Math.max(fx.stats.driftLivePeak || 0, live);
   if (live >= DRIFT_SMOKE_CAP) { fx.stats.driftSkipped = (fx.stats.driftSkipped || 0) + 1; return; }
   fx.driftWheel = 1 - (fx.driftWheel || 0); const w = wheels[fx.driftWheel];
   const kick = rnd(25, 55), kx = -sa * w.side * kick, ky = ca * w.side * kick; // outward from that wheel's side
-  if (add(fx, { k: 'drift', x: w.x, y: w.y, vx: c.vx * 0.15 + kx, vy: c.vy * 0.15 + ky, rot: rnd(0, 6.28), spin: rnd(-0.6, 0.6), life: rnd(1100, 1500), a0: 0.35 + 0.2 * d01, frame: (Math.random() * 6) | 0, d01 })) {
+  if (add(fx, { k: 'drift', x: w.x, y: w.y, vx: c.vx * 0.15 + kx, vy: c.vy * 0.15 + ky, rot: rnd(0, 6.28), spin: rnd(-0.6, 0.6), life: rnd(DRIFT_SMOKE_LIFE[0], DRIFT_SMOKE_LIFE[1]), a0: DRIFT_SMOKE_A[0] + (DRIFT_SMOKE_A[1] - DRIFT_SMOKE_A[0]) * d01, frame: (Math.random() * 6) | 0, d01 })) {
     fx.stats.driftSmoke = (fx.stats.driftSmoke || 0) + 1;
+    const L = fx.stats.driftSpawns || (fx.stats.driftSpawns = []); if (L.length < 400) L.push({ t: now, d01: +d01.toFixed(2), every: Math.round(every) }); // (verify: spawn rate vs drift01)
   }
 }
 
@@ -330,8 +351,8 @@ export function boostRingK(zoom, vw, vh, diam) {
 export function partLook(o) {
   const t = o.ms / o.life;
   if (o.k === 'drift') { // v54.8 GD curves: ease-out growth, short fade-in, long soft tail
-    const a = o.a0 * Math.min(1, t / 0.08) * Math.pow(1 - t, 1.4);
-    return { scale: 0.173 + 0.377 * (1 - (1 - t) * (1 - t)), alpha: Math.max(0, a), t };
+    const a = o.a0 * Math.min(1, t / 0.08) * Math.pow(1 - t, 0.9); // v54.8b: slower tail so the trail hangs
+    return { scale: DRIFT_SMOKE_SCALE * (0.173 + 0.377 * (1 - (1 - t) * (1 - t))), alpha: Math.max(0, a), t };
   }
   let a = o.a0 * (1 - t);
   if (o.k === 'spark' || o.k === 'streak') a = o.a0 * (t < 0.7 ? 1 : (1 - t) / 0.3);

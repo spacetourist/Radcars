@@ -89,3 +89,53 @@ See docs/reports/v548-*.txt (races both renderers, drift verify, FPS). The shots
   Values are avg / p5. The first Pixi pass had a one-off stall run on Razor (57.1 / 30.1); the rerun shown here gave 59.9 / 59.9.
 - Shots for GD: shots/v548/v548-middrift-412.png and v548-exit-412.png (Pixi), plus `-canvas` versions and per-track race
   shots.
+
+## v54.8b: GD's review tweaks, Pep's notes and driftReady (branch v548, not pushed; waiting on GD's sign-off)
+
+**Changes (both renderers; fx.js partLook and the shared skid tiles are used by Pixi and Canvas)**
+- **Smoke:** `DRIFT_SMOKE_A` is now 0.30 → 0.60 by drift01, giving a peak on-screen opacity of about 0.55 at full drift01 (was about 0.25).
+  - Puffs are 1.6× bigger (`DRIFT_SMOKE_SCALE`).
+  - Each puff lives 1.6–2.0 s, about 0.5 s longer, so a trail hangs behind the car.
+  - The colour stays off-white.
+  - The spawn interval went from 200 ms down to 80 ms by drift01 to stay inside the 24-puff cap.
+    - Peak live count: 7–10 in the drift verify. Nothing was ever skipped at the cap.
+- **Skid marks:** each drift stamp is drawn at 0.38–0.46 alpha, so a stripe averages about 45% black.
+  - A drift tile is held for 4 s after its last drift stamp.
+  - It then fades in 10 × 120 ms dst-out steps (at most 2 tiles per frame) and is cleared.
+- **DRIFT button after a drift:** the red rim is gone.
+  - During `data-state="recharge"` the button shows a dimmed orange puck with a conic radial fill driven by `--p`, plus a dimmed icon and label.
+  - Then `.ready-flare` plays: a 520 ms full orange flare.
+  - The driftStart flare is now scale-only, so the full orange is kept for "ready".
+- **Recharge:** `DRIFT_RECHARGE_MS` = 500. Measured full sweeps were 495–505 ms on every drift.
+- **`sfx('driftReady')`:** fires once on the frame the recharge completes, the same frame as the flare.
+  - It never fires at race start or before the first drift, and not after the finish.
+  - With no clip it is a silent no-op: it logs `{ev:'driftReady', skipped}` to the play log and is wrapped so an unknown name can't throw.
+- **Walls (Pep):**
+  - Only a proper hit ends the drift dirty: impact speed into the wall of at least `DRIFT_WALL_HIT_VN` = 350 wu/s.
+  - A lighter scrape keeps the slide and the mini-boost; it is counted in `scrapes` / `scrapeVn`.
+  - The slide angle target eases by up to 45% within 70 wu of the wall.
+
+**Verification (all run alone, 412×915 DPR 2.625)**
+- **Drift verify:** ALL OK in Pixi and Canvas (docs/reports/v548b-drift-verify-*.txt).
+- **Race regression with the DRIFT bot, 3 laps:** ALL OK in Pixi and Canvas on all 4 tracks (docs/reports/v548b-races-*.txt).
+- **Clean drifts with the bot holding DRIFT through the corner** (v548 before → v54.8b):
+
+  | Track | Pixi | Canvas |
+  |---|---|---|
+  | Razor | 5/12 → 11/12 | 5/12 → 12/12 |
+  | Cargo | 5/18 → 15/18 | 6/18 → 15/18 |
+
+  Gridlock was 23/23 (Pixi) and 21/21 (Canvas); Neon 3/3.
+- **Pickup regression:** ALL OK in both renderers (docs/reports/v548b-pickups-*.txt).
+- **Clean FPS** (avg / p5, 15 s per track):
+
+  | Renderer | Neon | Gridlock | Razor | Cargo |
+  |---|---|---|---|---|
+  | Pixi | 59.9 / 59.5 | 59.5 / 59.5 | 59.9 / 59.5 | 59.9 / 59.9 |
+  | Canvas | 59.2 / 59.5 | 59.7 / 59.5 | 59.0 / 59.5 | 58.9 / 59.5 |
+
+  A 45 s Pixi soak gave 59.9 / 59.7 / 60.0 / 60.0, with 25 drifts on Gridlock.
+- **Shots** (Pixi, gitignored):
+  - shots/v548/v548b-middrift-412.png
+  - shots/v548/v548b-recharge-412.png
+  - v548b-exit-412.png, with `-canvas` versions.

@@ -1,6 +1,6 @@
 import { getTrack, buildStartingGrid } from './tracks.js';
 import { createCar, CAR_COLORS, AI_NAMES } from './cars.js';
-import { stepCar, initCarOnTrack, resolveCarCollisions, BOOST_TOP_MUL, CAR_LEN, CAR_WID, slip01, CHAIN_RUSH_LVL } from './physics.js';
+import { stepCar, initCarOnTrack, resolveCarCollisions, BOOST_TOP_MUL, CAR_LEN, CAR_WID, slip01, CHAIN_RUSH_LVL, DRIFT_RECHARGE_MS } from './physics.js';
 import { stepAI } from './ai.js';
 import { createRenderer } from './render.js';
 import { newFx, stepFx, zoomPunch, SKID_ON, SKID_OFF } from './fx.js';
@@ -141,7 +141,7 @@ export function createGame(canvas, input) {
     world.missiles = [];
     world.fx = [];
     world.unstick = { stuckMs: 0, reverseMs: 0, count: 0 };
-    world.brakeStats = { ms: 0 }; world.hbStats = { presses: 0 }; world.driftLog = []; world.slipLog = []; world.driftFlash = null; world.driftStats = { starts: 0, clean: 0, dirty: 0, boosts: 0 }; world.driftFx = null;
+    world.brakeStats = { ms: 0 }; world.hbStats = { presses: 0 }; world.driftLog = []; world.slipLog = []; world.driftFlash = null; world.driftStats = { starts: 0, clean: 0, dirty: 0, boosts: 0, ready: 0, scrapes: 0 }; world.driftFx = null; world.driftReadyFx = null;
     p.braking = false;
     world.finish = null; // v52: set when the player crosses the line on the final lap (reveal → results)
     clearFinishFlow();
@@ -179,7 +179,7 @@ export function createGame(canvas, input) {
     if (!running) return; // the finish flow may have stopped the race this frame
     const showHud = !world.race.over && !world.player.finished;
     // v53: the action buttons (DOM, js/controls.js) replace the canvas BOOST / MISSILE panels and the POWER slot
-    lastHud = showHud ? updateControls(world, { boostMs: BOOST_MS, autopilotMs: AUTOPILOT_MS, rocketCount: ROCKET_COUNT, braking: !!world.player.braking, drifting: !!world.player.drifting, driftDir: world.player.driftDir || 0 }) : null;
+    lastHud = showHud ? updateControls(world, { boostMs: BOOST_MS, autopilotMs: AUTOPILOT_MS, rocketCount: ROCKET_COUNT, braking: !!world.player.braking, drifting: !!world.player.drifting, driftDir: world.player.driftDir || 0, driftRecharge: (world.player.driftRechargeMs || 0) / DRIFT_RECHARGE_MS }) : null;
     const race = world.race;
     if (race.countdown > 0) {
       const c = race.countdown;
@@ -451,6 +451,9 @@ export function createGame(canvas, input) {
       if (c.isPlayer && (c.drifting || ctl.driftBtn != null) && (autopilot || spinning || c.finished || world.power.handback)) ctl.noDrift = true; // v54.8: control taken away → auto-straighten
       stepCar(c, ctl, dt, track);
       if (c.isPlayer && c.driftEv) onDriftEvent(c, c.driftEv);
+      // v54.8b: the drift recharge just completed (only ever after a drift, never at the start): GD's full orange flare on
+      // the DRIFT button and sfx('driftReady') on the same frame (a silent no-op until AE supplies the clip)
+      if (c.isPlayer && c.driftReadyEv && !c.finished) { world.driftReadyFx = { t: world.race.time }; world.driftStats.ready++; sfx('driftReady'); }
       if (topSave != null) c.top = topSave;
       if (c.isPlayer) trackDrift(c, dt, ctl.autopilot || spinning);
       if (!c.finished) stepPads(world, c);
@@ -573,7 +576,7 @@ export function createGame(canvas, input) {
       sfx('driftStart', { dir: e.dir });
       return;
     }
-    const rec = { t: Math.round(race.time), ms: Math.round(e.ms), angDeg: Math.round(e.ang * 180 / Math.PI), avg01: +e.avg01.toFixed(2), clean: e.clean, wall: !!e.wall, why: e.why, q: 0, awarded: false };
+    const rec = { t: Math.round(race.time), ms: Math.round(e.ms), angDeg: Math.round(e.ang * 180 / Math.PI), avg01: +e.avg01.toFixed(2), clean: e.clean, wall: !!e.wall, why: e.why, scrapes: e.scrapes || 0, scrapeVn: e.scrapeVn || 0, q: 0, awarded: false };
     sfx('driftEnd', { clean: e.clean });
     world.fxEvents.push({ type: 'driftEnd', car: c, clean: e.clean, t: race.time });
     if (e.clean && e.ms >= DB_MIN_MS && !c.finished) {
@@ -583,6 +586,7 @@ export function createGame(canvas, input) {
       world.driftFlash = { text: q >= DB_PERFECT ? 'PERFECT DRIFT' : 'DRIFT BOOST', q, t: race.time };
       sfx('driftBoost', { quality: q });
     }
+    world.driftStats.scrapes += e.scrapes || 0;
     world.driftStats[e.clean ? 'clean' : 'dirty']++; if (rec.awarded) world.driftStats.boosts++;
     if (world.driftLog.length < 500) world.driftLog.push(rec);
   }

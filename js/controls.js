@@ -42,7 +42,7 @@ export const CONTROL_LAYOUT = {
   }
 };
 
-const ACCENT = { brake: '#e02020', boost: '#00e8ff', missile: '#ffe600', power: '#7c8494' };
+const ACCENT = { brake: '#ff8a1f', /* v54.8b GD: DRIFT is orange, no red rim */ boost: '#00e8ff', missile: '#ffe600', power: '#7c8494' };
 export const POWER_COLOR = { rocket: '#ff2b6a', lapboost: '#b8ff00', autopilot: '#00e8ff' };
 const NAMES = { brake: 'DRIFT', boost: 'BOOST', missile: 'MISSILE', power: 'POWER' };
 const POWER_NAME = { rocket: 'ROCKET', lapboost: 'LAP BOOST', autopilot: 'AUTOPILOT' };
@@ -222,12 +222,17 @@ export function updateControls(w, info) {
   const p = w.player, b = w.boost, ms = w.missile, pw = w.power, L = w.track.length;
   const lapFrac = (((p.dist % L) + L) % L) / L;
   // BRAKE
-  paint('brake', { state: info.braking || info.drifting ? 'active' : 'ready', label: 'DRIFT', p: null }); // v54.8: HANDBRAKE → DRIFT
+  // v54.8: HANDBRAKE → DRIFT. v54.8b (GD): after a drift the button recharges (dimmed orange, radial fill sweeping round by
+  // --p) instead of the red ready rim; the full orange flare is saved for the moment it's ready again (world.driftReadyFx)
+  const rech = info.drifting ? 0 : Math.max(0, Math.min(1, info.driftRecharge || 0));
+  paint('brake', { state: info.drifting || (info.braking && !rech) ? 'active' : rech > 0 ? 'recharge' : 'ready', label: 'DRIFT', p: rech > 0 ? 1 - rech : null });
   // v54.8 (GD drift-button.css): the icon leans into the slide (+8° drifting right / clockwise, −8° left) and the button
   // flares for 350 ms on each driftStart (world.driftFx, the same event that plays the drift_start bite)
   const tilt = info.drifting ? 8 * Math.sign(info.driftDir || 0) : 0;
   if (prev.tilt !== tilt && els.brake) { els.brake.style.setProperty('--drift-tilt', tilt + 'deg'); prev.tilt = tilt; }
   const df = w.driftFx;
+  const dr = w.driftReadyFx;
+  if (dr && prev.readyT !== dr.t && els.brake) { prev.readyT = dr.t; const el = els.brake; el.classList.remove('ready-flare'); void el.offsetWidth; el.classList.add('ready-flare'); clearTimeout(prev.readyTo); prev.readyTo = setTimeout(() => el.classList.remove('ready-flare'), 520); try { (self.__RAD_DRIFT_READY__ = self.__RAD_DRIFT_READY__ || []).push({ t: dr.t }); } catch (_) {} }
   if (df && prev.flareT !== df.t && els.brake) { prev.flareT = df.t; const el = els.brake; el.classList.remove('flare'); void el.offsetWidth; el.classList.add('flare'); clearTimeout(prev.flareTo); prev.flareTo = setTimeout(() => el.classList.remove('flare'), 350); try { (self.__RAD_DRIFT_FLARES__ = self.__RAD_DRIFT_FLARES__ || []).push({ t: df.t, dir: df.dir }); } catch (_) {} }
   // BOOST
   let bs;

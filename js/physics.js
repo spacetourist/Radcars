@@ -71,6 +71,10 @@ export const HB_GRIP = 3.5, HB_SPD_LO = 260, HB_SPD_HI = 520, HB_YAW_MUL = 1.15,
  */
 export const DRIFT_MIN_SPD = 380, DRIFT_ENTRY_STEER = 0.4, DRIFT_BETA_MIN = 20 * Math.PI / 180, DRIFT_BETA_MAX = 45 * Math.PI / 180;
 export const DRIFT_TURN_MUL = 1.3, DRIFT_SCRUB_LO = 110, DRIFT_SCRUB_HI = 300, DRIFT_FLOOR = 360, DRIFT_HOLD = 0.88, DRIFT_THROTTLE = 0.55;
+// v54.8b (Pep): only a proper wall hit (impact speed INTO the wall ≥ DRIFT_WALL_HIT_VN wu/s) ends a drift (and costs the
+// boost); a lighter scrape keeps it. The held angle eases off near the wall (last DRIFT_WALL_EASE_WU of the track width, down
+// to ×(1 − DRIFT_WALL_EASE) at the wall). After each drift DRIFT_RECHARGE_MS must pass before the next (button sweep + driftReady).
+export const DRIFT_WALL_HIT_VN = 350, DRIFT_WALL_EASE_WU = 70, DRIFT_WALL_EASE = 0.45, DRIFT_RECHARGE_MS = 500;
 export const DRIFT_MAX_MS = 4000, DRIFT_EXIT_SPD = 240, DRIFT_BETA_TAU = 0.12, DRIFT_ENTRY_TAU = 0.07, DRIFT_EXIT_TAU = 0.05, DRIFT_STRAIGHT = 4 * Math.PI / 180;
 export const drift01Of = (beta) => clamp((Math.abs(beta) * 180 / Math.PI - 20) / 25, 0, 1);
 export function driftGripAt(spd, top) {
@@ -115,8 +119,19 @@ export function stepCar(car, ctl, dtMs, track) {
     if (vF < -20) steer = -steer; // reversing: rotate the nose the intuitive way
   }
   // v54.8 DRIFT: its own step (steer / speed / slide angle), then the shared wall integration below
-  car.driftEv = null;
-  if (ctl.driftBtn != null || car.drifting) { if (stepDrift(car, ctl, dt)) { integrate(car, dt, track); if (car.drifting && car.driftSt && car.wallHit > 0) { car.driftSt.wall = true; endDrift(car, false, 'wall'); } return; } }
+  car.driftEv = null; car.driftReadyEv = false;
+  if (car.driftRechargeMs > 0) { car.driftRechargeMs = Math.max(0, car.driftRechargeMs - dt * 1000); if (car.driftRechargeMs === 0) car.driftReadyEv = true; }
+  if (ctl.driftBtn != null || car.drifting) {
+    if (stepDrift(car, ctl, dt, track)) {
+      const hold0 = car.driftHoldMs || 0, assist0 = car.wallAssistMs || 0;
+      integrate(car, dt, track);
+      if (car.drifting && car.driftSt && car.wallHit > 0) {
+        if (car.wallHit >= DRIFT_WALL_HIT_VN) { car.driftSt.wall = true; endDrift(car, false, 'wall'); }
+        else { car.driftSt.scrapes = (car.driftSt.scrapes || 0) + 1; car.driftSt.scrapeVn = Math.max(car.driftSt.scrapeVn || 0, car.wallHit); car.driftHoldMs = hold0; car.wallAssistMs = assist0; } // a light scrape: the slide carries on
+      }
+      return;
+    }
+  }
   const aSpd = Math.abs(vF);
   const turn = MAX_TURN * clamp(aSpd / 220, 0, 1) * (1 - 0.35 * clamp(aSpd / car.top, 0, 1));
   // wall assist (v54): for a moment after a hit, nudge the nose away from the wall (player input still wins)
@@ -206,7 +221,8 @@ function integrate(car, dt, track) {
 /** v54.8: end the slide. clean = released by the player; false = auto-straighten (held too long / wall / too slow). */
 function endDrift(car, clean, why = clean ? 'release' : 'auto') {
   const d = car.driftSt; if (!d) return;
-  car.driftEv = { type: 'end', clean, ms: d.ms, avg01: d.ms > 0 ? d.sum01 / d.ms : 0, dir: d.dir, ang: Math.abs(d.ang), wall: d.wall, why };
+  car.driftEv = { type: 'end', clean, ms: d.ms, avg01: d.ms > 0 ? d.sum01 / d.ms : 0, dir: d.dir, ang: Math.abs(d.ang), wall: d.wall, why, scrapes: d.scrapes || 0, scrapeVn: Math.round(d.scrapeVn || 0) };
+  car.driftRechargeMs = DRIFT_RECHARGE_MS; car.driftReadyEv = false; // v54.8b: the recharge runs from the end of the drift
   car.driftSt = null; car.driftExit = true; // still `drifting` until the nose and the travel direction have met
 }
 
@@ -214,7 +230,7 @@ function endDrift(car, clean, why = clean ? 'release' : 'auto') {
  * v54.8 DRIFT step (player). Returns true when it moved the car's velocity / heading this frame (the normal steering,
  * throttle and grip are then skipped), false to fall through to the normal handling.
  */
-function stepDrift(car, ctl, dt) {
+function stepDrift(car, ctl, dt, track) {
   const want = !!ctl.driftBtn;
   if (!want) car.driftArmed = true;
   const sp = Math.hypot(car.vx, car.vy), tv = sp > 1 ? Math.atan2(car.vy, car.vx) : car.angle;
@@ -231,7 +247,7 @@ function stepDrift(car, ctl, dt) {
       endDrift(car, false, why); d = null;
     }
   }
-  if (!d && !car.driftExit && want && car.driftArmed && !ctl.noDrift && sp >= DRIFT_MIN_SPD && !(car.driftHoldMs > 0)) {
+  if (!d && !car.driftExit && want && car.driftArmed && !ctl.noDrift && sp >= DRIFT_MIN_SPD && !(car.driftHoldMs > 0) && !(car.driftRechargeMs > 0)) {
     const s0 = Math.abs(st) >= Math.abs(car.driftSteer) ? st : car.driftSteer;
     if (Math.abs(s0) >= DRIFT_ENTRY_STEER) {
       const beta0 = angleDiff(tv, car.angle); // the slide angle it already has (signed, + = nose right of travel)
@@ -246,7 +262,10 @@ function stepDrift(car, ctl, dt) {
     const turn = MAX_TURN * clamp(sp / 220, 0, 1) * (1 - 0.35 * clamp(sp / car.top, 0, 1)) * DRIFT_TURN_MUL;
     const w = st * turn, ntv = tv + w * dt;
     // the held angle: into the slide opens it to 45°, easing off / counter-steer closes it to 20°
-    const into = clamp(st * d.dir, 0, 1), target = d.dir * (DRIFT_BETA_MIN + (DRIFT_BETA_MAX - DRIFT_BETA_MIN) * into);
+    const into = clamp(st * d.dir, 0, 1), limit = track ? track.halfW - CAR_R : 1e9;
+    const near = clamp((Math.abs(car.lat || 0) - (limit - DRIFT_WALL_EASE_WU)) / DRIFT_WALL_EASE_WU, 0, 1); // v54.8b: ease off near a wall
+    const target = d.dir * (DRIFT_BETA_MIN + (DRIFT_BETA_MAX - DRIFT_BETA_MIN) * into) * (1 - DRIFT_WALL_EASE * near);
+    d.nearMax = Math.max(d.nearMax || 0, near);
     const tau = Math.abs(d.beta) < DRIFT_BETA_MIN ? DRIFT_ENTRY_TAU : DRIFT_BETA_TAU;
     d.beta += (target - d.beta) * (1 - Math.exp(-dt / tau));
     const a0 = car.angle;

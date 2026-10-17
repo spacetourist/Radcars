@@ -171,6 +171,7 @@ export const wallStrength = (wallHit) => Math.max(0, Math.min(1, (wallHit - WALL
 /** sfx(name, opts): game / UI events → sprite clips (handoff §4.1). opts.wallHit for 'wall', opts.quality for 'driftBoost'. */
 export function sfx(name, opts = {}) {
   try { if (self.__RAD_SFX_LOG__) self.__RAD_SFX_LOG__.push(name); } catch (_) {} // verification hook
+  if (name === 'driftReady') { driftReady(); return; }
   if (SYNTH) { synthSfx(name, opts); return; }
   musicCue(name);
   if (!ctx || !load.core || silent()) return;
@@ -211,6 +212,17 @@ export function sfx(name, opts = {}) {
 }
 
 // ------------------------------------------------------------------ music scenes (handoff §4.3)
+/** v54.8b sfx('driftReady'): the drift recharge just completed. AE has no clip yet, so this is a silent no-op that only logs to
+ *  the play log; once AE ships a `driftReady` entry in SHOTS (with its clip loaded) it plays that. Never throws. */
+function driftReady() {
+  const now = Math.round(performance.now()), t = ctx ? +ctx.currentTime.toFixed(4) : null;
+  try {
+    const S = A.SHOTS && A.SHOTS.driftReady, has = !!(S && S.files && S.files.every((f) => B[f]));
+    if (has && !SYNTH && ctx && load.core && !silent()) { shots.play('driftReady', { t: ctx.currentTime }); return; } // (the shot player logs it)
+    played.push({ ev: 'driftReady', skipped: has ? 'silent' : 'noClip', t, now });
+  } catch (_) { try { played.push({ ev: 'driftReady', skipped: 'error', t, now }); } catch (__) {} }
+}
+
 function musicCue(name) {
   if (name === 'countdownGo') {
     scene = 'race';

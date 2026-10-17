@@ -1,0 +1,23 @@
+# pickups · pixi · v54.8 · drift · 412×915
+
+=== Neon Loop · pixi ===
+  [ok] box 0 centre pass (lat -148.5): GRANTED rocket · closest pass {"d":61,"latErr":1.8,"lat":-146.7,"boxLat":-148.5,"spd":911,"zoom":0.249,"drawnHalf":40.1} · POWER button held/ROCKET · sfx bonus · pickup clips 1 · flash ROCKET!
+  [ok] box 1 EDGE pass (lat 0): GRANTED lapboost · closest pass {"d":60,"latErr":56.8,"lat":56.8,"boxLat":0,"spd":1141,"zoom":0.24,"drawnHalf":41.7} · POWER button held/LAP BOOST · sfx bonus · pickup clips 2 · flash LAP BOOST!
+  [ok] holding a power-up: box left (one at a time), ignored 1, feedback flash POWER FULL + sfx boost,boost,boost,lap,boost,denied · closest {"d":-14,"latErr":-3,"lat":145.5,"boxLat":148.5,"spd":1140,"zoom":0.24,"drawnHalf":41.7}
+
+=== Gridlock Circuit · pixi ===
+  [ok] box 0 centre pass (lat -104.5): GRANTED rocket · closest pass {"d":56,"latErr":-5.2,"lat":-109.7,"boxLat":-104.5,"spd":880,"zoom":0.258,"drawnHalf":38.8} · POWER button held/ROCKET · sfx bonus · pickup clips 1 · flash ROCKET!
+  [ok] box 1 EDGE pass (lat 0): GRANTED lapboost · closest pass {"d":63,"latErr":59.6,"lat":59.6,"boxLat":0,"spd":1129,"zoom":0.24,"drawnHalf":41.7} · POWER button held/LAP BOOST · sfx bonus · pickup clips 2 · flash LAP BOOST!
+  [ok] holding a power-up: box left (one at a time), ignored 1, feedback flash POWER FULL + sfx boost,boost,lap,boost,denied · closest {"d":-9,"latErr":4.7,"lat":109.2,"boxLat":104.5,"spd":1138,"zoom":0.24,"drawnHalf":41.7}
+
+=== Razor Hairpin · pixi ===
+  [ok] box 0 centre pass (lat -73.5): GRANTED rocket · closest pass {"d":74,"latErr":-0.4,"lat":-73.9,"boxLat":-73.5,"spd":1000,"zoom":0.24,"drawnHalf":41.7} · POWER button held/ROCKET · sfx bonus · pickup clips 1 · flash ROCKET!
+  [ok] box 1 EDGE pass (lat 73.5): GRANTED rocket · closest pass {"d":74,"latErr":-55.9,"lat":17.6,"boxLat":73.5,"spd":1120,"zoom":0.24,"drawnHalf":41.7} · POWER button held/ROCKET · sfx bonus · pickup clips 2 · flash ROCKET!
+  [ok] holding a power-up: box left (one at a time), ignored 1, feedback flash POWER FULL + sfx boost,boost,lap,denied · closest {"d":0,"latErr":-2.9,"lat":-76.4,"boxLat":-73.5,"spd":1000,"zoom":0.24,"drawnHalf":41.7}
+
+=== Cargo Dock · pixi ===
+  [ok] box 0 centre pass (lat -67.2): GRANTED lapboost · closest pass {"d":64,"latErr":4.3,"lat":-62.9,"boxLat":-67.2,"spd":889,"zoom":0.255,"drawnHalf":39.2} · POWER button held/LAP BOOST · sfx bonus · pickup clips 1 · flash LAP BOOST!
+  [ok] box 1 EDGE pass (lat 67.2): GRANTED rocket · closest pass {"d":62,"latErr":-52.8,"lat":14.4,"boxLat":67.2,"spd":1139,"zoom":0.24,"drawnHalf":41.7} · POWER button held/ROCKET · sfx bonus · pickup clips 2 · flash ROCKET!
+  [ok] holding a power-up: box left (one at a time), ignored 1, feedback flash POWER FULL + sfx boost,boost,lap,denied · closest {"d":-2,"latErr":-4,"lat":-71.2,"boxLat":-67.2,"spd":1002,"zoom":0.24,"drawnHalf":41.7}
+  [ok] no console errors (none)
+RESULT: ALL OK

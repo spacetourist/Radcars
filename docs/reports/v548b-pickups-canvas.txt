@@ -1,0 +1,23 @@
+# pickups · canvas · v54.8 · drift · 412×915
+
+=== Neon Loop · canvas ===
+  [ok] box 0 centre pass (lat -148.5): GRANTED rocket · closest pass {"d":62,"latErr":-1.5,"lat":-150,"boxLat":-148.5,"spd":912,"zoom":0.249,"drawnHalf":40.1} · POWER button held/ROCKET · sfx bonus · pickup clips 1 · flash ROCKET!
+  [ok] box 1 EDGE pass (lat 0): GRANTED autopilot · closest pass {"d":67,"latErr":47.3,"lat":47.3,"boxLat":0,"spd":1140,"zoom":0.24,"drawnHalf":41.7} · POWER button held/AUTOPILOT · sfx bonus · pickup clips 2 · flash AUTOPILOT!
+  [ok] holding a power-up: box left (one at a time), ignored 1, feedback flash POWER FULL + sfx boost,boost,boost,lap,boost,denied · closest {"d":-4,"latErr":16.4,"lat":164.9,"boxLat":148.5,"spd":1140,"zoom":0.24,"drawnHalf":41.7}
+
+=== Gridlock Circuit · canvas ===
+  [ok] box 0 centre pass (lat -104.5): GRANTED lapboost · closest pass {"d":69,"latErr":-3.9,"lat":-108.4,"boxLat":-104.5,"spd":878,"zoom":0.258,"drawnHalf":38.7} · POWER button held/LAP BOOST · sfx bonus · pickup clips 1 · flash LAP BOOST!
+  [ok] box 1 EDGE pass (lat 0): GRANTED autopilot · closest pass {"d":70,"latErr":61.9,"lat":61.9,"boxLat":0,"spd":1130,"zoom":0.24,"drawnHalf":41.7} · POWER button held/AUTOPILOT · sfx bonus · pickup clips 2 · flash AUTOPILOT!
+  [ok] holding a power-up: box left (one at a time), ignored 1, feedback flash POWER FULL + sfx boost,boost,lap,boost,denied · closest {"d":6,"latErr":10.4,"lat":114.9,"boxLat":104.5,"spd":1136,"zoom":0.24,"drawnHalf":41.7}
+
+=== Razor Hairpin · canvas ===
+  [ok] box 0 centre pass (lat -73.5): GRANTED lapboost · closest pass {"d":70,"latErr":-2.1,"lat":-75.6,"boxLat":-73.5,"spd":1000,"zoom":0.24,"drawnHalf":41.7} · POWER button held/LAP BOOST · sfx bonus · pickup clips 1 · flash LAP BOOST!
+  [ok] box 1 EDGE pass (lat 73.5): GRANTED autopilot · closest pass {"d":73,"latErr":-48.5,"lat":25,"boxLat":73.5,"spd":1121,"zoom":0.24,"drawnHalf":41.7} · POWER button held/AUTOPILOT · sfx bonus · pickup clips 2 · flash AUTOPILOT!
+  [ok] holding a power-up: box left (one at a time), ignored 1, feedback flash POWER FULL + sfx boost,boost,lap,denied · closest {"d":8,"latErr":-2.6,"lat":-76.1,"boxLat":-73.5,"spd":1000,"zoom":0.24,"drawnHalf":41.7}
+
+=== Cargo Dock · canvas ===
+  [ok] box 0 centre pass (lat -67.2): GRANTED autopilot · closest pass {"d":70,"latErr":-2.4,"lat":-69.6,"boxLat":-67.2,"spd":889,"zoom":0.255,"drawnHalf":39.2} · POWER button held/AUTOPILOT · sfx bonus · pickup clips 1 · flash AUTOPILOT!
+  [ok] box 1 EDGE pass (lat 67.2): GRANTED lapboost · closest pass {"d":64,"latErr":-49.1,"lat":18.1,"boxLat":67.2,"spd":1139,"zoom":0.24,"drawnHalf":41.7} · POWER button held/LAP BOOST · sfx bonus · pickup clips 2 · flash LAP BOOST!
+  [ok] holding a power-up: box left (one at a time), ignored 1, feedback flash POWER FULL + sfx boost,boost,lap,denied · closest {"d":-3,"latErr":8.5,"lat":-58.7,"boxLat":-67.2,"spd":1002,"zoom":0.24,"drawnHalf":41.7}
+  [ok] no console errors (none)
+RESULT: ALL OK
