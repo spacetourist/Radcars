@@ -357,7 +357,8 @@ export function createGame(canvas, input) {
     stepCars(flags, dt, autopilot);
     if (autopilot) trackAutopilot(world);
     stepMissiles(world, dt, onMissileEnd);
-    if (!player.finished) stepBonus(world, standings().indexOf(player) + 1, (pw) => { sfx('bonus'); world.power.flash = { text: POWER_INFO[pw].name + '!', ms: 1100, kind: 'got' }; });
+    if (!player.finished) stepBonus(world, standings().indexOf(player) + 1, (pw) => { sfx('bonus'); world.power.flash = { text: POWER_INFO[pw].name + '!', ms: 1100, kind: 'got' }; },
+      () => { sfx('denied'); world.power.flash = { text: 'POWER FULL', ms: 900, kind: 'full' }; }); // v54.7.1: holding one → say so
     emitFeelEvents();
     checkLaps();
     if (race.lapFlashMs > 0) race.lapFlashMs = Math.max(0, race.lapFlashMs - dt);

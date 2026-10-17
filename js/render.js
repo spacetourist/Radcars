@@ -5,7 +5,7 @@
 import { getLayout } from './controls.js';
 import { CAR_LEN, CAR_WID } from './physics.js';
 import { partLook, boostRingK, chainK, chainFlash, streakBand, CHAIN_FLAME_MUL, loadDriftAtlas } from './fx.js';
-import { pointAt, buildStartingGrid } from './tracks.js';
+import { pointAt, buildStartingGrid, bonusDrawHalf } from './tracks.js';
 import { TROPHY, trophyScale, ringState, partAlpha, trophyAnchor, outFade, PLACE_TEXT_Y } from './celebrate.js';
 import { styleFor, carSprite, shadowSprite, scaleBucket, textureTile, SPRITE_W, SPRITE_H, TOY_FONT } from './toyart.js';
 
@@ -510,7 +510,7 @@ export function createRenderer(canvas, opts = {}) {
     if (!b) return;
     const taken = (world.power && world.power.collected) || [];
     const tm = (world.race.time || 0) + (world.race.countdown > 0 ? (3800 - world.race.countdown) : 0);
-    const s = Math.max(1, 20 / (b.half * 2 * zoom)); // keep ≥ ~20 px on screen at the far chase zoom
+    const s = bonusDrawHalf(b.half, zoom) / b.half; // keep ≥ ~20 px on screen at the far chase zoom
     for (const box of b.boxes) {
       if (taken[box.i]) continue;
       const h = b.half * s;

@@ -6,7 +6,7 @@
  * - LAP BOOST: v47-strength boost until the player next crosses the line (min 2 s), green flames.
  * - AUTOPILOT: 10 s locked to the centreline, throttle on, +25 % top speed, then control is handed back.
  */
-import { pointAt, wrapS } from './tracks.js';
+import { pointAt, wrapS, bonusDrawHalf } from './tracks.js';
 import { angleDiff, clamp } from './util.js';
 import { CAR_LEN, CAR_WID } from './physics.js';
 
@@ -51,19 +51,32 @@ export function rollPower(pw, place) {
 }
 
 /** Player drives through a box → collect it (only when not already holding one). */
-export function stepBonus(world, place, onCollect) {
+/**
+ * v54.7.1 (Callum: "drove right over it and got nothing"): the hitbox is the box AS DRAWN. At racing speed the camera
+ * sits at the far zoom and the renderers draw the box up to 1.6× its 26 wu half-size (≥ 20 px on screen); the pickup
+ * used the bare 26 wu, so a car visibly overlapping a box's edge (centres 44–58 wu apart) got nothing. Now the half-size
+ * is bonusDrawHalf(half, camera zoom) + BONUS_SLACK, and the row is also checked as swept (crossing between two frames
+ * counts, so a long frame at speed can't step over a box). Holding a power-up still leaves the box (one at a time), but
+ * no longer silently: onFull fires once per touch (toast + blip).
+ */
+const BONUS_SLACK = 4; // wu of forgiveness on top of the drawn size
+export function stepBonus(world, place, onCollect, onFull) {
   const { track, player: p, power: pw } = world;
   const b = track.bonus;
   if (!b || p.finished) return;
+  const half = bonusDrawHalf(b.half, world.cam && world.cam.zoom) + BONUS_SLACK;
   const d = aheadDist(track, b.s, p.sPrev);
-  if (Math.abs(d) > b.half + CAR_LEN * 0.45) { pw.touching = false; return; }
+  const reach = half + CAR_LEN * 0.45;
+  const crossed = pw.lastBonusD != null && pw.lastBonusD > 0 && d <= 0 && pw.lastBonusD - d < 400; // swept: passed the row this frame
+  pw.lastBonusD = d;
+  if (Math.abs(d) > reach && !crossed) { pw.touching = false; return; }
   for (const box of b.boxes) {
     if (pw.collected[box.i]) continue;
-    if (Math.abs(p.lat - box.lat) > b.half + CAR_WID / 2) continue;
-    if (pw.held) { if (!pw.touching) pw.ignored++; pw.touching = true; return; } // one at a time: box stays
-    pw.collected[box.i] = true;
+    if (Math.abs(p.lat - box.lat) > half + CAR_WID / 2) continue;
+    if (pw.held) { if (!pw.touching) { pw.ignored++; onFull && onFull(pw.held); } pw.touching = true; return; } // one at a time: box stays
+    pw.collected[box.i] = true; pw.touching = true; // (the same pass brushing a neighbouring box doesn't then say POWER FULL)
     pw.held = rollPower(pw, place);
-    pw.collects.push({ t: world.race.time, lap: p.lap, box: box.i, power: pw.held });
+    pw.collects.push({ t: world.race.time, lap: p.lap, box: box.i, power: pw.held, latErr: Math.round(p.lat - box.lat), d: Math.round(d), half: Math.round(half) });
     (world.fx = world.fx || []).push({ x: box.x, y: box.y, ms: 0, max: 600, kind: 'bonus' });
     onCollect && onCollect(pw.held);
     return;
