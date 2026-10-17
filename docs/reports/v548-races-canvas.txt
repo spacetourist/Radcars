@@ -1,0 +1,108 @@
+# v548 race verification · canvas · 412×915 DPR 2.625 · 3 laps · build v54.8 · drift · 2026-10-17T18:05:55.106Z
+
+=== neon · canvas ===
+  [ok] first touch unlocked the AudioContext (running)
+  [ok] renderer canvas
+    shot shots/v548/v548-neon-countdown-canvas-412.png
+    shot shots/v548/v548-neon-race-early-canvas-412.png
+    shot shots/v548/v548-neon-boost-canvas-412.png
+    shot shots/v548/v548-neon-race-mid-canvas-412.png
+    shot shots/v548/v548-neon-finish-canvas-412.png
+    shot shots/v548/v548-neon-results-canvas-412.png
+  [ok] race completed → results (66 s wall)
+  [ok] finish reveal shown
+  [ok] laps 3/3: 0:19.20 · 0:17.95 · 0:17.95
+  [ok] all 6 cars finished (DNF: none); player P1 in 0:55.10
+  [ok] AI cars race: all 5 covered distance by mid race (22528, 23449, 23928, 23375, 23830 wu)
+  [ok] cars point the way they drive: sprite axis vs heading max err player 0.000 / AI 0.000 rad
+  [ok] no keyboard hints in the gameplay UI (none)
+  [ok] keyboard: arrow keys steered the whole race; Shift fired BOOST (active 1733 ms, button active)
+  [ok] FPS avg 56.8, p5 59.5, worst frame 683.3 ms, 50 frames > 25 ms of 3663
+  [ok] audio files loaded (12 files, failures 0)
+  [ok] sfx scheduled: countdown×3 GO×1 lap×2 boost×10 wall×0 finish=slam,win
+  [ok] mid race: music music_race, context running, engine voices true
+    audio main-thread cost 0.044 ms/frame over 3710 frames
+  [ok] DRIFT: 3 drifts (bot presses 3): 3 clean, 0 dirty, 3 mini-boosts (dirty: -; clean ms 850/1200/1233); drifting in 17 samples, drift01 max 0.84
+  [ok] drift sounds started: drift_start×3 drift_end×3 drift_boost×2 (+1 folded into a DOUBLE BOOST) drift_sparkle×0 (no handbrake clip)
+  [ok] held scrub layer (DriftVoice) on in 17/17 drifting samples, on in 0 non-drifting
+  [ok] GD art fired: button flare×3, drift smoke puffs 34, drift skid stamps 404
+
+=== gridlock · canvas ===
+  [ok] renderer canvas
+    shot shots/v548/v548-gridlock-countdown-canvas-412.png
+    shot shots/v548/v548-gridlock-race-early-canvas-412.png
+    shot shots/v548/v548-gridlock-boost-canvas-412.png
+    shot shots/v548/v548-gridlock-race-mid-canvas-412.png
+    shot shots/v548/v548-gridlock-finish-canvas-412.png
+    shot shots/v548/v548-gridlock-results-canvas-412.png
+  [ok] race completed → results (74 s wall)
+  [ok] finish reveal shown
+  [ok] laps 3/3: 0:20.57 · 0:19.32 · 0:18.98
+  [ok] all 6 cars finished (DNF: none); player P1 in 0:58.86
+  [ok] AI cars race: all 5 covered distance by mid race (21327, 22278, 22020, 22248, 22293 wu)
+  [ok] cars point the way they drive: sprite axis vs heading max err player 0.000 / AI 0.000 rad
+  [ok] no keyboard hints in the gameplay UI (none)
+  [ok] keyboard: arrow keys steered the whole race; Shift fired BOOST (active 1717 ms, button active)
+  [ok] FPS avg 57.6, p5 59.5, worst frame 600.0 ms, 41 frames > 25 ms of 4164
+  [ok] audio files loaded (12 files, failures 0)
+  [ok] sfx scheduled: countdown×3 GO×1 lap×2 boost×3 wall×0 finish=slam,win
+  [ok] mid race: music music_race, context running, engine voices true
+    audio main-thread cost 0.042 ms/frame over 7660 frames
+  [ok] DRIFT: 22 drifts (bot presses 22): 21 clean, 1 dirty, 21 mini-boosts (dirty: wall; clean ms 900/967/1150/733/617/1017/783/950/1000/1733/717/1000/1017/783/783/1000/900/833/717/750/1083); drifting in 101 samples, drift01 max 0.77
+  [ok] drift sounds started: drift_start×22 drift_end×22 drift_boost×21 (+0 folded into a DOUBLE BOOST) drift_sparkle×1 (no handbrake clip)
+  [ok] held scrub layer (DriftVoice) on in 101/101 drifting samples, on in 0 non-drifting
+  [ok] GD art fired: button flare×22, drift smoke puffs 201, drift skid stamps 2610
+
+=== razor · canvas ===
+  [ok] renderer canvas
+    shot shots/v548/v548-razor-countdown-canvas-412.png
+    shot shots/v548/v548-razor-race-early-canvas-412.png
+    shot shots/v548/v548-razor-boost-canvas-412.png
+    shot shots/v548/v548-razor-race-mid-canvas-412.png
+    shot shots/v548/v548-razor-finish-canvas-412.png
+    shot shots/v548/v548-razor-results-canvas-412.png
+  [ok] race completed → results (61 s wall)
+  [ok] finish reveal shown
+  [ok] laps 3/3: 0:18.37 · 0:16.70 · 0:16.70
+  [ok] all 6 cars finished (DNF: none); player P1 in 0:51.76
+  [ok] AI cars race: all 5 covered distance by mid race (21257, 21990, 21617, 21832, 22112 wu)
+  [ok] cars point the way they drive: sprite axis vs heading max err player 0.000 / AI 0.000 rad
+  [ok] no keyboard hints in the gameplay UI (none)
+  [ok] keyboard: arrow keys steered the whole race; Shift fired BOOST (active 1733 ms, button active)
+  [ok] FPS avg 56.3, p5 59.5, worst frame 683.4 ms, 66 frames > 25 ms of 3388
+  [ok] audio files loaded (12 files, failures 0)
+  [ok] sfx scheduled: countdown×3 GO×1 lap×2 boost×9 wall×1 finish=slam,win
+  [ok] mid race: music music_race, context running, engine voices true
+    audio main-thread cost 0.042 ms/frame over 11157 frames
+  [ok] DRIFT: 12 drifts (bot presses 12): 5 clean, 7 dirty, 5 mini-boosts (dirty: wall,wall,wall,wall,wall,wall,wall; clean ms 1800/1767/717/717/717); drifting in 54 samples, drift01 max 0.89
+  [ok] drift sounds started: drift_start×12 drift_end×12 drift_boost×5 (+0 folded into a DOUBLE BOOST) drift_sparkle×2 (no handbrake clip)
+  [ok] held scrub layer (DriftVoice) on in 54/54 drifting samples, on in 0 non-drifting
+  [ok] GD art fired: button flare×12, drift smoke puffs 113, drift skid stamps 1414
+
+=== cargo · canvas ===
+  [ok] renderer canvas
+    shot shots/v548/v548-cargo-countdown-canvas-412.png
+    shot shots/v548/v548-cargo-race-early-canvas-412.png
+    shot shots/v548/v548-cargo-boost-canvas-412.png
+    shot shots/v548/v548-cargo-race-mid-canvas-412.png
+    shot shots/v548/v548-cargo-finish-canvas-412.png
+    shot shots/v548/v548-cargo-results-canvas-412.png
+  [ok] race completed → results (70 s wall)
+  [ok] finish reveal shown
+  [ok] laps 3/3: 0:19.53 · 0:18.73 · 0:18.28
+  [ok] all 6 cars finished (DNF: none); player P1 in 0:56.55
+  [ok] AI cars race: all 5 covered distance by mid race (20341, 21358, 21249, 21445, 21478 wu)
+  [ok] cars point the way they drive: sprite axis vs heading max err player 0.000 / AI 0.000 rad
+  [ok] no keyboard hints in the gameplay UI (none)
+  [ok] keyboard: arrow keys steered the whole race; Shift fired BOOST (active 1733 ms, button active)
+  [ok] FPS avg 55.6, p5 59.5, worst frame 716.6 ms, 136 frames > 25 ms of 3826
+  [ok] audio files loaded (12 files, failures 0)
+  [ok] sfx scheduled: countdown×3 GO×1 lap×2 boost×8 wall×2 finish=slam,win
+  [ok] mid race: music music_race, context running, engine voices true
+    audio main-thread cost 0.042 ms/frame over 14880 frames
+  [ok] DRIFT: 18 drifts (bot presses 18): 6 clean, 12 dirty, 6 mini-boosts (dirty: wall,wall,wall,wall,wall,wall,wall,wall,wall,wall,wall,wall; clean ms 717/733/1967/750/783/717); drifting in 60 samples, drift01 max 0.71
+  [ok] drift sounds started: drift_start×18 drift_end×18 drift_boost×6 (+0 folded into a DOUBLE BOOST) drift_sparkle×1 (no handbrake clip)
+  [ok] held scrub layer (DriftVoice) on in 60/60 drifting samples, on in 0 non-drifting
+  [ok] GD art fired: button flare×18, drift smoke puffs 121, drift skid stamps 1544
+  [ok] no console errors / warnings (none)
+RESULT: ALL OK

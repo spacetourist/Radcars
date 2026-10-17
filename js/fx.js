@@ -24,6 +24,32 @@ export const chainK = (c) => Math.max(0, Math.min(1, (((c && c.boostLevel) || 0)
 /** 0..1 alpha of the white edge flash (CHAIN_FLASH_MS after a DOUBLE BOOST lands; linear fade). */
 export const chainFlash = (fx, now) => { const el = now - (fx.flashAt ?? -1e9); return el >= 0 && el < CHAIN_FLASH_MS ? 1 - el / CHAIN_FLASH_MS : 0; };
 const rnd = (a, b) => a + Math.random() * (b - a);
+/**
+ * v54.8 DRIFT FX (GD, assets/drift/README.md), driven by the same values as the drift audio:
+ *   - tyre smoke: 'drift' puffs (atlas drift_smoke_0..5) spawn only while car.drifting, alternating rear wheels, every
+ *     DRIFT_SMOKE_MS[1] → [0] ms as drift01 goes 0 → 1 (denser and thicker with drift01), a0 0.35 + 0.2·drift01, cap 24 live;
+ *     quality 1 halves the rate, quality 0 none;
+ *   - skid marks: the drift_skid stamp (12 × 6 wu) into the shared skid tiles, laid down only while car.drifting
+ *     (alpha 0.14 → 0.24 with drift01); the v54 slip marks / smoke are off for a drifting car so the two never stack;
+ *   - the DRIFT button flare on driftStart is in controls.js (world.driftFx).
+ */
+export const DRIFT_SMOKE_MS = [60, 140], DRIFT_SMOKE_CAP = 24, DRIFT_SKID_A = [0.14, 0.24];
+let driftSkidImg = null, driftAtlasP = null;
+/** v54.8: GD's drift atlas (drift_smoke_0..5 + drift_skid), fetched on the first race frame (never during page load). */
+export function loadDriftAtlas() {
+  if (!driftAtlasP && typeof Image !== 'undefined' && typeof fetch !== 'undefined') {
+    driftAtlasP = Promise.all([
+      fetch('assets/drift/drift-atlas.json').then((r) => r.json()),
+      new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = rej; im.src = 'assets/drift/drift-atlas.png'; })
+    ]).then(([meta, img]) => ({ meta, img })).catch(() => null);
+    driftSkid();
+  }
+  return driftAtlasP;
+}
+function driftSkid() {
+  if (driftSkidImg === null && typeof Image !== 'undefined') { driftSkidImg = new Image(); driftSkidImg.src = 'assets/drift/drift-skid.png'; }
+  return driftSkidImg && driftSkidImg.complete && driftSkidImg.naturalWidth ? driftSkidImg : null;
+}
 
 export function newFx() {
   const q = (typeof location !== 'undefined' && /[?&]fx=([012])/.exec(location.search));
@@ -49,7 +75,7 @@ function add(fx, p) {
 }
 
 /** Skid stamp into the lazily created 512² tiles (1 px = 1 wu). */
-function stamp(fx, x, y, a, alpha) {
+function stamp(fx, x, y, a, alpha, brush) {
   const S = SKID_TILE, r = 7;
   const i0 = Math.floor((x - r) / S), i1 = Math.floor((x + r) / S), j0 = Math.floor((y - r) / S), j1 = Math.floor((y + r) / S);
   for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
@@ -66,7 +92,10 @@ function stamp(fx, x, y, a, alpha) {
     }
     t.used = fx.stats.stamps;
     const g = t.ctx; g.save(); g.translate(x - t.x0, y - t.y0); g.rotate(a);
-    g.globalAlpha = alpha; g.fillStyle = '#16161c'; g.fillRect(-SKID_LEN / 2, -2.6, SKID_LEN, 5.2); g.restore();
+    g.globalAlpha = alpha;
+    if (brush) g.drawImage(brush, -6, -3, 12, 6); // v54.8 GD drift_skid stamp (x along travel)
+    else { g.fillStyle = '#16161c'; g.fillRect(-SKID_LEN / 2, -2.6, SKID_LEN, 5.2); }
+    g.restore();
     fx.skid.dirty.add(t);
   }
   fx.stats.stamps++;
@@ -150,7 +179,8 @@ export function stepFx(fx, world, dt, view, W, H) {
     const sp01 = Math.hypot(c.vx, c.vy) / 1100, wasOn = fx.skidOn.has(c);
     const on = wasOn ? !(sl < SKID_OFF || sp01 < 0.18) : sl > SKID_ON && sp01 > 0.25;
     if (on) fx.skidOn.add(c); else fx.skidOn.delete(c);
-    if (on && near && !c.finished) {
+    if (c.drifting && near && !c.finished) driftFx(fx, c, now, ca, sa); // v54.8: the drift's own smoke + marks (v54 ones off)
+    else if (on && near && !c.finished) {
       // v54.1: each rear tyre stamps along its path from last frame's position to this one, spaced ≤ ¼ stamp length,
       // so a slide at speed leaves ONE continuous mark per tyre (no dashes); per-stamp alpha is low because ~4 overlap
       const last = fx.lastStamp.get(c), wheels = [];
@@ -224,11 +254,42 @@ export function stepFx(fx, world, dt, view, W, H) {
     }
     if (o.k === 'spark') { o.vx *= Math.exp(-4 * s); o.vy *= Math.exp(-4 * s); }
     if (o.k === 'smoke') { o.vx *= Math.exp(-2 * s); o.vy *= Math.exp(-2 * s); o.rot += 0.6 * s; }
+    if (o.k === 'drift') { o.vx *= Math.exp(-2 * s); o.vy *= Math.exp(-2 * s); o.rot += o.spin * s; }
   }
   // ---- camera shake (screen px, decays over SHAKE_MS)
   const sh = fx.shake;
   if (sh.ms > 0) { sh.ms = Math.max(0, sh.ms - dt); const k = sh.ms / SHAKE_MS, a = sh.amp * k * k, t = Math.random() * 6.283; sh.x = Math.cos(t) * a; sh.y = Math.sin(t) * a; } else { sh.x = sh.y = 0; }
   fadeSkids(fx, now);
+}
+
+/** v54.8: one drifting car's frame of drift FX (smoke density and skid alpha from drift01). */
+function driftFx(fx, c, now, ca, sa) {
+  const d01 = Math.max(0, Math.min(1, c.drift01 || 0));
+  const wheels = [];
+  for (const side of [-1, 1]) wheels.push({ x: c.x - ca * CAR_LEN * 0.32 - sa * side * CAR_WID * 0.36, y: c.y - sa * CAR_LEN * 0.32 + ca * side * CAR_WID * 0.36, side });
+  // skid marks: one continuous stripe per rear tyre, stamps ≤ 3 wu apart
+  const last = fx.lastStamp.get(c), brush = driftSkid(), a1 = DRIFT_SKID_A[0] + (DRIFT_SKID_A[1] - DRIFT_SKID_A[0]) * d01;
+  for (let k = 0; k < 2; k++) {
+    const w1 = wheels[k], w0 = last ? last[k] : null;
+    const dx = w0 ? w1.x - w0.x : 0, dy = w0 ? w1.y - w0.y : 0, dd = Math.hypot(dx, dy);
+    if (!w0 || dd > 120) { stamp(fx, w1.x, w1.y, c.angle, a1, brush); continue; }
+    const ang = dd > 0.5 ? Math.atan2(dy, dx) : c.angle, nSt = Math.max(1, Math.ceil(dd / 3));
+    for (let i = 1; i <= nSt; i++) stamp(fx, w0.x + dx * i / nSt, w0.y + dy * i / nSt, ang, a1, brush);
+  }
+  fx.lastStamp.set(c, wheels);
+  fx.stats.driftStamps = (fx.stats.driftStamps || 0) + 2;
+  // smoke: denser with drift01, alternating wheels, capped at DRIFT_SMOKE_CAP live puffs (skip, never evict)
+  if (fx.quality < 1) return;
+  const every = (DRIFT_SMOKE_MS[1] + (DRIFT_SMOKE_MS[0] - DRIFT_SMOKE_MS[1]) * d01) * (fx.quality >= 2 ? 1 : 2);
+  if (now < (fx.smokeAt.get(c) || 0)) return;
+  fx.smokeAt.set(c, now + every);
+  let live = 0; for (const o of fx.parts) if (o.k === 'drift') live++;
+  if (live >= DRIFT_SMOKE_CAP) { fx.stats.driftSkipped = (fx.stats.driftSkipped || 0) + 1; return; }
+  fx.driftWheel = 1 - (fx.driftWheel || 0); const w = wheels[fx.driftWheel];
+  const kick = rnd(25, 55), kx = -sa * w.side * kick, ky = ca * w.side * kick; // outward from that wheel's side
+  if (add(fx, { k: 'drift', x: w.x, y: w.y, vx: c.vx * 0.15 + kx, vy: c.vy * 0.15 + ky, rot: rnd(0, 6.28), spin: rnd(-0.6, 0.6), life: rnd(1100, 1500), a0: 0.35 + 0.2 * d01, frame: (Math.random() * 6) | 0, d01 })) {
+    fx.stats.driftSmoke = (fx.stats.driftSmoke || 0) + 1;
+  }
 }
 
 const STREAK_HALF = 160;    // CSS px half-length of a streak at scale 1 (Pixi frame 320 px, Canvas 300 px)
@@ -268,6 +329,10 @@ export function boostRingK(zoom, vw, vh, diam) {
 /** Particle look at time t: {scale, alpha}. */
 export function partLook(o) {
   const t = o.ms / o.life;
+  if (o.k === 'drift') { // v54.8 GD curves: ease-out growth, short fade-in, long soft tail
+    const a = o.a0 * Math.min(1, t / 0.08) * Math.pow(1 - t, 1.4);
+    return { scale: 0.173 + 0.377 * (1 - (1 - t) * (1 - t)), alpha: Math.max(0, a), t };
+  }
   let a = o.a0 * (1 - t);
   if (o.k === 'spark' || o.k === 'streak') a = o.a0 * (t < 0.7 ? 1 : (1 - t) / 0.3);
   if (o.fade != null) a *= o.fade;

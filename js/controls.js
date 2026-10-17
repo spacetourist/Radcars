@@ -44,7 +44,7 @@ export const CONTROL_LAYOUT = {
 
 const ACCENT = { brake: '#e02020', boost: '#00e8ff', missile: '#ffe600', power: '#7c8494' };
 export const POWER_COLOR = { rocket: '#ff2b6a', lapboost: '#b8ff00', autopilot: '#00e8ff' };
-const NAMES = { brake: 'HANDBRAKE', boost: 'BOOST', missile: 'MISSILE', power: 'POWER' };
+const NAMES = { brake: 'DRIFT', boost: 'BOOST', missile: 'MISSILE', power: 'POWER' };
 const POWER_NAME = { rocket: 'ROCKET', lapboost: 'LAP BOOST', autopilot: 'AUTOPILOT' };
 
 let layout = null;          // last computed layout (CSS px) — read by the camera and the minimap
@@ -222,7 +222,13 @@ export function updateControls(w, info) {
   const p = w.player, b = w.boost, ms = w.missile, pw = w.power, L = w.track.length;
   const lapFrac = (((p.dist % L) + L) % L) / L;
   // BRAKE
-  paint('brake', { state: info.braking ? 'active' : 'ready', label: 'HANDBRAKE', p: null }); // v54.4: BRAKE → HANDBRAKE
+  paint('brake', { state: info.braking || info.drifting ? 'active' : 'ready', label: 'DRIFT', p: null }); // v54.8: HANDBRAKE → DRIFT
+  // v54.8 (GD drift-button.css): the icon leans into the slide (+8° drifting right / clockwise, −8° left) and the button
+  // flares for 350 ms on each driftStart (world.driftFx, the same event that plays the drift_start bite)
+  const tilt = info.drifting ? 8 * Math.sign(info.driftDir || 0) : 0;
+  if (prev.tilt !== tilt && els.brake) { els.brake.style.setProperty('--drift-tilt', tilt + 'deg'); prev.tilt = tilt; }
+  const df = w.driftFx;
+  if (df && prev.flareT !== df.t && els.brake) { prev.flareT = df.t; const el = els.brake; el.classList.remove('flare'); void el.offsetWidth; el.classList.add('flare'); clearTimeout(prev.flareTo); prev.flareTo = setTimeout(() => el.classList.remove('flare'), 350); try { (self.__RAD_DRIFT_FLARES__ = self.__RAD_DRIFT_FLARES__ || []).push({ t: df.t, dir: df.dir }); } catch (_) {} }
   // BOOST
   let bs;
   // v54.7 (GD) DOUBLE BOOST: while the chain rushes the button stays full and pulses cyan/pink at 4 Hz with a pink ×2

@@ -1,6 +1,6 @@
 // Single source of truth for the build name. Loaded as a classic script by index.html (sets self.RADCARS_BUILD for the
 // menu label) and by sw.js via importScripts (cache name). Bump here on every release.
-self.RADCARS_BUILD = { version: 'v54.7', name: 'sound' };
+self.RADCARS_BUILD = { version: 'v54.8', name: 'drift' };
 self.RADCARS_BUILD.label = `${self.RADCARS_BUILD.version} · ${self.RADCARS_BUILD.name}`;
 self.RADCARS_BUILD.cache = `radcars-${self.RADCARS_BUILD.version}-${self.RADCARS_BUILD.name}`;
 // Files the service worker pre-caches and the menu's hard refresh re-downloads (relative to the site root).
@@ -9,10 +9,14 @@ self.RADCARS_BUILD.assets = [
   './index.html',
   './css/style.css',
   './assets/ui/controls/controls-polish.css',            // v53.1: Graphic Designer's control chrome (CSS only)
+  './assets/drift/drift-button.css',                     // v54.8: GD DRIFT button heat / tilt
   './assets/ui/controls/svg/infinity-badge.svg',
   './assets/ui/controls/fonts/BarlowCondensed-ExtraBold-ui.woff2',
   './assets/fx/fx-atlas.png',                            // v54: FX atlas (sparks, glow, ring, smoke, streak, flame)
   './assets/fx/fx-atlas.json',
+  './assets/drift/drift-atlas.png',                      // v54.8: GD drift smoke puffs (Canvas + Pixi)
+  './assets/drift/drift-atlas.json',
+  './assets/drift/drift-skid.png',                       // v54.8: drift skid stamp brush
   './manifest.webmanifest',
   './icons/icon.svg',
   './icons/icon-192.png',
@@ -55,6 +59,7 @@ if (typeof document !== 'undefined' && document.readyState === 'loading') {
   document.write(
     `<link rel="stylesheet" href="css/style.css${q}" />` +
     `<link rel="stylesheet" href="assets/ui/controls/controls-polish.css${q}" />` + // v53.1 polish layer, after style.css
+    `<link rel="stylesheet" href="assets/drift/drift-button.css${q}" />` + // v54.8 GD DRIFT button (after the polish layer)
     `<script type="importmap">${JSON.stringify({ imports })}<\/script>` +
     `<script type="module" src="js/main.js${q}"><\/script>`
   );

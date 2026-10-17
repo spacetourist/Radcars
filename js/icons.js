@@ -16,14 +16,21 @@ const rocket = (t = '', s = 1) => `<g transform="${t}" stroke="${O}" stroke-widt
   <path d="M24 40 C27 33 31 27 36 22" fill="none" stroke="#fff" stroke-width="${2.2 / s}" opacity="0.7"/></g>`;
 
 export const ICONS = {
-  /** BRAKE: drilled brake disc with a red calliper */
-  brake: svg(`<g stroke="${O}" stroke-width="2.6" stroke-linejoin="round">
-    <circle cx="32" cy="32" r="25" fill="#c7ccd8"/><circle cx="32" cy="32" r="25" fill="none" stroke="#ffffff" stroke-width="2" opacity="0.5" transform="translate(-1 -1)"/>
-    <circle cx="32" cy="32" r="18.5" fill="#aab1c2" stroke-width="1.6"/>
-    ${[0, 1, 2, 3, 4, 5, 6, 7].map((i) => { const a = i * Math.PI / 4 + 0.39, x = 32 + Math.cos(a) * 21.8, y = 32 + Math.sin(a) * 21.8; return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="1.9" fill="${O}" stroke="none"/>`; }).join('')}
-    <circle cx="32" cy="32" r="10" fill="#6c7385"/>${[0, 1, 2, 3, 4].map((i) => { const a = i * Math.PI * 0.4 - 1.57, x = 32 + Math.cos(a) * 5.6, y = 32 + Math.sin(a) * 5.6; return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="1.7" fill="#e8ecf4" stroke-width="1.2"/>`; }).join('')}
-    <path d="M44 8 C53 11 59 19 60 28 L49 30 C48 24 45 20 40 18 Z" fill="#ff2a2a"/>
-    <path d="M47 12 C51 14 54 18 56 22" fill="none" stroke="#ffb3b3" stroke-width="2.2" stroke-linecap="round"/></g>`),
+  /** v54.8 DRIFT (GD, assets/drift/drift-icon.svg): a yellow toy car turned 30° with a smoke curl off the rear tyres.
+   *  The kind key stays 'brake' so ids / classes / input / layout are unchanged. */
+  brake: svg(`<g stroke="#1a1030" stroke-width="2.6"><circle cx="25.5" cy="32.5" r="4.2" fill="#bfc4d6"/><circle cx="19.5" cy="38.5" r="6" fill="#bfc4d6"/><circle cx="39.5" cy="45.5" r="4.2" fill="#bfc4d6"/><circle cx="31.5" cy="50" r="6.2" fill="#bfc4d6"/><circle cx="13.5" cy="47" r="8.6" fill="#bfc4d6"/><circle cx="22.5" cy="53.5" r="6.8" fill="#bfc4d6"/><circle cx="23" cy="44" r="5" fill="#bfc4d6"/></g><g stroke="none"><circle cx="25.5" cy="32.5" r="4.2" fill="#bfc4d6"/><circle cx="19.5" cy="38.5" r="6" fill="#bfc4d6"/><circle cx="39.5" cy="45.5" r="4.2" fill="#bfc4d6"/><circle cx="31.5" cy="50" r="6.2" fill="#bfc4d6"/><circle cx="13.5" cy="47" r="8.6" fill="#bfc4d6"/><circle cx="22.5" cy="53.5" r="6.8" fill="#bfc4d6"/><circle cx="23" cy="44" r="5" fill="#bfc4d6"/><circle cx="24.6" cy="31.2" r="2.3" fill="#eef0f7"/><circle cx="18.6" cy="37.2" r="4.1" fill="#eef0f7"/><circle cx="38.6" cy="44.2" r="2.3" fill="#eef0f7"/><circle cx="30.6" cy="48.7" r="4.3" fill="#eef0f7"/><circle cx="12.6" cy="45.7" r="6.7" fill="#eef0f7"/><circle cx="21.6" cy="52.2" r="4.9" fill="#eef0f7"/><circle cx="22.1" cy="42.7" r="3.1" fill="#eef0f7"/></g><path d="M15.5 44.6 C12.2 43.2 9.6 46.6 11.4 49.4 C13.2 52 17.6 51 17.8 47.6 C18 44.6 15 42.4 12 43.2" fill="none" stroke="#8d93ab" stroke-width="2" stroke-linecap="round"/><path d="M27 49.6 C29.5 51.6 33 51.4 35 49.4" fill="none" stroke="#8d93ab" stroke-width="1.8" stroke-linecap="round"/><path d="M3.5 38.5 C4.8 34.5 8 31.5 12 30.5 M5 58.5 C8 60.2 12 60.4 15.5 59.2" fill="none" stroke="#e4e7f2" stroke-width="2.4" stroke-linecap="round" opacity="0.85"/><g transform="translate(40 25.5) rotate(30) scale(0.94)" stroke="#1a1030" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round">
+  <rect x="-12.1" y="-13.6" width="4.2" height="8" rx="1.6" fill="#4a4262" stroke-width="2"/><path d="M-10.7 -11.6 L-10.7 -7.6" stroke="#a49cc0" stroke-width="1.3"/><rect x="7.9" y="-13.6" width="4.2" height="8" rx="1.6" fill="#4a4262" stroke-width="2"/><path d="M9.3 -11.6 L9.3 -7.6" stroke="#a49cc0" stroke-width="1.3"/><rect x="-12.1" y="4.8" width="4.2" height="8" rx="1.6" fill="#4a4262" stroke-width="2"/><path d="M-10.7 6.8 L-10.7 10.8" stroke="#a49cc0" stroke-width="1.3"/><rect x="7.9" y="4.8" width="4.2" height="8" rx="1.6" fill="#4a4262" stroke-width="2"/><path d="M9.3 6.8 L9.3 10.8" stroke="#a49cc0" stroke-width="1.3"/>
+  <path d="M-7.5 -16.2 Q0 -18.6 7.5 -16.2 Q10 -15.2 10 -11 L10 12.5 Q10 16.8 6 16.8 L-6 16.8 Q-10 16.8 -10 12.5 L-10 -11 Q-10 -15.2 -7.5 -16.2 Z" fill="#ffd21a"/>
+  <path d="M6.2 -13.6 Q8.7 -12.8 8.7 -10 L8.7 12.2 Q8.7 15.4 5.6 15.5 Z" fill="#ff9a1f" stroke="none"/>
+  <path d="M-7.6 -10.5 L-7.6 10.5" fill="none" stroke="#fff6b0" stroke-width="2.2" opacity="0.9"/>
+  <rect x="-1.7" y="-16.6" width="3.4" height="9.4" fill="#ffffff" stroke="none" opacity="0.92"/>
+  <rect x="-1.7" y="10.6" width="3.4" height="5.6" fill="#ffffff" stroke="none" opacity="0.92"/>
+  <path d="M-7.4 -6.4 L7.4 -6.4 L5.6 -0.6 L-5.6 -0.6 Z" fill="#36c6ff" stroke-width="2"/>
+  <path d="M-4.6 -4.6 L-1.2 -4.6" fill="none" stroke="#ffffff" stroke-width="1.6" opacity="0.85"/>
+  <path d="M-5.6 6 L5.6 6 L6.8 10.2 L-6.8 10.2 Z" fill="#2393d6" stroke-width="2"/>
+  <circle cx="-6" cy="-14.2" r="1.6" fill="#fffbd0" stroke-width="1.2"/><circle cx="6" cy="-14.2" r="1.6" fill="#fffbd0" stroke-width="1.2"/>
+  <rect x="-8" y="14.6" width="3.6" height="2" rx="0.8" fill="#ff2a2a" stroke-width="1.1"/><rect x="4.4" y="14.6" width="3.6" height="2" rx="0.8" fill="#ff2a2a" stroke-width="1.1"/>
+</g>`),
   /** BOOST: lightning bolt */
   boost: svg(`<g stroke="${O}" stroke-width="3" stroke-linejoin="round">
     <path d="M38 4 L12 36 L29 36 L23 60 L52 25 L34 25 Z" fill="#ffd21a"/>

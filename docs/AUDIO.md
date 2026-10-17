@@ -1,6 +1,6 @@
 # Radcars audio plan (v54 feel → v55 rivals)
 
-Audio Engineer · 2 Oct 2026 · **rev 3: everything rebuilt from real recordings.** Pure synthesis is out after Callum's verdict ("sounds like bad synth music"). The trigger maths, mixer, hook and v55 warning timing agreed in rev 2 are kept. **rev 3.2 (3 Oct):** squeal mapping retuned to Developer's v54.2 drift data (engine spec §7). Status: draft for Pep. Callum is the final ear. **rev 4 (7 Oct, v54.4):** music is now in scope (an 8-bit chiptune soundtrack, §11) with a music bus and ducking (§5). New recorded `handbrake` and `driftBoost`, the remaining synth beeps replaced by polished files (§2, §3.5), and the new `denied` cue. **rev 4.1 (7 Oct, v54.6 'DOUBLE BOOST'):** new `boostChain` cue for a second boost stacked on a running one (recorded whooshes +4 st + a rising A-major chip arp, §3.6), with a deeper −8 dB music duck (§5). **rev 4.2 (7 Oct, v54.7 sound release):** one-shot sprite (`sfx_sprite.ogg/.m4a/.json`), SFX 203.2 → 147.6 KB Opus, engine top-gear / shift / boost-rev / DOUBLE BOOST rush fixes, squeal +3 dB at full slip, phone-band pass on heavy hits, anti-lag pops on `boost`; see `docs/AUDIO_V547_HANDOFF.md` (supersedes the hook and size details below where they differ).
+Audio Engineer · 2 Oct 2026 · **rev 3: everything rebuilt from real recordings.** Pure synthesis is out after Callum's verdict ("sounds like bad synth music"). The trigger maths, mixer, hook and v55 warning timing agreed in rev 2 are kept. **rev 3.2 (3 Oct):** squeal mapping retuned to Developer's v54.2 drift data (engine spec §7). Status: draft for Pep. Callum is the final ear. **rev 4 (7 Oct, v54.4):** music is now in scope (an 8-bit chiptune soundtrack, §11) with a music bus and ducking (§5). New recorded `handbrake` and `driftBoost`, the remaining synth beeps replaced by polished files (§2, §3.5), and the new `denied` cue. **rev 4.1 (7 Oct, v54.6 'DOUBLE BOOST'):** new `boostChain` cue for a second boost stacked on a running one (recorded whooshes +4 st + a rising A-major chip arp, §3.6), with a deeper −8 dB music duck (§5). **rev 4.2 (7 Oct, v54.7 sound release):** one-shot sprite (`sfx_sprite.ogg/.m4a/.json`), SFX 203.2 → 147.6 KB Opus, engine top-gear / shift / boost-rev / DOUBLE BOOST rush fixes, squeal +3 dB at full slip, phone-band pass on heavy hits, anti-lag pops on `boost`; see `docs/AUDIO_V547_HANDOFF.md` (supersedes the hook and size details below where they differ). **rev 4.3 (7 Oct, v54.8 DRIFT):** DRIFT replaces HANDBRAKE. New `driftStart {dir}` (recorded tyre bite + a clutch-kick rev flare on the live engine), a held power-slide layer driven by `drifting` / `drift01 = clamp((angle − 20)/25, 0, 1)` (the squeal loop + a new recorded burnout loop `drift_scrub`), and `driftEnd {clean}` (grip-catch chirp; auto-straighten = clean false). The cornering squeal ducks −18 dB while drifting. Non-music set 149.3 KB Opus (≤ 150, after the handbrake clip and 6.2 KB of measured re-encodes); see `docs/AUDIO_V548_DRIFT.md`.
 
 Companion docs:
 - `docs/ENGINE_NOTE_SPEC.md` (rev 3, sample-based): per-loop file, recorded rpm and fundamental, exact loopStart/loopEnd, crossfade table vs rpm01, playbackRate ranges, boost, braking, squeal, rivals.
@@ -44,7 +44,9 @@ All of them go through `beep()` (one oscillator + exponential decay → `ctx.des
 | `autopilot` | game.js 557 | 2-note sine | **rev 4:** `sfx_autopilot` (C#6 → E6 PWM, 0.4 s), sfx bus | v54.4 |
 | `powerEnd` | game.js 571 (autopilot end), 573 (lap boost end) | 2-note triangle | **rev 4:** `sfx_power_end` (E6 → A5, 0.32 s), sfx bus | v54.4 |
 
-| `handbrake` **(new)** | Developer's v54.4 handbrake input | — | Recorded `handbrake` (yank + ratchet + tyre bite, 0.42 s), sfx bus, rate 0.97–1.03 (`handbrakeParams`) | v54.4 |
+| ~~`handbrake`~~ | Developer's v54.4 handbrake input | — | **Retired in v54.8** (DRIFT replaces it; clip removed from the sprite). `sfx('handbrake')` is a deprecated alias that plays the `drift_start` bite until game.js switches. | v54.4 → v54.8 |
+| `driftStart {dir}` **(v54.8)** | DRIFT pressed, dir −1 left / +1 right | — | `A.playDriftStart({shots, eng, drift}, {dir})`: recorded `drift_start` tyre bite (0.36 s, gain 0.9, pan dir·0.25) + the engine's clutch-kick rev flare (+3 st, ~250 ms) | v54.8 |
+| `driftEnd {clean}` **(v54.8)** | DRIFT released (clean) or auto-straighten / wall (`clean: false`) | — | `A.playDriftEnd({shots}, {clean})`: recorded `drift_end` chirp (0.15 s); clean = +1 st full band, not clean = −1 st, LP 4.5 kHz, −1.9 dB. A clean drift's `driftBoost` follows as before. | v54.8 |
 | `driftBoost {quality}` **(new)** | v54.4 drift-boost release, quality 0..1 | — | Recorded whoosh + tonal arp (`drift_boost`) + `drift_sparkle` above q 0.7, via `playDriftBoost()` (§3.5) | v54.4 |
 | `boostChain` **(new)** | v54.6 DOUBLE BOOST: a second boost (pad, drift boost or button) lands while one is running; the game fires it **instead of** `boost` (max 2 stacks) | — | Recorded `boost_chain` (0.78 s: big whoosh + the boost whoosh, both +4 st, snap, fizz, plus a rising A-major chip arp), sfx bus, gain 1.15, cap 1, via `playBoostChain()`: **music −8 dB** (§3.6, §5). The BoostEdge can't fire on a stack (boostLevel is already > 0.15), and `boost_end` still plays once when the whole boost bleeds out. | v54.6 |
 | `denied` **(new)** | missile button tapped while it shows NO TARGET | — | `ui_denied`: a soft two-note "denied" blip E5 → C5, low-passed, 0.16 s, ui bus, quiet (gain 0.5, file peak −9 dBFS) | v54.4 |
@@ -111,7 +113,8 @@ FX and audio read **the same values** from the same source, so a hit never looks
 | **Wall strength** | `strength = clamp((car.wallHit − 200) / 700, 0, 1)`. Fires when wallHit > 200, 150 ms cooldown per car | wall variant tier, gain, rate, engine duck | spark count / length, smoke on scrapes |
 | **Heavy threshold** | `strength ≥ 0.6` (wallHit ≈ 620) | `wall_heavy_*` + engine duck | camera shake, `navigator.vibrate`, sodium `ring` |
 | **boostLevel** | `car.boostLevel` from `rampBoost()`, 0…1 | engine boost push; `boost` on the 0.15 rising edge, `boost_end` on the re-arm < 0.05 | boost flame; the cyan `ring` on the same 0.15 edge |
-| **slip01** | `clamp((abs(vL) − 40)/220, 0, 1)` (v54.2 drift data) | squeal on > 0.22 / off < 0.15 (with speed01 > 0.25); gain `smoothstep(0.22, 0.80, slip01)`, trim 1.0 (engine spec §7) | skid smoke + skid marks on the same flag (`squeal.update()` returns it) |
+| **slip01** | `clamp((abs(vL) − 40)/220, 0, 1)` (v54.2 drift data) | squeal on > 0.22 / off < 0.15 (with speed01 > 0.25); gain `smoothstep(0.22, 0.80, slip01)`, trim 1.0 (engine spec §7) | skid smoke + skid marks on the same flag (`squeal.update()` returns it; v54.8: `squealing \|\| sliding`) |
+| **drifting / drift01** (v54.8) | `drifting` = the DRIFT state (press → straightened); `drift01 = clamp((angleDeg − 20)/25, 0, 1)` while drifting, else 0 (`A.driftAmount`) | `drifting` gates the slide layer (`DriftVoice`), the −18 dB squeal duck and the engine wheelspin; drift01 shades the layer from smooth (20°, already clearly audible) to rough and bright (45°) | skid smoke / marks while drifting (`drift.update()` returns the flag) |
 
 ### 3.4 v55 "rivals" (summary; full detail in V55_SFX.md)
 
@@ -150,7 +153,9 @@ When a second boost (pad, drift boost or button) lands while one is running, the
 
 ## 4. Format and file-size budget
 
-**v54.7 (rev 4.2) — the current shipped set.** Full detail, hook map and loading code: `docs/AUDIO_V547_HANDOFF.md`. Every one-shot is now a clip in one sprite; the loops and the music stay separate files. The rev 3–4.1 notes below are kept as history (their per-file one-shot sizes no longer exist as files).
+**v54.8 (rev 4.3, DRIFT) — the current shipped set:** the non-music set is **149,330 B Opus incl. the JSON (≤ 150 KB, 670 B headroom; v54.7 149,229)** and 331,471 B AAC (v54.7 316,262). New: `drift_scrub` loop 4.5 KB Opus / 10.8 KB AAC, `drift_start` + `drift_end` sprite clips 2.9 KB Opus. Paid for by retiring `handbrake` (1.06 KB) and measured re-encodes (engine loops 56 → 52/48k, win/podium jingles, boost_end, wall_heavy_1, missile VBR, wall_light_2, minified JSON: 6.2 KB). The full cut list with the band-error cost of each is in `docs/AUDIO_V548_DRIFT.md` §7. Engine loops now 31.1 KB + eng_high 8.1 KB; sprite 93.9 KB, 30 clips, 21.12 s.
+
+**v54.7 (rev 4.2).** Full detail, hook map and loading code: `docs/AUDIO_V547_HANDOFF.md`. Every one-shot is now a clip in one sprite; the loops and the music stay separate files. The rev 3–4.1 notes below are kept as history (their per-file one-shot sizes no longer exist as files).
 
 | Spent on | Files | Opus (.ogg) | AAC (.m4a) |
 |---|---|---|---|
@@ -209,8 +214,8 @@ How it fits under 150 KB: per-clip Opus settings chosen by measured 1/3-octave b
 
 ```
 master 0.9 → DynamicsCompressor (thr −10 dB, knee 6, ratio 4, attack 3 ms, release 150 ms) → destination
-  ├─ sfxVol (Effects setting) ← engine 0.5 → engineDuck    player engine, ≤3 rival engines, slide squeal
-  │                           ← sfx    0.9 → sfxDuck       hits, boost, boostChain, weapons, pickup, barge, power-ups, handbrake, driftBoost
+  ├─ sfxVol (Effects setting) ← engine 0.5 → engineDuck    player engine, ≤3 rival engines, slide squeal, drift layer (v54.8)
+  │                           ← sfx    0.9 → sfxDuck       hits, boost, boostChain, weapons, pickup, barge, power-ups, driftStart, driftEnd, driftBoost
   │                           ← ui     0.7                 clicks, countdown, lap, finish jingles, denied, missile warning (never ducked)
   └─ musicVol (Music setting) ← musicEng ← musicHit ← music 0.75    race / menu loop, finish sting (rev 4, §11)
 ```
@@ -226,6 +231,7 @@ master 0.9 → DynamicsCompressor (thr −10 dB, knee 6, ratio 4, attack 3 ms, r
 | Explosion on a rival | engine −4 dB 250 ms, only if within 600 wu |
 | Finish slam (v52 reveal) | engine −10 dB until the results screen, then fade the engine bus to 0 over 1 s and stop the voices |
 | Countdown | engine held at −6 dB until GO |
+| **DRIFT** (v54.8, `drifting`) | cornering squeal −18 dB (`SQUEAL.driftDuckDb`), ~40 ms down / ~150 ms back; the drift layer takes over. No music duck for driftStart / driftEnd / the layer. The engine is **not** ducked: it revs slightly up (wheelspin, +1 dB). |
 | Heavy wall / explosion / boost whoosh / player barge (`MUSIC_DUCK_EVENTS`) | **music −6 dB** (`mix.duckMusic()`): 20 ms attack, 120 ms hold (explosion 250 ms, boost 300 ms = `MUSIC_MIX.boostHoldS`), recovery τ 130 ms (back within 1 dB in about 400 ms). `boostChain` is also in `MUSIC_DUCK_EVENTS`, but at −8 dB (next row). |
 | driftBoost q ≥ 0.5 | music −(4 + 2q) dB, same shape |
 | **boostChain** (v54.6, `playBoostChain()`) | **music −8 dB** (`MUSIC_MIX.chainDb`), a bit deeper than the boost whoosh's −6. Same shape: 20 ms attack, 300 ms hold (`chainHoldS`), recovery τ 130 ms, back within 1 dB about 230 ms after the hold ends (≈ 400 ms recovery). It lands while the boost duck is still active or recovering, and the deeper duck wins. Measured −8.0 dB. |
@@ -239,6 +245,7 @@ master 0.9 → DynamicsCompressor (thr −10 dB, knee 6, ratio 4, attack 3 ms, r
 |---|---|---|
 | Engines | 1 player `'full'` (5 looping sources) + **3 rival `'lite'`** (3 looping sources each), pooled | Reassign to the loudest rivals with 1.25× hysteresis (engine spec §8) |
 | Squeal | 1 (player) | — |
+| Drift layer (v54.8) | 1 (player): `DriftVoice`, 2 looping sources (squeal + drift_scrub) | — |
 | Warning | 1 held loop. Beeps never overlap by construction (beep ≤ 40 % of the gap). | — |
 | One-shots | **12 total.** Per event: wall_light 2, wall_heavy 2, barge 2, boost 1, boostChain 1 (its own voice, so it overlaps the boost tail), boost_end 1, pickup 1, missile_launch 3 (a salvo is 3 × 250 ms), explosion 3 | Over the cap, stop the oldest of that sound with a 10 ms fade. Over the global cap, drop the quietest non-player sound. |
 | Rival-vs-rival barges | play only within 600 wu, at −9 dB | — |
@@ -299,6 +306,8 @@ Revisit only if we move to many long streamed files (music, which is out of scop
 | `v3_menu_loop_seam.mp4` (46 s) | the menu track from the top, through the loop seam at 37.5 s |
 | `v3_race_loop_x2.mp4` (122 s) | the race loop twice: seams at 60 s and 120 s |
 | `v3_oneshots.mp4` (22 s) | handbrake, driftBoost at q 0 / 0.4 / 0.7 / 1.0, click, countdown ×3, GO, lap, denied ×2, miss, power, autopilot, powerEnd, slam, podium, win |
+
+**rev 4.3 (v54.8 DRIFT):** `/workspace/radcars-audio/previews/video/v548/v548_drift.mp4` (28.6 s), rendered by `_src/render_v547.mjs --scenes scenes_v548.mjs` through the real mixer with the race music and the engine. Corner 1 at 2.0 s (driftStart → held slide drift01 0.4 → 1.0 → 0.6 → driftEnd + driftBoost q 0.75 at 3.6), corner 2 at 7.0 (→ 8.2, q 0.9 with sparkle), tap-drift 11.6 → 11.95 (no boost), long burning slide 14.0 → auto-straighten driftEnd clean: false at 17.6, then dry: driftStart ∓1 at 21.4 / 22.3, driftEnd clean / not at 23.2 / 23.9, the layer solo at drift01 0 (24.8) and swept 0 → 1 (25.8), release 27.8. Timeline and copies: `/workspace/radcars-audio/previews/v548/`.
 
 **rev 4.1 (v54.6 DOUBLE BOOST):** `/workspace/radcars-audio/previews/video/v3/v3_boost_chain.mp4` (12 s). The WAV/Opus/AAC copies, timeline, measurement stems (`m_bc_*`) and `measurements.json` are in `/workspace/radcars-audio/previews/v3_546/`. It's rendered by `_src/render_v546.mjs --scenes scenes_v546.mjs` (render3 plus a `--scenes` flag), which plays the shipped files through the real mixer in headless Chrome. The MP4 is built by `/workspace/radcars-audio/tools/video_v546.py`: a scrolling showwaves cline, a whole-clip overview with a playhead, and event labels. There's no engine in this scene, so the ducks are heard and measured without the −2.5 dB engine baseline.
 

@@ -17,7 +17,7 @@
 import * as P from '../vendor/pixi-lean.mjs';
 import { createRenderer, minimapBox } from './render.js';
 import { CAR_LEN, CAR_WID } from './physics.js';
-import { partLook, boostRingK, chainK, chainFlash, streakBand, CHAIN_PINK, CHAIN_FLAME_MUL } from './fx.js';
+import { partLook, boostRingK, chainK, chainFlash, streakBand, CHAIN_PINK, CHAIN_FLAME_MUL, loadDriftAtlas } from './fx.js';
 import { pointAt, buildStartingGrid } from './tracks.js';
 import { TROPHY, trophyScale, ringState, partAlpha, trophyAnchor, outFade, PLACE_TEXT_Y } from './celebrate.js';
 import { styleFor, carSprite, shadowSprite, textureTile, scaleBucket, SPRITE_W, SPRITE_H, TOY_FONT } from './toyart.js';
@@ -171,7 +171,20 @@ export async function createPixiRenderer(hudCanvas, app) {
       return out;
     } catch (e) { console.info('fx atlas unavailable, using plain discs', e && e.message); return null; }
   }
+  // v54.8 GD drift atlas (drift_smoke_0..5), requested on the first race frame so it never competes with page load
+  let driftAtlas = null, driftReq = false;
+  function wantDriftAtlas() {
+    if (driftReq) return; driftReq = true;
+    const pr = loadDriftAtlas(); if (!pr) return;
+    pr.then((a) => {
+      if (!a) return;
+      const source = new P.ImageSource({ resource: a.img, scaleMode: 'linear', autoGenerateMipmaps: true }), out = {};
+      for (const [name, f] of Object.entries(a.meta.frames)) out[name] = { tex: new P.Texture({ source, frame: new P.Rectangle(f.frame.x, f.frame.y, f.frame.w, f.frame.h) }), ax: f.anchor?.x ?? 0.5, ay: f.anchor?.y ?? 0.5 };
+      driftAtlas = out;
+    });
+  }
   function drawFeelFx(wd) {
+    wantDriftAtlas();
     partPool.begin(); scrPool.begin(); ghostPool.begin();
     const fx = wd.fxState;
     if (fx) {
@@ -198,6 +211,12 @@ export async function createPixiRenderer(hudCanvas, app) {
       }
       const ringK = boostRingK(wd.cam.zoom, W, H, 106);
       for (const o of fx.parts) {
+        if (o.k === 'drift') { // v54.8 drift puff: GD atlas, normal blend, untinted
+          const lk = partLook(o), fr = driftAtlas && driftAtlas['drift_smoke_' + (o.frame || 0)], sp = partPool.get(fr ? fr.tex : disc);
+          sp.anchor.set(0.5); sp.position.set(o.x, o.y); sp.alpha = lk.alpha; sp.blendMode = 'normal'; sp.tint = fr ? 0xffffff : 0xebe6de; sp.rotation = o.rot || 0;
+          if (fr) sp.scale.set(lk.scale); else { sp.width = sp.height = 160 * lk.scale; }
+          continue;
+        }
         const lk = partLook(o), name = o.k === 'smoke' ? 'smoke_' + (o.frame || 0) : FX_FRAME[o.k], fr = fxAtlas && fxAtlas[name];
         const sp = (o.scr ? scrPool : partPool).get(fr ? fr.tex : disc);
         if (fr) sp.anchor.set(fr.ax, fr.ay); else sp.anchor.set(0.5);

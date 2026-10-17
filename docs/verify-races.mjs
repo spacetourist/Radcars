@@ -39,25 +39,32 @@ const build = await page.evaluate(() => self.RADCARS_BUILD && self.RADCARS_BUILD
 log(`# ${prefix} race verification · ${rk} · 412×915 DPR 2.625 · ${laps} laps · build ${build} · ${new Date().toISOString()}`);
 
 async function startBot() {
-  await page.evaluate(async () => {
+  await page.evaluate(async (DRIFT) => {
     const { pointAt } = await import('./js/tracks.js');
     const { angleDiff } = await import('./js/util.js');
     const held = new Set();
     const set = (k, on) => { if (on && !held.has(k)) { held.add(k); window.dispatchEvent(new KeyboardEvent('keydown', { key: k })); } else if (!on && held.has(k)) { held.delete(k); window.dispatchEvent(new KeyboardEvent('keyup', { key: k })); } };
-    window.__botStats = { ticks: 0, brake: 0, boosts: 0 };
+    window.__botStats = { ticks: 0, brake: 0, boosts: 0, drifts: 0 }; const B = { hold: false, t0: 0, cool: 0 };
     clearInterval(window.__bot);
     window.__bot = setInterval(() => {
       const w = window.__RAD_GAME__.world; if (!w || w.player.finished) { ['ArrowLeft', 'ArrowRight', 'ArrowDown'].forEach((k) => set(k, false)); return; }
       const p = w.player, spd = Math.hypot(p.vx, p.vy);
       const tp = pointAt(w.track, p.sPrev + 150 + spd * 0.35);
-      const err = angleDiff(p.angle, Math.atan2(tp.y - p.y, tp.x - p.x));
+      const hd = p.drifting && spd > 50 ? Math.atan2(p.vy, p.vx) : p.angle; // v54.8: aim the travel, not the slid-out nose
+      const err = angleDiff(hd, Math.atan2(tp.y - p.y, tp.x - p.x));
       set('ArrowRight', err > 0.05); set('ArrowLeft', err < -0.05);
       const a1 = pointAt(w.track, p.sPrev + 60), a2 = pointAt(w.track, p.sPrev + 60 + spd * 0.55);
       const turn = Math.abs(angleDiff(Math.atan2(a1.ty, a1.tx), Math.atan2(a2.ty, a2.tx)));
-      set('ArrowDown', (turn > 0.75 && spd > 640) || (Math.abs(err) > 0.8 && spd > 480));
+      if (DRIFT) { // v54.8: DRIFT the big corners: hold Down from the entry (flick toward the corner) until it opens out
+        const T = w.race.time, tan = (q) => Math.atan2(q.ty, q.tx), ahead = angleDiff(tan(pointAt(w.track, p.sPrev + 80)), tan(pointAt(w.track, p.sPrev + 620))), rest = angleDiff(hd, tan(pointAt(w.track, p.sPrev + 260)));
+        if (!B.hold && T > B.cool && spd > 620 && Math.abs(ahead) > 0.65) { B.hold = true; B.t0 = T; B.dir = Math.sign(ahead); window.__botStats.drifts++; }
+        else if (B.hold && ((T - B.t0 > 700 && Math.abs(rest) < 0.3) || T - B.t0 > 3200 || (T - B.t0 > 400 && !p.drifting))) { B.hold = false; B.cool = T + 900; }
+        if (B.hold && T - B.t0 < 160) { set('ArrowRight', B.dir > 0); set('ArrowLeft', B.dir < 0); }
+        set('ArrowDown', B.hold);
+      } else set('ArrowDown', (turn > 0.75 && spd > 640) || (Math.abs(err) > 0.8 && spd > 480));
       window.__botStats.ticks++; if (held.has('ArrowDown')) window.__botStats.brake++;
     }, 30);
-  });
+  }, !!process.env.DRIFT);
 }
 const stopBot = () => page.evaluate(() => { clearInterval(window.__bot); ['ArrowLeft', 'ArrowRight', 'ArrowDown'].forEach((k) => window.dispatchEvent(new KeyboardEvent('keyup', { key: k }))); });
 const sample = () => page.evaluate(() => {
@@ -69,7 +76,7 @@ const sample = () => page.evaluate(() => {
   const info = g.getHudInfo(), A = self.__RAD_AUDIO__;
   return { t: w.race.time, lap: p.lap, lastLapMs: p.lastLapMs || 0, finished: p.finished, place: info.place, spd: Math.hypot(p.vx, p.vy), dist: p.dist,
     ai: w.cars.filter((c) => !c.isPlayer).map((c) => ({ d: c.dist, f: !!c.finished, s: Math.hypot(c.vx, c.vy) })),
-    orient, orientAI, drifting: !!p.drifting, drift01: +(p.drift01 || 0),
+    orient, orientAI, drifting: !!p.drifting, drift01: +(p.drift01 || 0), sliding: !!(self.__RAD_AUDIO__ && self.__RAD_AUDIO__.drift && self.__RAD_AUDIO__.drift.sliding),
     reveal: !!document.querySelector('#finish-reveal'), results: !!document.querySelector('#results'),
     music: A && A.music && A.music.cur ? A.music.cur.name : null, ctx: A && A.ctx ? A.ctx.state : null, voices: A ? A.voices : null,
     text: [...document.querySelectorAll('#app *')].filter((el) => { const r = el.getBoundingClientRect(), cs = getComputedStyle(el); return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none' && +cs.opacity > 0.05; }).map((el) => [...el.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join(' ')).join(' | ') };
@@ -79,7 +86,7 @@ let firstTap = true;
 for (let ti = 0; ti < TRACKS.length; ti++) {
   const name = TRACKS[ti];
   log(`\n=== ${name} · ${rk} ===`);
-  await page.evaluate(() => { self.__RAD_SFX_PLAYED__ && (self.__RAD_SFX_PLAYED__.length = 0); self.__RAD_SFX_LOG__.length = 0; });
+  await page.evaluate(() => { self.__RAD_SFX_PLAYED__ && (self.__RAD_SFX_PLAYED__.length = 0); self.__RAD_SFX_LOG__.length = 0; self.__RAD_DRIFT_FLARES__ = []; });
   await page.waitForSelector('[data-act=race]');
   await page.tap('[data-act=race]'); // real touch: unlocks the AudioContext on the first tap
   await page.waitForSelector('#tracks button');
@@ -95,7 +102,7 @@ for (let ti = 0; ti < TRACKS.length; ti++) {
   // frame timing over the whole race
   await page.evaluate(() => { window.__ft = []; window.__ftOn = true; let last = performance.now(); const f = (t) => { if (!window.__ftOn) return; window.__ft.push(t - last); last = t; requestAnimationFrame(f); }; requestAnimationFrame(f); });
   const t0 = Date.now();
-  let s = null, lapTimes = [], prevLap = 0, revealSeen = false, orientMax = 0, orientAIMax = 0, hint = '', shots = {}, musicMid = null, ctxMid = null, voicesMid = null, kbBoost = null, aiStart = null, aiMid = null, driftSeen = 0, driftMax = 0;
+  let s = null, lapTimes = [], prevLap = 0, revealSeen = false, orientMax = 0, orientAIMax = 0, hint = '', shots = {}, musicMid = null, ctxMid = null, voicesMid = null, kbBoost = null, aiStart = null, aiMid = null, driftSeen = 0, driftMax = 0, slideSeen = 0, slideOff = 0;
   while (Date.now() - t0 < 300000) {
     await sleep(200);
     try { s = await sample(); } catch (e) { continue; }
@@ -105,7 +112,7 @@ for (let ti = 0; ti < TRACKS.length; ti++) {
     if (s.lap > prevLap) { lapTimes.push(s.lastLapMs); prevLap = s.lap; }
     if (s.finished) continue;
     if (!aiStart && s.t > 500) aiStart = s.ai.map((a) => a.d);
-    if (s.drifting) driftSeen++; driftMax = Math.max(driftMax, s.drift01);
+    if (s.drifting) { driftSeen++; if (s.sliding) slideSeen++; } else if (s.sliding) slideOff++; driftMax = Math.max(driftMax, s.drift01);
     orientMax = Math.max(orientMax, s.orient); orientAIMax = Math.max(orientAIMax, s.orientAI);
     const m = s.text.match(KEY_HINT); if (m && !hint) hint = m[0];
     if (!shots.early && s.t > 7000) shots.early = await shot(`${name}-race-early`);
@@ -149,9 +156,18 @@ for (let ti = 0; ti < TRACKS.length; ti++) {
   check(musicMid === 'music_race' && ctxMid === 'running' && voicesMid, `mid race: music ${musicMid}, context ${ctxMid}, engine voices ${voicesMid}`);
   const audioMs = A.perf.frames ? A.perf.ms / A.perf.frames : 0;
   log(`    audio main-thread cost ${audioMs.toFixed(3)} ms/frame over ${A.perf.frames} frames`);
-  if (process.env.DRIFT) log(`    drift: drifting in ${driftSeen} samples, drift01 max ${driftMax.toFixed(2)}`);
+  let drift = null;
+  if (process.env.DRIFT) {
+    drift = await page.evaluate(() => ({ stats: window.__RAD_GAME__.world.driftStats, bot: window.__botStats.drifts, files: (self.__RAD_SFX_PLAYED__ || []).filter((x) => /^drift/.test(x.ev)).map((x) => x.ev + ':' + x.file), flares: (self.__RAD_DRIFT_FLARES__ || []).length, dirtyWhy: window.__RAD_GAME__.world.driftLog.filter((r) => !r.clean).map((r) => r.why || (r.wall ? 'wall' : '?')), cleanMs: window.__RAD_GAME__.world.driftLog.filter((r) => r.clean).map((r) => r.ms), fx: window.__RAD_GAME__.world.fxState.stats }));
+    const fc = (re) => drift.files.filter((x) => re.test(x)).length;
+    check(drift.stats.starts >= 3 && drift.stats.clean >= 1 && drift.stats.boosts >= 1, `DRIFT: ${drift.stats.starts} drifts (bot presses ${drift.bot}): ${drift.stats.clean} clean, ${drift.stats.dirty} dirty, ${drift.stats.boosts} mini-boosts (dirty: ${drift.dirtyWhy.join(',') || '-'}; clean ms ${drift.cleanMs.join('/')}); drifting in ${driftSeen} samples, drift01 max ${driftMax.toFixed(2)}`);
+    check(fc(/^driftStart:drift_start/) === drift.stats.starts && fc(/^driftEnd:drift_end/) === drift.stats.clean + drift.stats.dirty && fc(/^drift_boost:/) === drift.stats.boosts && !PL.some((x) => /handbrake/.test(x)),
+      `drift sounds started: drift_start×${fc(/^driftStart:drift_start/)} drift_end×${fc(/^driftEnd:drift_end/)} drift_boost×${fc(/^drift_boost:drift_boost/)} (+${fc(/^drift_boost:undefined/)} folded into a DOUBLE BOOST) drift_sparkle×${fc(/^drift_sparkle:/)} (no handbrake clip)`);
+    check(slideSeen >= driftSeen * 0.8 && slideOff <= 2, `held scrub layer (DriftVoice) on in ${slideSeen}/${driftSeen} drifting samples, on in ${slideOff} non-drifting`);
+    check(drift.flares >= drift.stats.starts && (drift.fx.driftSmoke || 0) > 0 && (drift.fx.driftStamps || 0) > 0, `GD art fired: button flare×${drift.flares}, drift smoke puffs ${drift.fx.driftSmoke || 0}, drift skid stamps ${drift.fx.driftStamps || 0}`);
+  }
   report.push({ track: name, renderer: rk, place: me ? me.place : null, finish: me ? fmt(me.finishTime) : null, laps: lapTimes.map(fmt), best: me ? fmt(me.bestLapMs) : null,
-    fps: +fps.toFixed(1), p5: +p5.toFixed(1), worstMs: +worst.toFixed(1), slow, audioMsPerFrame: +audioMs.toFixed(3), orient: +orientMax.toFixed(3), sfx: PL.length, music: musicMid, shots, driftSeen, driftMax });
+    fps: +fps.toFixed(1), p5: +p5.toFixed(1), worstMs: +worst.toFixed(1), slow, audioMsPerFrame: +audioMs.toFixed(3), orient: +orientMax.toFixed(3), sfx: PL.length, music: musicMid, shots, driftSeen, driftMax, drift });
   await page.evaluate(() => document.querySelector('#title')?.click());
   await sleep(600);
 }

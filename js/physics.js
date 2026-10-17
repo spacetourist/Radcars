@@ -53,6 +53,26 @@ export const DRIFT_CATCH_BETA = 0.42, DRIFT_CATCH_GAIN = 2.5, DRIFT_CENTRE_MUL =
  * catch gain, self-centring), then normal handling. Works with the Drift handling option on or off.
  */
 export const HB_GRIP = 3.5, HB_SPD_LO = 260, HB_SPD_HI = 520, HB_YAW_MUL = 1.15, HB_THROTTLE = 0.5, HB_DECEL = 150, HB_FLOOR = 300, HB_CATCH_MS = 380, HB_MAX_BETA = 0.95; // v54.5 'more slide': HB_GRIP 5→3.5, HB_MAX_BETA 0.75→0.95
+/**
+ * v54.8 DRIFT (player only; replaces the v54.4 HANDBRAKE on the same button / Down key). Hold DRIFT at speed
+ * (≥ DRIFT_MIN_SPD) with hard steer (|steer| ≥ DRIFT_ENTRY_STEER, measured against the direction of travel, so the
+ * touch ring and the arrow keys both work) and the car throws into a committed power slide toward that side:
+ *   - the slide angle (nose vs direction of travel) is HELD between DRIFT_BETA_MIN (20°) and DRIFT_BETA_MAX (45°):
+ *     steering harder into the slide opens it toward 45°, easing off / counter-steer closes it to 20°; it never spins;
+ *   - steering bends the line: the direction of travel turns at DRIFT_TURN_MUL × the normal turn rate (a drift takes a
+ *     corner a little tighter than gripping), and the slide scrubs DRIFT_SCRUB_LO..HI wu/s² (more at a wider angle) down
+ *     to DRIFT_FLOOR, with part throttle holding it near DRIFT_HOLD × top, so a long drift loses some speed, not a lot;
+ *   - release = a clean exit: the nose and the direction of travel meet in the middle over ~DRIFT_EXIT_TAU×3 (no scrub,
+ *     the slide's speed is kept), and game.js pays the v54.4 drift mini-boost when the drift lasted ≥ DB_MIN_MS;
+ *   - auto-straighten (clean: false, no boost): held longer than DRIFT_MAX_MS, any wall contact, or below DRIFT_EXIT_SPD.
+ * State on the car for the renderers / audio: car.drifting (true from the entry until the car has straightened),
+ * car.drift01 = clamp((angleDeg − 20) / 25, 0, 1) while drifting, car.driftDir (−1 left / +1 right),
+ * car.driftEv = { type: 'start', dir } | { type: 'end', clean, ms, avg01 } on the frame it happens (game.js → sfx()).
+ */
+export const DRIFT_MIN_SPD = 380, DRIFT_ENTRY_STEER = 0.4, DRIFT_BETA_MIN = 20 * Math.PI / 180, DRIFT_BETA_MAX = 45 * Math.PI / 180;
+export const DRIFT_TURN_MUL = 1.3, DRIFT_SCRUB_LO = 110, DRIFT_SCRUB_HI = 300, DRIFT_FLOOR = 360, DRIFT_HOLD = 0.88, DRIFT_THROTTLE = 0.55;
+export const DRIFT_MAX_MS = 4000, DRIFT_EXIT_SPD = 240, DRIFT_BETA_TAU = 0.12, DRIFT_ENTRY_TAU = 0.07, DRIFT_EXIT_TAU = 0.05, DRIFT_STRAIGHT = 4 * Math.PI / 180;
+export const drift01Of = (beta) => clamp((Math.abs(beta) * 180 / Math.PI - 20) / 25, 0, 1);
 export function driftGripAt(spd, top) {
   const t = clamp((spd - DRIFT_GRIP_SPD) / Math.max(1, top - DRIFT_GRIP_SPD), 0, 1), e = t * t * (3 - 2 * t);
   return DRIFT_GRIP_LOW + (DRIFT_GRIP_HIGH - DRIFT_GRIP_LOW) * e;
@@ -94,6 +114,9 @@ export function stepCar(car, ctl, dtMs, track) {
     steer = Math.abs(err) < 0.03 ? 0 : clamp(err / 0.6, -1, 1);
     if (vF < -20) steer = -steer; // reversing: rotate the nose the intuitive way
   }
+  // v54.8 DRIFT: its own step (steer / speed / slide angle), then the shared wall integration below
+  car.driftEv = null;
+  if (ctl.driftBtn != null || car.drifting) { if (stepDrift(car, ctl, dt)) { integrate(car, dt, track); if (car.drifting && car.driftSt && car.wallHit > 0) { car.driftSt.wall = true; endDrift(car, false, 'wall'); } return; } }
   const aSpd = Math.abs(vF);
   const turn = MAX_TURN * clamp(aSpd / 220, 0, 1) * (1 - 0.35 * clamp(aSpd / car.top, 0, 1));
   // wall assist (v54): for a moment after a hit, nudge the nose away from the wall (player input still wins)
@@ -164,7 +187,11 @@ export function stepCar(car, ctl, dtMs, track) {
   car.vx = fx * vF - fy * vL;
   car.vy = fy * vF + fx * vL;
 
-  // Integrate in small substeps with wall constraint against the centreline offset
+  integrate(car, dt, track);
+}
+
+/** Integrate in small substeps with the wall constraint against the centreline offset. */
+function integrate(car, dt, track) {
   const spd = Math.hypot(car.vx, car.vy);
   const steps = Math.max(1, Math.ceil((spd * dt) / 14));
   const sdt = dt / steps;
@@ -174,6 +201,80 @@ export function stepCar(car, ctl, dtMs, track) {
     car.y += car.vy * sdt;
     constrain(car, track);
   }
+}
+
+/** v54.8: end the slide. clean = released by the player; false = auto-straighten (held too long / wall / too slow). */
+function endDrift(car, clean, why = clean ? 'release' : 'auto') {
+  const d = car.driftSt; if (!d) return;
+  car.driftEv = { type: 'end', clean, ms: d.ms, avg01: d.ms > 0 ? d.sum01 / d.ms : 0, dir: d.dir, ang: Math.abs(d.ang), wall: d.wall, why };
+  car.driftSt = null; car.driftExit = true; // still `drifting` until the nose and the travel direction have met
+}
+
+/**
+ * v54.8 DRIFT step (player). Returns true when it moved the car's velocity / heading this frame (the normal steering,
+ * throttle and grip are then skipped), false to fall through to the normal handling.
+ */
+function stepDrift(car, ctl, dt) {
+  const want = !!ctl.driftBtn;
+  if (!want) car.driftArmed = true;
+  const sp = Math.hypot(car.vx, car.vy), tv = sp > 1 ? Math.atan2(car.vy, car.vx) : car.angle;
+  // steer against the direction of travel (touch ring: the aim; keys: the steer value)
+  let st = clamp(ctl.steer || 0, -1, 1);
+  if (ctl.aimAngle != null && Number.isFinite(ctl.aimAngle)) { const e = angleDiff(tv, ctl.aimAngle); st = Math.abs(e) < 0.03 ? 0 : clamp(e / 0.6, -1, 1); }
+  car.driftSteer = (car.driftSteer || 0) + (st - (car.driftSteer || 0)) * (1 - Math.exp(-dt / 0.12)); // "the recent steering"
+  let d = car.driftSt;
+  if (d) {
+    if (!want && !ctl.noDrift) { endDrift(car, true); d = null; }
+    else if (d.ms > DRIFT_MAX_MS || sp < DRIFT_EXIT_SPD || car.driftHoldMs > 0 || ctl.noDrift) {
+      const why = ctl.noDrift ? 'off' : car.driftHoldMs > 0 ? 'wall' : d.ms > DRIFT_MAX_MS ? 'held' : 'slow';
+      if (why === 'wall') d.wall = true;
+      endDrift(car, false, why); d = null;
+    }
+  }
+  if (!d && !car.driftExit && want && car.driftArmed && !ctl.noDrift && sp >= DRIFT_MIN_SPD && !(car.driftHoldMs > 0)) {
+    const s0 = Math.abs(st) >= Math.abs(car.driftSteer) ? st : car.driftSteer;
+    if (Math.abs(s0) >= DRIFT_ENTRY_STEER) {
+      const beta0 = angleDiff(tv, car.angle); // the slide angle it already has (signed, + = nose right of travel)
+      d = car.driftSt = { ms: 0, dir: Math.sign(s0), beta: Math.sign(s0) * Math.max(0, Math.sign(s0) * beta0), ang: 0, sum01: 0, wall: false };
+      car.driftArmed = false; car.drifting = true; car.driftDir = d.dir; car.driftExit = false;
+      car.driftEv = { type: 'start', dir: d.dir }; car.driftCount = (car.driftCount || 0) + 1;
+    }
+  }
+  if (d) {
+    d.ms += dt * 1000;
+    // the line: the direction of travel turns with the steer (a touch tighter than gripping)
+    const turn = MAX_TURN * clamp(sp / 220, 0, 1) * (1 - 0.35 * clamp(sp / car.top, 0, 1)) * DRIFT_TURN_MUL;
+    const w = st * turn, ntv = tv + w * dt;
+    // the held angle: into the slide opens it to 45°, easing off / counter-steer closes it to 20°
+    const into = clamp(st * d.dir, 0, 1), target = d.dir * (DRIFT_BETA_MIN + (DRIFT_BETA_MAX - DRIFT_BETA_MIN) * into);
+    const tau = Math.abs(d.beta) < DRIFT_BETA_MIN ? DRIFT_ENTRY_TAU : DRIFT_BETA_TAU;
+    d.beta += (target - d.beta) * (1 - Math.exp(-dt / tau));
+    const a0 = car.angle;
+    car.angle = normalizeAngle(ntv + d.beta); car.yawRate = w;
+    d.ang += angleDiff(a0, car.angle);
+    // speed: scrub by the angle, part throttle holds it near DRIFT_HOLD × top (boost still pushes)
+    const b = clamp(ctl.boost || 0, 0, CHAIN_RUSH_LVL), top = car.top * (1 + BOOST_TOP_MUL * b), k01 = drift01Of(d.beta);
+    let v = sp - (DRIFT_SCRUB_LO + (DRIFT_SCRUB_HI - DRIFT_SCRUB_LO) * k01) * dt * (b > 0.15 ? 0.3 : 1);
+    const hold = top * DRIFT_HOLD;
+    if (v < hold) v = Math.min(hold, v + throttleAccel(v, top, car.accel * (1 + BOOST_ACCEL_MUL * b)) * DRIFT_THROTTLE * dt);
+    v = Math.max(Math.min(sp, DRIFT_FLOOR), v);
+    car.vx = Math.cos(ntv) * v; car.vy = Math.sin(ntv) * v;
+    car.vLat = v * Math.sin(Math.abs(d.beta)); car.slideCapped = false;
+    car.drift01 = k01; d.sum01 += k01 * dt * 1000;
+    return true;
+  }
+  if (car.driftExit) {
+    // straighten: nose and travel direction meet in the middle, speed kept (the slingshot out of the corner)
+    const e = angleDiff(tv, car.angle), k = 1 - Math.exp(-dt / DRIFT_EXIT_TAU);
+    const ntv = tv + e * 0.5 * k; car.angle = normalizeAngle(car.angle - e * 0.5 * k); car.yawRate = 0;
+    car.vx = Math.cos(ntv) * sp; car.vy = Math.sin(ntv) * sp;
+    const left = Math.abs(angleDiff(ntv, car.angle));
+    car.vLat = sp * Math.sin(left); car.drift01 = drift01Of(left);
+    if (left < DRIFT_STRAIGHT || sp < 60) { car.driftExit = false; car.drifting = false; car.drift01 = 0; }
+    return true;
+  }
+  car.drifting = false; car.drift01 = 0;
+  return false;
 }
 
 /** Keep the car between the two parallel walls and update progress. */

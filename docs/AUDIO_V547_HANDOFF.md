@@ -2,6 +2,8 @@
 
 Audio Engineer · 7 Oct 2026 · for Pep / Developer, Callum signs off. **Nothing in `js/` was touched and nothing is committed.** This doc is the whole contract between the audio files and the game: every file, every hook, every gain, and how to load it with plain Web Audio. The reference implementation is `assets/audio/_src/audio-engine.mjs` (plain ES module, no build step, no dependencies), and the sign-off preview was rendered through exactly that code with exactly these files.
 
+> **v54.8 DRIFT update:** `handbrake` is retired (`driftStart` / `driftEnd` + a held slide layer replace it), `engineFrame` gains `drifting` / `drift01`, and some clips and engine loops were re-encoded to stay within 150 KB. Where this doc differs, `docs/AUDIO_V548_DRIFT.md` wins.
+
 **Sign-off preview:** `/workspace/radcars-audio/previews/video/v547/v547_full_race.mp4` (62.5 s, timeline in §10).
 
 ## 1. What changed in v54.7, and why (measured)

@@ -1,0 +1,12 @@
+v54.8 · drift pixi neon: 59.9 fps avg, p5 59.9, worst 33.3 ms, 1/900 frames > 25 ms, 1 drifts
+v54.8 · drift pixi gridlock: 57.7 fps avg, p5 59.5, worst 33.4 ms, 34/867 frames > 25 ms, 10 drifts
+v54.8 · drift pixi razor: 57.1 fps avg, p5 30.1, worst 50.1 ms, 43/856 frames > 25 ms, 3 drifts
+v54.8 · drift pixi cargo: 59.9 fps avg, p5 59.5, worst 33.4 ms, 2/899 frames > 25 ms, 5 drifts
+v54.8 · drift pixi neon: 59.9 fps avg, p5 59.5, worst 33.4 ms, 1/899 frames > 25 ms, 1 drifts
+v54.8 · drift pixi gridlock: 58.5 fps avg, p5 59.5, worst 33.4 ms, 22/878 frames > 25 ms, 10 drifts
+v54.8 · drift pixi razor: 59.9 fps avg, p5 59.9, worst 33.4 ms, 2/899 frames > 25 ms, 3 drifts
+v54.8 · drift pixi cargo: 59.9 fps avg, p5 59.5, worst 33.3 ms, 2/899 frames > 25 ms, 6 drifts
+v54.8 · drift canvas neon: 59.9 fps avg, p5 59.9, worst 33.3 ms, 2/898 frames > 25 ms, 1 drifts
+v54.8 · drift canvas gridlock: 58.5 fps avg, p5 59.5, worst 50 ms, 22/877 frames > 25 ms, 10 drifts
+v54.8 · drift canvas razor: 59 fps avg, p5 59.5, worst 33.4 ms, 15/885 frames > 25 ms, 3 drifts
+v54.8 · drift canvas cargo: 58.2 fps avg, p5 59.5, worst 33.4 ms, 27/874 frames > 25 ms, 6 drifts

@@ -1,13 +1,17 @@
 /**
  * Radcars — sample-based audio reference implementation (v54 engine/squeal/walls/boost + v55 set + v54.6 boostChain
- * + v54.7 sound release: one-shot sprite, top-gear rpm fix, DOUBLE BOOST engine rush, squeal lift at full slip).
- * Hook map, gains and loading recipe for the game: docs/AUDIO_V547_HANDOFF.md.
+ * + v54.7 sound release: one-shot sprite, top-gear rpm fix, DOUBLE BOOST engine rush, squeal lift at full slip
+ * + v54.8 DRIFT: driftStart / driftEnd one-shots, the held power-slide layer (DriftVoice), the clutch-kick rev flare and
+ *   wheelspin on the engine, the cornering squeal ducked while drifting; 'handbrake' retired).
+ * Hook map, gains and loading recipe for the game: docs/AUDIO_V547_HANDOFF.md, DRIFT additions: docs/AUDIO_V548_DRIFT.md.
  * Supersedes the oscillator recipes in audio-recipes.mjs (kept only for history; do not ship them).
  *
  * Plain ES module, no build step, no dependencies. Everything plays decoded AudioBuffers from assets/audio/:
  *   engine  = 3 on-load loops (idle / low / high) + 2 off-load loops, AudioBufferSourceNode.loop with loopStart/loopEnd,
  *             equal-power crossfaded by a fake RPM, playbackRate inside each band (docs/ENGINE_NOTE_SPEC.md)
  *   squeal  = 1 recorded tyre-squeal loop, gain + rate from slip01
+ *   drift   = (v54.8) the held power slide: the squeal loop (smooth layer) + a recorded burnout loop (gritty layer),
+ *             crossfaded and brightened by drift01
  *   one-shots = recorded impacts / whoosh / rocket / explosion / chime / door-slam, 2–3 variants where it matters
  *   warn    = a recorded reversing-alarm beep, looped and gated per pulse on the agreed v55 timing
  *   music   = chiptune race loop / menu loop / finish sting on its own bus, ducked under heavy SFX and the engine (rev 4, v54.4)
@@ -22,9 +26,11 @@ function chain(...n) { for (let i = 0; i < n.length - 1; i++) n[i].connect(n[i +
 
 // ------------------------------------------------------------------ files
 /**
- * v54.7 shipped files (48 kHz mono; .ogg = Opus, .m4a = AAC-LC fallback):
- *   loops   eng_idle / eng_low / eng_high / eng_off_low / eng_off_high / squeal (.ogg Opus 56 kbps, .m4a AAC 80 kbps), warn_loop
+ * v54.8 shipped files (48 kHz mono; .ogg = Opus, .m4a = AAC-LC fallback):
+ *   loops   eng_idle / eng_low / eng_high / eng_off_low / eng_off_high / squeal / drift_scrub (v54.8)
+ *           (.ogg Opus 36–56 kbps VBR, 40 ms frames; .m4a AAC 80 kbps), warn_loop
  *   sprite  sfx_sprite.ogg (Opus, per-clip rate 20–56 kbps) + sfx_sprite.m4a (AAC 64 kbps) + sfx_sprite.json {name: {start, duration}}
+ *           (v54.8: 'handbrake' clip removed, 'drift_start' + 'drift_end' added; 30 clips, 21.12 s)
  *           every one-shot below lives in the sprite (100 ms digital-silence guards; duration includes a 30 ms silent pad)
  *   music   music_race / music_menu / music_finish (unchanged since v54.4)
  * Loops carry loopStart/loopEnd in seconds (exact sample/48000; both are rising zero crossings, and the file already
@@ -37,6 +43,8 @@ export const LOOPS = {
   eng_off_low:  { loopStart: 0.05, loopEnd: 1.036312, rpm: 2428, firingHz: 80.94,  src: 'Chippy569 190E 21_2500 (no load)' },
   eng_off_high: { loopStart: 0.05, loopEnd: 1.040896, rpm: 6295, firingHz: 209.84, src: 'Chippy569 190E 21_6500 (no load)' },
   squeal:       { loopStart: 0.05, loopEnd: 1.050271, baseHz: 941,  src: 'audible-edge Chrysler LHS tire squeal 04' },
+  // v54.8 DRIFT gritty layer: 7 tyre-hop chatter periods (121.5 ms each) of a real burnout, samples 2400 → 43059 (0.847063 s)
+  drift_scrub:  { loopStart: 0.05, loopEnd: 0.897063, baseHz: 1600, chatterHz: 8.23, src: 'audible-edge Nissan Maxima burnout (71740)' },
   warn_loop:    { loopStart: 0.02, loopEnd: 0.140354, baseHz: 1437.8, src: 'C-V backing up beep (truck reversing alarm)' }
 };
 /** One-shots: event → variants, bus, base gain, max simultaneous voices. */
@@ -53,8 +61,14 @@ export const SHOTS = {
   explosion:      { files: ['explosion'], bus: 'sfx', gain: 1.0, cap: 3 },
   pickup:         { files: ['pickup'], bus: 'sfx', gain: 0.6, cap: 1 },
   barge:          { files: ['barge_1', 'barge_2'], bus: 'sfx', gain: 0.85, cap: 2 },
-  // v54.4: recorded handbrake + drift boost; chip-styled UI / race-flow cues in the soundtrack's key (A minor)
-  handbrake:      { files: ['handbrake'], bus: 'sfx', gain: 0.8, cap: 1 },
+  // v54.8 DRIFT (replaces 'handbrake'): the tyre bite on the press (+ the live engine rev flare, playDriftStart) and the
+  // grip-catch chirp on release / auto-straighten (playDriftEnd). Both recorded (elliottdj 'Skrrt' 685910 + 71740 grit).
+  driftStart:     { files: ['drift_start'], bus: 'sfx', gain: 0.9, cap: 1 },
+  driftEnd:       { files: ['drift_end'], bus: 'sfx', gain: 1.0, cap: 2 },
+  // @deprecated v54.4 'handbrake' (clip retired in v54.8): kept only so an old sfx('handbrake') call still makes a sound
+  // until game.js switches to sfx('driftStart', {dir}). Plays the driftStart bite centred, without the rev flare.
+  handbrake:      { files: ['drift_start'], bus: 'sfx', gain: 0.9, cap: 1 },
+  // v54.4: recorded drift boost; chip-styled UI / race-flow cues in the soundtrack's key (A minor)
   drift_boost:    { files: ['drift_boost'], bus: 'sfx', gain: 0.7, cap: 1 },
   drift_sparkle:  { files: ['drift_sparkle'], bus: 'sfx', gain: 0.55, cap: 1 },
   click:          { files: ['ui_click'], bus: 'ui', gain: 0.6, cap: 2 },
@@ -266,6 +280,11 @@ export const ENGINE = {
   boostShelfDb: 4,      // high-shelf (2.5 kHz) +4 dB × boostEnv: brighter, raspier while boosting
   // v54.7 DOUBLE BOOST rush: boostLevel above 1 (CHAIN_RUSH_LVL 1.35 for 1.2 s) → chainK = (boostLevel − 1) / 0.35, smoothed
   chainSpan: 0.35, chainRpm: 0.07, chainRate: 0.03, chainShelfDb: 2, chainVol: 0.10, chainTau: 0.03,
+  // v54.8 DRIFT. Clutch kick on the press (driftKick): playbackRate × 2^(kickSt·k/12), gain × dB(kickDb·k), shelf +kickShelfDb·k,
+  // k = 0 → 1 in kickAttackS, held to kickHoldS, then exp decay τ kickTau (≈ 250 ms of flare in all, ≈ +3 st at its peak).
+  // Wheelspin while drifting: +rpm01 driftRpm · (0.6 + 0.4·drift01) and level × (1 + driftVol), smoothed τ driftTau.
+  kickSt: 3, kickDb: 2.5, kickShelfDb: 2, kickAttackS: 0.025, kickHoldS: 0.12, kickTau: 0.06,
+  driftRpm: 0.06, driftVol: 0.12, driftTau: 0.08,
   brakeCutoff: 1800,    // lowpass when fully off-load (load 0); 12 kHz on load
   tauRate: 0.05, tauShift: 0.025, tauGain: 0.06, tauAccel: 0.12,
   rivalPitch: [1.0, 0.94, 1.05, 0.97, 1.08, 0.91, 1.03, 0.99]
@@ -315,7 +334,7 @@ export class SampleEngineVoice {
   constructor(ctx, out, buffers, { quality = 'full', pitchMul = 1, t0 = ctx.currentTime } = {}) {
     this.ctx = ctx; this.q = quality; this.pitchMul = pitchMul;
     this.gear = 0; this.prevS = 0; this.accel = 0; this.boostEnv = 0; this.chainEnv = 0; this.edge = new BoostEdge(); this.boostStart = -1e9; this.dipUntil = -1; this.lastT = null;
-    this.distGain = 1; this.lastLoad = 1;
+    this.distGain = 1; this.lastLoad = 1; this.kickStart = -1e9; this.driftEnv = 0;
     this.out = gain(ctx, 0);
     this.pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
     let head = this.out;
@@ -336,11 +355,20 @@ export class SampleEngineVoice {
     this.off = quality === 'full' ? Object.values(ENGINE.offBands).map(mk) : [];
     if (this.pan) chain(this.out, this.pan, out); else this.out.connect(out);
   }
+  /** v54.8: the DRIFT press 'clutch kick' (called by playDriftStart): a ≈250 ms rev flare of ≈ +3 st on top of whatever the rpm is. */
+  driftKick(t = this.ctx.currentTime) { this.kickStart = t; }
+  /** Flare amount 0..1 at time t (rise kickAttackS, hold to kickHoldS, then exp decay τ kickTau). */
+  kickK(t) {
+    const E = ENGINE, d = t - this.kickStart;
+    if (d < 0 || d > E.kickHoldS + 6 * E.kickTau) return 0;
+    return d < E.kickAttackS ? d / E.kickAttackS : d < E.kickHoldS ? 1 : Math.exp(-(d - E.kickHoldS) / E.kickTau);
+  }
   /**
    * speed01 0..1.4, boostLevel 0..1.35 (rampBoost; > 1 only during the DOUBLE BOOST rush), slip01 (unused here),
-   * t = audio time of this frame. Returns state; state.edge === 'off' is the cue for the 'boost_end' one-shot (game.js never fires it).
+   * t = audio time of this frame, drift = (v54.8) { drifting, drift01 } from the engineFrame params (optional).
+   * Returns state; state.edge === 'off' is the cue for the 'boost_end' one-shot (game.js never fires it).
    */
-  update(speed01, boostLevel = 0, slip01 = 0, t = this.ctx.currentTime) {
+  update(speed01, boostLevel = 0, slip01 = 0, t = this.ctx.currentTime, drift = null) {
     const E = ENGINE, s = clamp(speed01 || 0, 0, 1.4);
     const dt = this.lastT == null ? 1 / 60 : clamp(t - this.lastT, 1 / 240, 0.1); this.lastT = t;
     const a = (s - this.prevS) / dt; this.prevS = s;
@@ -350,12 +378,16 @@ export class SampleEngineVoice {
     const edge = this.edge.update(lvl); if (edge === 'on') this.boostStart = t;
     this.boostEnv += (lvl - this.boostEnv) * (1 - Math.exp(-dt / E.boostTau));
     this.chainEnv += (chainK - this.chainEnv) * (1 - Math.exp(-dt / E.chainTau));
+    const dTarget = drift && drift.drifting ? 0.6 + 0.4 * clamp(drift.drift01 || 0, 0, 1) : 0;
+    this.driftEnv += (dTarget - this.driftEnv) * (1 - Math.exp(-dt / E.driftTau));
+    const kk = this.kickK(t);
     const kick = t - this.boostStart < E.boostKickS && lvl > BOOST_EDGE.off ? E.boostKick - E.boostHold : 0;
     const g = gearFor(s, this.gear), shifted = g !== this.gear;
     if (g > this.gear) this.dipUntil = t + E.shiftDipS;
     this.gear = g;
-    const rpm01 = rpmFor(s, g) + this.boostEnv * E.boostHold + kick + this.chainEnv * E.chainRpm, rpm = rpmOf(rpm01);
-    const tr = shifted || kick ? E.tauShift : E.tauRate, push = 1 + E.boostRate * this.boostEnv + E.chainRate * this.chainEnv;
+    const rpm01 = rpmFor(s, g) + this.boostEnv * E.boostHold + kick + this.chainEnv * E.chainRpm + this.driftEnv * E.driftRpm, rpm = rpmOf(rpm01);
+    const tr = shifted || kick || kk > 0 ? E.tauShift : E.tauRate;
+    const push = (1 + E.boostRate * this.boostEnv + E.chainRate * this.chainEnv) * Math.pow(2, (E.kickSt * kk) / 12);
     const set = (v, on) => {
       const w = bandWeight(v.band.fade, rpm) * on;
       v.g.gain.setTargetAtTime(w, t, E.tauGain);
@@ -367,13 +399,14 @@ export class SampleEngineVoice {
     for (const v of this.on) set(v, v.band.loop === 'eng_idle' ? 1 : onW);
     for (const v of this.off) set(v, offW);
     const dip = t < this.dipUntil ? E.shiftDipGain : 1;
-    this.out.gain.setTargetAtTime(engineVol(s, load, this.boostEnv) * (1 + E.chainVol * this.chainEnv) * dip * this.distGain, t, dip < 1 ? 0.012 : E.tauGain);
+    const dv = (1 + E.driftVol * clamp(this.driftEnv / 0.6, 0, 1)) * dB(E.kickDb * kk);
+    this.out.gain.setTargetAtTime(engineVol(s, load, this.boostEnv) * (1 + E.chainVol * this.chainEnv) * dv * dip * this.distGain, t, dip < 1 ? 0.012 : kk > 0 ? E.tauShift : E.tauGain);
     if (this.lp) {
       this.lp.frequency.setTargetAtTime(E.brakeCutoff + (12000 - E.brakeCutoff) * load * load, t, 0.08);
-      this.shelf.gain.setTargetAtTime(E.boostShelfDb * this.boostEnv + E.chainShelfDb * this.chainEnv, t, 0.05);
+      this.shelf.gain.setTargetAtTime(E.boostShelfDb * this.boostEnv + E.chainShelfDb * this.chainEnv + E.kickShelfDb * kk, t, 0.05);
     }
     this.lastLoad = load;
-    return { gear: g, rpm01, rpm, load, edge, chain: this.chainEnv };
+    return { gear: g, rpm01, rpm, load, edge, chain: this.chainEnv, kick: kk, drift: this.driftEnv };
   }
   place(distGain, pan, t = this.ctx.currentTime) { this.distGain = distGain; if (this.pan) this.pan.pan.setTargetAtTime(pan, t, 0.05); }
   stop(t = this.ctx.currentTime) { this.out.gain.setTargetAtTime(0, t, 0.05); for (const v of [...this.on, ...this.off]) v.s.stop(t + 0.4); }
@@ -400,21 +433,28 @@ export const RIVAL_VOICES = 3;
  * Pitch: playbackRate 0.92 → 1.12 across slip01 0.22 → 1.0.
  */
 export const SQUEAL = { on: 0.22, off: 0.15, minSpeed: 0.25, offSpeed: 0.18, lo: 0.22, hi: 0.8, trim: 1.0, attackTau: 0.02, releaseTau: 0.06, rate0: 0.92, rateSpan: 0.20, rateTau: 0.06,
-  topDb: 3, topLo: 0.8 };   // v54.7: +3 dB more from slip 0.8 → 1.0 (handbrake slide / spins), so the squeal tops the engine there
+  topDb: 3, topLo: 0.8,     // v54.7: +3 dB more from slip 0.8 → 1.0 (slides / spins), so the squeal tops the engine there
+  driftDuckDb: -18 };       // v54.8: while `drifting` the cornering squeal sits −18 dB under (DriftVoice carries the tyres), same 40/150 ms shape
 /** Squeal gain (before the bus) for a given slip01, ignoring the gate. */
 export const squealGain = (slip01) => SQUEAL.trim * smooth(SQUEAL.lo, SQUEAL.hi, slip01) * (1 + (dB(SQUEAL.topDb) - 1) * smooth(SQUEAL.topLo, 1, slip01));
 export const squealRate = (slip01) => SQUEAL.rate0 + SQUEAL.rateSpan * clamp((slip01 - SQUEAL.lo) / (1 - SQUEAL.lo), 0, 1);
 export class SquealVoice {
   constructor(ctx, out, buffers, t0 = ctx.currentTime) {
-    this.ctx = ctx; this.on = false; this.target = 0; this.out = gain(ctx, 0);
+    this.ctx = ctx; this.on = false; this.target = 0; this.ducked = false; this.out = gain(ctx, 0); this.duckG = gain(ctx, 1);
     const L = LOOPS.squeal; this.s = ctx.createBufferSource(); this.s.buffer = buffers.squeal; this.s.loop = true; this.s.loopStart = L.loopStart; this.s.loopEnd = L.loopEnd;
-    chain(this.s, this.out, out); this.s.start(t0, L.loopStart);
+    chain(this.s, this.out, this.duckG, out); this.s.start(t0, L.loopStart);
   }
-  /** Call every frame. Returns the on/off flag (share it with skid smoke and skid marks). */
-  update(speed01, slip01, t = this.ctx.currentTime) {
+  /**
+   * Call every frame. Returns the on/off flag (skid smoke / marks = this flag OR drifting).
+   * v54.8: drifting = true ducks the squeal by SQUEAL.driftDuckDb (attack τ 13 ms ≈ 40 ms, release τ 50 ms ≈ 150 ms, the
+   * same shape as DriftVoice), so the two tyre layers hand over instead of stacking. Keyed on `drifting`, not drift01 > 0:
+   * a 20° slide is drift01 0 and still a drift.
+   */
+  update(speed01, slip01, t = this.ctx.currentTime, drifting = false) {
     const S = SQUEAL, sl = clamp(slip01 || 0, 0, 1);
     if (!this.on && sl > S.on && speed01 > S.minSpeed) this.on = true;
     else if (this.on && (sl < S.off || speed01 < S.offSpeed)) this.on = false;
+    if (!!drifting !== this.ducked) { this.ducked = !!drifting; this.duckG.gain.setTargetAtTime(drifting ? dB(S.driftDuckDb) : 1, t, drifting ? DRIFT.attackTau : DRIFT.releaseTau); }
     const target = this.on ? squealGain(sl) : 0;
     this.out.gain.setTargetAtTime(target, t, target > this.target ? S.attackTau : S.releaseTau);
     this.target = target;
@@ -422,6 +462,97 @@ export class SquealVoice {
     return this.on;
   }
   stop(t = this.ctx.currentTime) { this.out.gain.setTargetAtTime(0, t, 0.03); this.s.stop(t + 0.3); }
+}
+
+// ------------------------------------------------------------------ v54.8 DRIFT: the held power slide
+/**
+ * Developer's DRIFT (v54.8, replaces HANDBRAKE): pressing DRIFT throws the car into a committed power slide toward the recent
+ * steering; the slide angle is held between 20° and 45° and never spins; release straightens up. The car also auto-straightens
+ * if DRIFT is held too long or the slide reaches a wall: the game treats that exactly like a release with clean = false.
+ * The game passes, in the engineFrame params, every frame:
+ *   drifting  true from the DRIFT press until the car has straightened (the DRIFT state; the gate for everything below)
+ *   drift01   clamp((angleDeg − 20) / 25, 0, 1) while drifting, 0 when not  → driftAmount(angleDeg) computes it
+ * drift01 0 is a 20° slide, which is already a full drift, so the slide layer is clearly there at drift01 0 and only gets
+ * heavier, rougher and brighter toward 1 (45°). Two recorded loops, crossfaded by drift01:
+ *   smooth = the squeal loop (audible-edge Chrysler squeal) played lower (rate 0.86 → 0.92: 809 → 866 Hz, heavier than the
+ *            cornering squeal's 0.92 → 1.12), 0 dB at drift01 0 → −6 dB at 1
+ *   grit   = drift_scrub, a real burnout (71740) chattering at 8.2 Hz, rate 0.86 → 0.98 (1.38 → 1.57 kHz, chatter 7.1 → 8.1 Hz),
+ *            lowpass 4 → 14 kHz (exponential), −5 dB at drift01 0 → 0 dB at 1
+ * Envelope on `drifting`: attack τ 13 ms (≈ 40 ms to full), release τ 50 ms (≈ 150 ms to −26 dB). While drifting the cornering
+ * squeal is ducked −18 dB (SquealVoice.update(..., drifting)). Skid smoke / marks: squealOn || drifting.
+ * Level (trim 1, measured, phone band, over the engine at the same speed): see docs/AUDIO_V548_DRIFT.md §5.
+ */
+export const DRIFT = {
+  angleMin: 20, angleSpan: 25,
+  // trim 1.41 (+3 dB): drift01 0 sits level with the (wheelspinning) engine on a phone, drift01 1 ≈ +3 dB over it (measured)
+  trim: 1.41, attackTau: 0.013, releaseTau: 0.05, mixTau: 0.06,
+  smoothDb: [0, -6], gritDb: [-5, 1], smoothRate: [0.86, 0.92], gritRate: [0.86, 0.98], gritLp: [4000, 14000],
+  panMax: 0.12, minSpeed: 0.1, fullSpeed: 0.3,
+  // one-shots: driftStart leans up to 0.25 toward the slide side; driftEnd clean = brighter (+1 st, full band),
+  // not clean (auto-straighten / wall) = duller (−1 st, lowpass 4.5 kHz) and a little quieter
+  startPan: 0.25, startRate: [0.97, 1.03],
+  endClean: { rate: 1.06, gain: 1.0, lp: 0 }, endDirty: { rate: 0.94, gain: 0.8, lp: 4500 }
+};
+/** drift01 from the slide angle in degrees (Developer computes it the same way). */
+export const driftAmount = (angleDeg) => clamp((Math.abs(angleDeg || 0) - DRIFT.angleMin) / DRIFT.angleSpan, 0, 1);
+/** Layer settings for a given drift01 (gains are before the voice trim and the engine bus). */
+export function driftLayers(drift01) {
+  const D = DRIFT, d = clamp(drift01 || 0, 0, 1), lerp = (a) => a[0] + (a[1] - a[0]) * d;
+  return { smooth: dB(lerp(D.smoothDb)), grit: dB(lerp(D.gritDb)), smoothRate: lerp(D.smoothRate), gritRate: lerp(D.gritRate),
+    gritLp: D.gritLp[0] * Math.pow(D.gritLp[1] / D.gritLp[0], d) };
+}
+export class DriftVoice {
+  constructor(ctx, out, buffers, t0 = ctx.currentTime) {
+    this.ctx = ctx; this.on = false; this.was = false; this.target = 0;
+    const mk = (name, off) => { const L = LOOPS[name], s = ctx.createBufferSource(); s.buffer = buffers[name]; s.loop = true; s.loopStart = L.loopStart; s.loopEnd = L.loopEnd; s.start(t0, L.loopStart + off * (L.loopEnd - L.loopStart)); return s; };
+    // the smooth layer starts 43 % into the squeal loop so it never phase-locks with the (ducked) SquealVoice
+    this.sS = mk('squeal', 0.43); this.sG = mk('drift_scrub', 0);
+    const L0 = driftLayers(0);
+    this.gS = gain(ctx, L0.smooth); this.gG = gain(ctx, L0.grit); this.lp = filt(ctx, 'lowpass', L0.gritLp, 0.707);
+    this.sS.playbackRate.value = L0.smoothRate; this.sG.playbackRate.value = L0.gritRate;
+    this.env = gain(ctx, 0); this.pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+    chain(this.sS, this.gS, this.env); chain(this.sG, this.lp, this.gG, this.env);
+    if (this.pan) chain(this.env, this.pan, out); else this.env.connect(out);
+  }
+  /** dir −1 / +1 from sfx('driftStart', {dir}): the held layer leans DRIFT.panMax toward the slide side. */
+  setDir(dir, t = this.ctx.currentTime) { if (this.pan) this.pan.pan.setTargetAtTime(clamp(dir || 0, -1, 1) * DRIFT.panMax, t, 0.05); }
+  /** Call every frame. Returns true while the slide layer sounds (OR it with the squeal flag for smoke / marks). */
+  update(speed01, drifting, drift01, t = this.ctx.currentTime) {
+    const D = DRIFT, sp = smooth(D.minSpeed, D.fullSpeed, speed01 || 0), press = !!drifting && !this.was;
+    this.was = !!drifting; this.on = !!drifting && sp > 0;
+    const target = this.on ? D.trim * sp : 0;
+    if (target !== this.target) { this.env.gain.setTargetAtTime(target, t, target > this.target ? D.attackTau : D.releaseTau); this.target = target; }
+    if (drifting) {   // on the press the balance jumps to the current drift01; while held it glides (τ 60 ms); on release it holds
+      const L = driftLayers(drift01), set = (p, v) => { if (press) { p.cancelScheduledValues(t); p.setValueAtTime(v, t); } else p.setTargetAtTime(v, t, D.mixTau); };
+      set(this.gS.gain, L.smooth); set(this.gG.gain, L.grit); set(this.sS.playbackRate, L.smoothRate); set(this.sG.playbackRate, L.gritRate); set(this.lp.frequency, L.gritLp);
+    }
+    return this.on;
+  }
+  stop(t = this.ctx.currentTime) { this.env.gain.setTargetAtTime(0, t, 0.03); this.sS.stop(t + 0.3); this.sG.stop(t + 0.3); }
+}
+/** sfx('driftStart', {dir}): params for the bite one-shot (small random pitch, pan toward the slide side). */
+export const driftStartParams = (dir = 0, rand = Math.random) => ({ gain: 1, rate: DRIFT.startRate[0] + rand() * (DRIFT.startRate[1] - DRIFT.startRate[0]), pan: clamp(dir || 0, -1, 1) * DRIFT.startPan });
+/** sfx('driftEnd', {clean}): clean = brighter grip-catch chirp; clean false (auto-straighten / wall) = duller, quieter. */
+export function driftEndParams(clean = true, rand = Math.random) {
+  const p = clean ? DRIFT.endClean : DRIFT.endDirty;
+  return { gain: p.gain, rate: p.rate * (0.985 + rand() * 0.03), lp: p.lp || undefined };
+}
+/**
+ * The DRIFT press: the bite one-shot + the engine's clutch-kick rev flare (+3 st for ≈250 ms on the live rpm) + the held
+ * layer's pan. voices = { shots, eng, drift } (eng / drift optional). No music duck.
+ */
+export function playDriftStart(voices, { dir = 0 } = {}, t = voices.shots.ctx.currentTime) {
+  const p = driftStartParams(dir, voices.shots.rand);
+  voices.shots.play('driftStart', { t, gain: p.gain, rate: p.rate, pan: p.pan });
+  if (voices.eng) voices.eng.driftKick(t);
+  if (voices.drift) voices.drift.setDir(dir, t);
+  return p;
+}
+/** The DRIFT release (or auto-straighten, clean false): the grip-catch chirp. A clean drift's sfx('driftBoost') follows as before. */
+export function playDriftEnd(voices, { clean = true } = {}, t = voices.shots.ctx.currentTime) {
+  const p = driftEndParams(clean, voices.shots.rand);
+  voices.shots.play('driftEnd', { t, gain: p.gain, rate: p.rate, lp: p.lp });
+  return p;
 }
 
 // ------------------------------------------------------------------ one-shots
@@ -481,7 +612,7 @@ export function playBoostChain(shots, mix, t = shots.ctx.currentTime) {
   if (mix.duckMusic) mix.duckMusic(MUSIC_MIX.chainDb, MUSIC_MIX.chainHoldS, t);
   return v;
 }
-/** sfx('handbrake'): small random pitch so repeated yanks don't machine-gun. */
+/** @deprecated v54.4 sfx('handbrake') (retired in v54.8 by DRIFT): now plays the driftStart bite centred; use playDriftStart. */
 export const handbrakeParams = (rand = Math.random) => ({ name: 'handbrake', gain: 1, rate: 0.97 + rand() * 0.06 });
 /** Wall: strength from car.wallHit; trigger > 200; heavy at ≥ 0.6; 150 ms per-car cooldown is the caller's. */
 export const WALL = { min: 200, span: 700, heavy: 0.6, cooldownMs: 150 };

@@ -4,7 +4,7 @@
  */
 import { getLayout } from './controls.js';
 import { CAR_LEN, CAR_WID } from './physics.js';
-import { partLook, boostRingK, chainK, chainFlash, streakBand, CHAIN_FLAME_MUL } from './fx.js';
+import { partLook, boostRingK, chainK, chainFlash, streakBand, CHAIN_FLAME_MUL, loadDriftAtlas } from './fx.js';
 import { pointAt, buildStartingGrid } from './tracks.js';
 import { TROPHY, trophyScale, ringState, partAlpha, trophyAnchor, outFade, PLACE_TEXT_Y } from './celebrate.js';
 import { styleFor, carSprite, shadowSprite, scaleBucket, textureTile, SPRITE_W, SPRITE_H, TOY_FONT } from './toyart.js';
@@ -353,13 +353,22 @@ export function createRenderer(canvas, opts = {}) {
    */
   /** v54 feel particles, Canvas fallback: plain strokes / arcs (no atlas), same state + timing as the Pixi version. */
   const hex = (n) => '#' + (n >>> 0).toString(16).padStart(6, '0');
+  let driftAtlas = null; // v54.8 GD drift smoke frames (loaded on the first race frame)
   function drawFeelParts(fx, screen, zoom = 1) {
+    if (!driftAtlas) { const pr = loadDriftAtlas(); if (pr) { driftAtlas = { pending: true }; pr.then((a) => { driftAtlas = a || { failed: true }; }); } }
     ctx.save();
     const ringK = boostRingK(zoom, W, H, 115);
     for (const o of fx.parts) {
       if (!!o.scr !== screen) continue;
       const lk = partLook(o); if (lk.alpha <= 0) continue;
       ctx.globalAlpha = lk.alpha;
+      if (o.k === 'drift') { // v54.8 drift puff: atlas frame (normal blend), visible size ≈ 28 → 88 wu
+        ctx.globalCompositeOperation = 'source-over';
+        const f = driftAtlas && driftAtlas.meta && driftAtlas.meta.frames['drift_smoke_' + (o.frame || 0)];
+        if (f) { const sz = 256 * lk.scale; ctx.save(); ctx.translate(o.x, o.y); ctx.rotate(o.rot || 0); ctx.drawImage(driftAtlas.img, f.frame.x, f.frame.y, f.frame.w, f.frame.h, -sz / 2, -sz / 2, sz, sz); ctx.restore(); }
+        else { ctx.fillStyle = '#ebe6de'; ctx.beginPath(); ctx.arc(o.x, o.y, 80 * lk.scale, 0, 6.2832); ctx.fill(); }
+        continue;
+      }
       if (o.k === 'smoke') { ctx.globalCompositeOperation = 'source-over'; ctx.fillStyle = '#e6e6ec'; ctx.beginPath(); ctx.arc(o.x, o.y, 40 * lk.scale, 0, 6.2832); ctx.fill(); continue; }
       ctx.globalCompositeOperation = 'lighter';
       const col = hex(o.tint ?? 0xffffff);

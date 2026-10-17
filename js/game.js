@@ -60,6 +60,8 @@ const UNSTICK_AFTER_MS = 1500;
  */
 export const DB_MIN_MS = 600, DB_MIN_ANG = Math.PI / 4, DB_FULL_MS = 1500, DB_FULL_ANG = Math.PI * 0.75;
 export const DB_W_DUR = 0.35, DB_W_ANG = 0.4, DB_W_SMOOTH = 0.25, DB_MS0 = 400, DB_MS1 = 700, DB_LVL0 = 0.6, DB_LVL1 = 0.35, DB_PERFECT = 0.8, DB_NEED_HB = true;
+/** v54.8 DRIFT mini-boost quality: duration (600 → 1500 ms), mean slide depth (drift01) and a base for any clean ≥ 0.6 s drift. */
+export const DRIFT_Q_DUR = 0.4, DRIFT_Q_ANG = 0.4, DRIFT_Q_BASE = 0.2;
 export const PLAYER_BRAKE = 1500;
 export const PLAYER_BRAKE_FLOOR = 170;
 const UNSTICK_REVERSE_MS = 900;
@@ -139,7 +141,7 @@ export function createGame(canvas, input) {
     world.missiles = [];
     world.fx = [];
     world.unstick = { stuckMs: 0, reverseMs: 0, count: 0 };
-    world.brakeStats = { ms: 0 }; world.hbStats = { presses: 0 }; world.driftLog = []; world.driftFlash = null;
+    world.brakeStats = { ms: 0 }; world.hbStats = { presses: 0 }; world.driftLog = []; world.slipLog = []; world.driftFlash = null; world.driftStats = { starts: 0, clean: 0, dirty: 0, boosts: 0 }; world.driftFx = null;
     p.braking = false;
     world.finish = null; // v52: set when the player crosses the line on the final lap (reveal → results)
     clearFinishFlow();
@@ -177,7 +179,7 @@ export function createGame(canvas, input) {
     if (!running) return; // the finish flow may have stopped the race this frame
     const showHud = !world.race.over && !world.player.finished;
     // v53: the action buttons (DOM, js/controls.js) replace the canvas BOOST / MISSILE panels and the POWER slot
-    lastHud = showHud ? updateControls(world, { boostMs: BOOST_MS, autopilotMs: AUTOPILOT_MS, rocketCount: ROCKET_COUNT, braking: !!world.player.braking }) : null;
+    lastHud = showHud ? updateControls(world, { boostMs: BOOST_MS, autopilotMs: AUTOPILOT_MS, rocketCount: ROCKET_COUNT, braking: !!world.player.braking, drifting: !!world.player.drifting, driftDir: world.player.driftDir || 0 }) : null;
     const race = world.race;
     if (race.countdown > 0) {
       const c = race.countdown;
@@ -402,7 +404,7 @@ export function createGame(canvas, input) {
     const others = world.cars.filter((c) => c !== p).map((c) => ({ c, d: Math.hypot(c.x - p.x, c.y - p.y) })).sort((a, b) => a.d - b.d).slice(0, 3)
       .map(({ c, d }) => ({ id: c.id, speed01: Math.hypot(c.vx, c.vy) / 1100, boostLevel: c.boostLevel || 0, dist: d,
         screenX: lay ? clamp(0.5 + ((c.x - world.cam.x) * (world.cam.zoom || 1)) / Math.max(1, lay.vw), 0, 1) : 0.5 }));
-    engineFrame({ speed01: Math.hypot(p.vx, p.vy) / 1100, boostLevel: p.boostLevel || 0, slip01: slip01(p) }, others);
+    engineFrame({ speed01: Math.hypot(p.vx, p.vy) / 1100, boostLevel: p.boostLevel || 0, slip01: slip01(p), drifting: !!p.drifting, drift01: p.drifting ? p.drift01 || 0 : 0 }, others); // v54.8: + drifting / drift01
   }
 
   /** One physics step for every car. Finished cars (v52) cruise on instead of braking to a stop. */
@@ -445,7 +447,9 @@ export function createGame(canvas, input) {
       // autopilot rail: its own +25% top; pads don't stack, but v54.3 lets the player's BOOST stack on it (finish cruise: none)
       ctl.boost = ctl.autopilot && !(c.isPlayer && autopilot && !c.finished) ? 0 : (c.boostLevel || 0);
       c.drive = ctl.accel || !!ctl.steer; // last frame's drive input (read by the verify scripts)
+      if (c.isPlayer && (c.drifting || ctl.driftBtn != null) && (autopilot || spinning || c.finished || world.power.handback)) ctl.noDrift = true; // v54.8: control taken away → auto-straighten
       stepCar(c, ctl, dt, track);
+      if (c.isPlayer && c.driftEv) onDriftEvent(c, c.driftEv);
       if (topSave != null) c.top = topSave;
       if (c.isPlayer) trackDrift(c, dt, ctl.autopilot || spinning);
       if (!c.finished) stepPads(world, c);
@@ -554,6 +558,34 @@ export function createGame(canvas, input) {
     later(() => stopRace(), FINISH_TIMING.finalStopMs);
   }
 
+  /**
+   * v54.8 DRIFT events (js/physics.js stepDrift). start → sfx('driftStart', {dir}) + fx/controls flare; end →
+   * sfx('driftEnd', {clean}) and, for a clean drift of ≥ DB_MIN_MS, the drift mini-boost through the v54.4 path
+   * (sfx('driftBoost') on the same frame, after driftEnd). Quality q = DRIFT_Q_DUR·duration + DRIFT_Q_ANG·mean drift01.
+   */
+  function onDriftEvent(c, e) {
+    const race = world.race;
+    if (e.type === 'start') {
+      world.driftStats.starts++;
+      world.driftFx = { t: race.time, dir: e.dir };
+      world.fxEvents.push({ type: 'driftStart', car: c, dir: e.dir, t: race.time });
+      sfx('driftStart', { dir: e.dir });
+      return;
+    }
+    const rec = { t: Math.round(race.time), ms: Math.round(e.ms), angDeg: Math.round(e.ang * 180 / Math.PI), avg01: +e.avg01.toFixed(2), clean: e.clean, wall: !!e.wall, why: e.why, q: 0, awarded: false };
+    sfx('driftEnd', { clean: e.clean });
+    world.fxEvents.push({ type: 'driftEnd', car: c, clean: e.clean, t: race.time });
+    if (e.clean && e.ms >= DB_MIN_MS && !c.finished) {
+      const q = clamp(DRIFT_Q_DUR * clamp((e.ms - DB_MIN_MS) / (DB_FULL_MS - DB_MIN_MS), 0, 1) + DRIFT_Q_ANG * e.avg01 + DRIFT_Q_BASE, 0, 1);
+      rec.q = +q.toFixed(2); rec.awarded = true;
+      c.driftBoostMs = DB_MS0 + DB_MS1 * q; c.driftBoostLvl = DB_LVL0 + DB_LVL1 * q; c.driftBoostQ = q; c.driftLand = (c.driftLand || 0) + 1;
+      world.driftFlash = { text: q >= DB_PERFECT ? 'PERFECT DRIFT' : 'DRIFT BOOST', q, t: race.time };
+      sfx('driftBoost', { quality: q });
+    }
+    world.driftStats[e.clean ? 'clean' : 'dirty']++; if (rec.awarded) world.driftStats.boosts++;
+    if (world.driftLog.length < 500) world.driftLog.push(rec);
+  }
+
   /** v54.4: follow the player's slide and award the drift boost on a clean exit. */
   function trackDrift(c, dt, off) {
     const s01 = slip01(c);
@@ -563,11 +595,11 @@ export function createGame(canvas, input) {
     d.ms += dt; d.ang += angleDiff(d.lastA, c.angle); d.lastA = c.angle; d.peak = Math.max(d.peak, s01);
     if (c.wallHit > 0 || c.driftHoldMs > 0) d.wall = true;
     if (c.slideCapped) d.capMs += dt;
-    if (c.hbHeld) d.hb = true;
+    // v54.8: no handbrake any more; a DRIFT pays its boost from onDriftEvent, so d.hb stays false and this slip run only logs
     if (s01 >= SKID_OFF) return;
     c.driftRun = null;
     const ang = Math.abs(d.ang), rec = { t: Math.round(world.race.time), ms: Math.round(d.ms), angDeg: Math.round(ang * 180 / Math.PI), wall: d.wall, capMs: Math.round(d.capMs), peak: +d.peak.toFixed(2), hb: d.hb, q: 0, awarded: false };
-    if (world.driftLog.length < 500) world.driftLog.push(rec);
+    if (world.slipLog.length < 500) world.slipLog.push(rec);  // v54.8: ordinary slip runs log apart from DRIFTs
     // only a HANDBRAKE drift pays (the Drift handling option's ordinary corner slides would otherwise earn ~10–28 boosts
     // a race and make that option ~0.1–0.9 s/lap faster): DB_NEED_HB
     if (d.wall || d.ms < DB_MIN_MS || ang < DB_MIN_ANG || (DB_NEED_HB && !d.hb)) return;
@@ -687,10 +719,11 @@ export function createGame(canvas, input) {
     if (!braking && spd < 60) u.stuckMs += dt; else u.stuckMs = 0;
     if (u.stuckMs > UNSTICK_AFTER_MS) { u.stuckMs = 0; u.reverseMs = UNSTICK_REVERSE_MS; u.count++; }
     if (braking) world.brakeStats.ms += dt;
-    // v54.4: the BRAKE input is now the HANDBRAKE (rear grip cut, throttle off, modest scrub — js/physics.js HB_*)
-    if (braking && !p.hbHeld) { sfx('handbrake'); world.hbStats.presses++; }
+    // v54.8: the BRAKE input is now DRIFT (js/physics.js stepDrift: hold at speed with hard steer → held power slide);
+    // its sounds fire from the drift's own start / end events (onDriftEvent), not from the button press
+    if (braking && !p.hbHeld) world.hbStats.presses++;
     p.hbHeld = braking;
-    return { accel: true, brake: false, handbrake: braking, noReverse: true, steer: flags.steer, aimAngle: flags.aimAngle };
+    return { accel: true, brake: false, driftBtn: braking, noReverse: true, steer: flags.steer, aimAngle: flags.aimAngle };
   }
 
   /** v50 power-ups: E / POWER tap activates the held one; runs rocket salvos, lap boost and autopilot timers. */
@@ -875,6 +908,7 @@ export function createGame(canvas, input) {
     readPixels: (x, y, w, h) => renderer.readPixels(x, y, w, h), // verification (device px of the race view)
     // Pausing freezes the boost timer (update() does not run); resuming drops any boost
     // request queued while paused so Shift/GAS taps on the pause screen never fire a boost.
+    get paused() { return paused; },
     setPaused(v) { paused = v; setAudioPaused(v); if (!v) { last = performance.now(); input.clearBoost && input.clearBoost(); } },
     isPaused: () => paused,
     setOnFinish(fn) { onFinish = fn; },            // fn(result): result.live = provisional (rivals still finishing), result.final = done

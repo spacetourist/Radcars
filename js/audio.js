@@ -11,6 +11,7 @@
  *   music    menu loop on the menus (0.4 s fade in; 1 s when the track arrives after the menu is already showing),
  *            stopped (0.5 s) when a race loads, race loop on the GO frame — or, if it isn't decoded yet, at the next lap
  *            line (never part-way through a lap) — then the finish sting on the place-reveal frame (250 ms crossfade).
+ *   drift    v54.8: driftStart / driftEnd one-shots + the held slide layer (DriftVoice) fed drifting / drift01 every frame.
  *   engine   one player voice + squeal + 3 rival voices per race, fed every frame by engineFrame() (also during the
  *            countdown, held 6 dB down until GO); boost_end on the engine's boost edge 'off'; −10 dB for 4 s at the
  *            finish; voices stop when the results come up or the race stops.
@@ -36,14 +37,14 @@ let muted = false, paused = false, hidden = false;
 const B = {};                                   // decoded: loops (AudioBuffer), sprite regions {buffer,start,duration}, music
 const load = { started: false, core: false, coreFailed: false, ext: null, files: {}, timeline: [], t0: 0 };
 let scene = 'menu', racePending = false, raceOn = false, lastDriftT = -1e9, pendingDrift = null, frames = 0;
-let eng = null, sq = null, rivals = [], warn = null;
+let eng = null, sq = null, drift = null, rivals = [], warn = null;
 const played = [], perf = { frames: 0, ms: 0 };
 try { self.__RAD_SFX_PLAYED__ = played; } catch (_) {}
 try {
   self.__RAD_AUDIO__ = {
     synth: SYNTH, load, B, vol, perf,
     get ctx() { return ctx; }, get mix() { return mix; }, get music() { return music; },
-    get scene() { return scene; }, get racePending() { return racePending; }, get voices() { return !!eng; }
+    get scene() { return scene; }, get drift() { return driftAudio; }, get driftVoice() { return !!drift; }, get racePending() { return racePending; }, get voices() { return !!eng; }
   };
 } catch (_) {}
 const mark = (name, ev, extra) => { if (load.timeline.length < 200) load.timeline.push({ name, ev, t: Math.round(performance.now()), ...extra }); };
@@ -193,7 +194,10 @@ export function sfx(name, opts = {}) {
       // held for one frame: a drift landing that chains reaches chainBoost on the NEXT frame, and a chained drift boost
       // plays boostChain instead of drift_boost (audio-engine.mjs playBoostChain); otherwise it plays 1 frame later
       lastDriftT = t; pendingDrift = { q: opts.quality ?? 0.5, frame: frames }; break;
-    case 'handbrake': { const p = A.handbrakeParams(); shots.play('handbrake', { gain: p.gain, rate: p.rate, t }); break; }
+    // v54.8 DRIFT (docs/AUDIO_V548_DRIFT.md): the tyre bite + clutch-kick rev flare on the slide's start, the grip-catch
+    // chirp on its end (clean: released; false: auto-straighten / wall). The held slide layer runs in engineFrame.
+    case 'driftStart': A.playDriftStart({ shots, eng, drift }, { dir: opts.dir || 0 }, t); break;
+    case 'driftEnd': A.playDriftEnd({ shots }, { clean: opts.clean !== false }, t); break;
     case 'missile': shots.play('missile_launch', { rate: 0.98 + Math.random() * 0.06, t }); break;
     case 'hit': shots.play('explosion', { gain: 0.8, t }); mix.duck(mix.engineDuck, -4, 0.3, t); mix.duckMusic(undefined, undefined, t); break;
     case 'bonus': shots.play('pickup', { t }); break;
@@ -248,20 +252,22 @@ export function raceAudioEnd() {
 function makeVoices() {
   eng = new A.SampleEngineVoice(ctx, mix.engine, B);
   sq = new A.SquealVoice(ctx, mix.engine, B);
+  drift = B.drift_scrub ? new A.DriftVoice(ctx, mix.engine, B) : null; // v54.8 held power-slide layer
   rivals = [0.94, 1.05, 0.97].slice(0, A.RIVAL_VOICES).map((p) => { const v = new A.SampleEngineVoice(ctx, mix.engine, B, { quality: 'lite', pitchMul: p }); v.audible = false; return v; });
   warn = new A.WarnVoice(ctx, mix.ui, B);
 }
 function stopVoices() {
   if (!ctx) return;
   const t = ctx.currentTime;
-  try { if (eng) eng.stop(t); if (sq) sq.stop(t); rivals.forEach((v) => v.stop(t)); if (warn) warn.stop(t); } catch (_) {}
-  eng = sq = warn = null; rivals = [];
+  try { if (eng) eng.stop(t); if (sq) sq.stop(t); if (drift) drift.stop(t); rivals.forEach((v) => v.stop(t)); if (warn) warn.stop(t); } catch (_) {}
+  eng = sq = drift = warn = null; rivals = [];
 }
 /**
  * Every race frame (also the countdown): player { speed01 (vs base 1100, may exceed 1), boostLevel (≤ 1.35 in the
  * DOUBLE BOOST rush), slip01 } and up to 3 nearest rivals { id, speed01, boostLevel, dist, screenX 0..1 }.
  */
 let lastEngine = null;
+const driftAudio = { squealing: false, sliding: false, drifting: false, drift01: 0 }; // v54.8 verify hook (self.__RAD_AUDIO__.drift)
 export function engineFrame(p, others) {
   lastEngine = { player: p, others };
   if (SYNTH || !raceOn || !ctx || !load.core || ctx.state !== 'running') return;
@@ -270,9 +276,11 @@ export function engineFrame(p, others) {
   const t = ctx.currentTime;
   frames++;
   if (pendingDrift && frames - pendingDrift.frame >= 2) { if (!silent()) A.playDriftBoost(shots, mix, pendingDrift.q, t); pendingDrift = null; }
-  const st = eng.update(p.speed01, p.boostLevel, p.slip01, t);
+  const st = eng.update(p.speed01, p.boostLevel, p.slip01, t, p);          // v54.8: reads p.drifting / p.drift01 (wheelspin)
   if (st.edge === 'off') shots.play('boost_end', { t });                     // game.js never fires boost_end
-  sq.update(p.speed01, p.slip01, t);
+  const squealing = sq.update(p.speed01, p.slip01, t, !!p.drifting);         // v54.8: ducked −18 dB while drifting
+  const sliding = drift ? drift.update(p.speed01, !!p.drifting, p.drifting ? p.drift01 || 0 : 0, t) : false;
+  driftAudio.squealing = squealing; driftAudio.sliding = sliding; driftAudio.drifting = !!p.drifting; driftAudio.drift01 = p.drift01 || 0;
   mix.engineLevel(Math.min(1, p.speed01), t);
   for (let i = 0; i < rivals.length; i++) {
     const v = rivals[i], o = others && others[i];
