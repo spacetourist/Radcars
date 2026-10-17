@@ -1,0 +1,8 @@
+v54.7.1 · pickups pixi neon: 60 fps avg, p5 59.5, worst 16.8 ms, 0/901 frames > 25 ms
+v54.7.1 · pickups pixi gridlock: 60 fps avg, p5 59.5, worst 16.8 ms, 0/900 frames > 25 ms
+v54.7.1 · pickups pixi razor: 59.9 fps avg, p5 59.5, worst 33.4 ms, 1/900 frames > 25 ms
+v54.7.1 · pickups pixi cargo: 59.6 fps avg, p5 59.5, worst 33.4 ms, 6/895 frames > 25 ms
+v54.7.1 · pickups canvas neon: 60 fps avg, p5 59.9, worst 16.8 ms, 0/900 frames > 25 ms
+v54.7.1 · pickups canvas gridlock: 59.6 fps avg, p5 59.9, worst 49.9 ms, 5/894 frames > 25 ms
+v54.7.1 · pickups canvas razor: 59.9 fps avg, p5 59.5, worst 33.4 ms, 2/898 frames > 25 ms
+v54.7.1 · pickups canvas cargo: 59.5 fps avg, p5 59.5, worst 33.4 ms, 8/892 frames > 25 ms

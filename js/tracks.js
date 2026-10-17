@@ -9,6 +9,10 @@
 const SAMPLE = 30; // world units between resampled centreline points
 export const PAD_LEN = 150; // boost pad length along the road (wu)
 export const BONUS_HALF = 26; // bonus '?' box half-size (wu)
+// v54.7.1: the renderers never draw a box smaller than BONUS_MIN_PX CSS px across (at the far chase zoom 0.24 it is drawn at
+// 1.6× = 41.7 wu half); bonusDrawHalf() is that drawn half-size, and the pickup uses it so what you see is what you hit
+export const BONUS_MIN_PX = 20;
+export const bonusDrawHalf = (half, zoom) => half * Math.max(1, BONUS_MIN_PX / (half * 2 * Math.max(0.05, zoom || 1)));
 
 /**
  * Closed uniform cubic B-spline through a control polygon (C2: position,

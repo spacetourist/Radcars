@@ -18,7 +18,7 @@ import * as P from '../vendor/pixi-lean.mjs';
 import { createRenderer, minimapBox } from './render.js';
 import { CAR_LEN, CAR_WID } from './physics.js';
 import { partLook, boostRingK, chainK, chainFlash, streakBand, CHAIN_PINK, CHAIN_FLAME_MUL } from './fx.js';
-import { pointAt, buildStartingGrid } from './tracks.js';
+import { pointAt, buildStartingGrid, bonusDrawHalf } from './tracks.js';
 import { TROPHY, trophyScale, ringState, partAlpha, trophyAnchor, outFade, PLACE_TEXT_Y } from './celebrate.js';
 import { styleFor, carSprite, shadowSprite, textureTile, scaleBucket, SPRITE_W, SPRITE_H, TOY_FONT } from './toyart.js';
 
@@ -502,7 +502,7 @@ export async function createPixiRenderer(hudCanvas, app) {
     if (!b) return;
     const taken = (world.power && world.power.collected) || [];
     const tm = (world.race.time || 0) + (world.race.countdown > 0 ? (3800 - world.race.countdown) : 0);
-    const s = Math.max(1, 20 / (b.half * 2 * zoom));
+    const s = bonusDrawHalf(b.half, zoom) / b.half;
     for (const v of boxes) {
       const i = v.box.i;
       v.cont.visible = !taken[i];

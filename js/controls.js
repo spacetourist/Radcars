@@ -274,7 +274,7 @@ export function updateControls(w, info) {
   if (w.chainFlash && prev.chFlash !== w.chainFlash) toast(w.chainFlash.text, 'boost', '#ffe600', '#ff2b6a'); // v54.6 DOUBLE BOOST (yellow, pink glow)
   prev.chFlash = w.chainFlash;
   if (pw.flash && prev.pwFlash !== pw.flash) {
-    const got = pw.flash.kind === 'got';
+    const got = pw.flash.kind === 'got' || pw.flash.kind === 'full'; // v54.7.1 'full': the held power-up's icon + colour
     const icon = got ? POWER_ICON[pw.held] || 'gift' : pw.flash.text.startsWith('ROCKET') ? 'rocket3' : 'gift';
     toast(pw.flash.text, icon, got ? POWER_COLOR[pw.held] : pw.flash.kind === 'hit' ? '#b8ff00' : '#ff6a6a');
   }
